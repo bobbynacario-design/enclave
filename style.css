@@ -828,6 +828,86 @@ label {
   margin-top: 20px;
 }
 
+/* ─── Events ─────────────────────────────────────────────────────────────── */
+.page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: border-color 0.15s;
+}
+
+.event-card:hover {
+  border-color: #3a3a3a;
+}
+
+.event-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.event-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.event-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.event-meta-row {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.event-desc {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.event-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.event-actions .btn.rsvped {
+  background: #2d5a3d;
+  border-color: #2d5a3d;
+}
+
+.event-actions .btn.rsvped:hover {
+  background: #356b48;
+  border-color: #356b48;
+}
+
+.event-date-row {
+  display: flex;
+  gap: 12px;
+}
+
 /* ─── Utility ────────────────────────────────────────────────────────────── */
 .text-muted  { color: var(--text-muted); }
 .text-accent { color: var(--accent); }

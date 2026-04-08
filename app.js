@@ -11,10 +11,12 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   addDoc,
   getDocs,
   serverTimestamp,
+  Timestamp,
   query,
   where,
   orderBy,
@@ -28,7 +30,12 @@ import { auth, db, googleProvider } from './firebase.js';
 var state = {
   currentPage:  'feed',
   user:         null,
-  accessDenied: false
+  accessDenied: false,
+  isAdmin:      false
+};
+
+var eventsState = {
+  events: []
 };
 
 var feedState = {
@@ -97,6 +104,8 @@ var upsertUserDoc = function(user) {
     };
 
     if (snap.exists()) {
+      var existing = snap.data();
+      state.isAdmin = existing.role === 'admin';
       updateDoc(ref, base).catch(function(err) {
         console.error('User doc update failed:', err);
       });
@@ -214,6 +223,7 @@ var loadPage = function(page) {
     // Page-specific init
     if (page === 'feed')    initFeedPage();
     if (page === 'members') initMembersPage();
+    if (page === 'events')  initEventsPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -687,6 +697,286 @@ var loadRecentPosts = function(uid) {
       ? 'Posts query needs a Firestore index. Check browser console for a link to create it.'
       : 'Failed to load posts.';
     container.innerHTML = '<p class="text-muted">' + msg + '</p>';
+  });
+};
+
+// ─── Events: init ────────────────────────────────────────────────────────────
+var initEventsPage = function() {
+  var createBtn = document.getElementById('createEventBtn');
+  if (createBtn) {
+    if (state.isAdmin) {
+      createBtn.hidden = false;
+      createBtn.addEventListener('click', openCreateEventModal);
+    } else {
+      createBtn.hidden = true;
+    }
+  }
+
+  document.querySelectorAll('[data-action="close-event"]').forEach(function(el) {
+    el.addEventListener('click', closeEventModal);
+  });
+
+  loadEvents();
+};
+
+// ─── Events: load upcoming ───────────────────────────────────────────────────
+var loadEvents = function() {
+  var list = document.getElementById('eventsList');
+  if (!list) return;
+
+  var q = query(collection(db, 'events'), orderBy('date', 'asc'));
+
+  getDocs(q).then(function(snap) {
+    var events = [];
+    var now = Date.now();
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      // Filter to upcoming (date >= now) client-side
+      var t = data.date && typeof data.date.toDate === 'function'
+        ? data.date.toDate().getTime()
+        : 0;
+      if (t >= now - 3600000) { // 1h grace period for "in-progress" events
+        events.push(data);
+      }
+    });
+    eventsState.events = events;
+    renderEventsList();
+  }).catch(function(err) {
+    console.error('Failed to load events:', err);
+    list.innerHTML = '<div class="card"><p class="text-muted">Failed to load events. Check Firestore rules.</p></div>';
+  });
+};
+
+// ─── Events: render list ─────────────────────────────────────────────────────
+var renderEventsList = function() {
+  var list = document.getElementById('eventsList');
+  if (!list) return;
+
+  if (eventsState.events.length === 0) {
+    list.innerHTML = '<div class="card"><p class="text-muted">No upcoming events. ' +
+      (state.isAdmin ? 'Click "Create Event" to add one.' : 'Check back soon.') + '</p></div>';
+    return;
+  }
+
+  list.innerHTML = eventsState.events.map(renderEventCard).join('');
+
+  // Wire RSVP buttons
+  list.querySelectorAll('[data-rsvp]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      handleRsvp(btn.dataset.rsvp, btn);
+    });
+  });
+
+  // Preload RSVP state for current user on each event
+  if (state.user) {
+    eventsState.events.forEach(function(ev) {
+      var rsvpRef = doc(db, 'events', ev.id, 'rsvps', state.user.uid);
+      getDoc(rsvpRef).then(function(snap) {
+        if (snap.exists()) {
+          var btn = list.querySelector('[data-rsvp="' + ev.id + '"]');
+          if (btn) {
+            btn.classList.add('rsvped');
+            btn.textContent = 'Going ✓';
+          }
+        }
+      }).catch(function() { /* ignore */ });
+    });
+  }
+};
+
+// ─── Events: render single card ──────────────────────────────────────────────
+var renderEventCard = function(ev) {
+  var titleEsc    = escapeHTML(ev.title    || 'Untitled');
+  var locationEsc = escapeHTML(ev.location || 'TBD');
+  var circleLbl   = escapeHTML(circleLabel(ev.circle || 'all'));
+  var descEsc     = escapeHTML(ev.description || '');
+
+  var when = 'TBD';
+  if (ev.date && typeof ev.date.toDate === 'function') {
+    var d = ev.date.toDate();
+    when = d.toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric'
+    }) + ' · ' + d.toLocaleTimeString(undefined, {
+      hour: 'numeric', minute: '2-digit'
+    });
+  }
+
+  var rsvpCount = (typeof ev.rsvpCount === 'number') ? ev.rsvpCount : 0;
+  var countLbl  = rsvpCount > 0 ? ' (' + rsvpCount + ')' : '';
+
+  return '' +
+    '<div class="event-card">' +
+      '<div class="event-card-header">' +
+        '<div class="event-title">' + titleEsc + '</div>' +
+        '<span class="post-circle">' + circleLbl + '</span>' +
+      '</div>' +
+      '<div class="event-meta">' +
+        '<div class="event-meta-row">&#128197; ' + escapeHTML(when) + '</div>' +
+        '<div class="event-meta-row">&#128205; ' + locationEsc + '</div>' +
+      '</div>' +
+      (descEsc ? '<div class="event-desc">' + descEsc + '</div>' : '') +
+      '<div class="event-actions">' +
+        '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">RSVP' + countLbl + '</button>' +
+      '</div>' +
+    '</div>';
+};
+
+// ─── Events: RSVP toggle ─────────────────────────────────────────────────────
+var handleRsvp = function(eventId, btn) {
+  if (!state.user || !eventId) return;
+
+  var rsvpRef = doc(db, 'events', eventId, 'rsvps', state.user.uid);
+  var isRsvped = btn.classList.contains('rsvped');
+
+  btn.disabled = true;
+
+  if (isRsvped) {
+    // Toggle off
+    deleteDoc(rsvpRef).then(function() {
+      btn.classList.remove('rsvped');
+      btn.textContent = 'RSVP';
+      btn.disabled = false;
+    }).catch(function(err) {
+      console.error('Failed to cancel RSVP:', err);
+      btn.disabled = false;
+    });
+  } else {
+    // Toggle on
+    setDoc(rsvpRef, {
+      uid:       state.user.uid,
+      name:      state.user.displayName || state.user.email,
+      email:     state.user.email,
+      timestamp: serverTimestamp()
+    }).then(function() {
+      btn.classList.add('rsvped');
+      btn.textContent = 'Going ✓';
+      btn.disabled = false;
+    }).catch(function(err) {
+      console.error('Failed to RSVP:', err);
+      alert('Failed to RSVP. Check console for details.');
+      btn.disabled = false;
+    });
+  }
+};
+
+// ─── Events: create event modal (admin only) ────────────────────────────────
+var openCreateEventModal = function() {
+  if (!state.isAdmin) return;
+
+  var modal = document.getElementById('eventModal');
+  var body  = document.getElementById('eventModalBody');
+  if (!modal || !body) return;
+
+  // Default to tomorrow 7pm
+  var tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var defaultDate = tomorrow.toISOString().slice(0, 10);
+
+  body.innerHTML =
+    '<div class="profile-header">' +
+      '<div class="profile-header-meta">' +
+        '<h2 class="profile-name">Create Event</h2>' +
+        '<p class="text-muted">Add a new gathering to the enclave.</p>' +
+      '</div>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<label class="profile-section-title" for="evTitle">Title</label>' +
+      '<input type="text" id="evTitle" class="edit-input" maxlength="80" placeholder="e.g. Poker Night" />' +
+    '</div>' +
+    '<div class="profile-section event-date-row">' +
+      '<div style="flex:1;">' +
+        '<label class="profile-section-title" for="evDate">Date</label>' +
+        '<input type="date" id="evDate" class="edit-input" value="' + defaultDate + '" />' +
+      '</div>' +
+      '<div style="flex:1;">' +
+        '<label class="profile-section-title" for="evTime">Time</label>' +
+        '<input type="time" id="evTime" class="edit-input" value="19:00" />' +
+      '</div>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<label class="profile-section-title" for="evLocation">Location</label>' +
+      '<input type="text" id="evLocation" class="edit-input" maxlength="120" placeholder="e.g. Bob\'s place" />' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<label class="profile-section-title" for="evCircle">Circle</label>' +
+      '<select id="evCircle" class="edit-input">' +
+        '<option value="all">All</option>' +
+        '<option value="poker-crew">Poker Crew</option>' +
+        '<option value="work-network">Work Network</option>' +
+        '<option value="family">Family</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<label class="profile-section-title" for="evDesc">Description</label>' +
+      '<textarea id="evDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
+    '</div>' +
+    '<div class="edit-actions">' +
+      '<button class="btn" id="evCancelBtn">Cancel</button>' +
+      '<button class="btn btn-primary" id="evSaveBtn">Create</button>' +
+    '</div>';
+
+  document.getElementById('evCancelBtn').addEventListener('click', closeEventModal);
+  document.getElementById('evSaveBtn').addEventListener('click', handleCreateEvent);
+
+  modal.hidden = false;
+};
+
+var closeEventModal = function() {
+  var modal = document.getElementById('eventModal');
+  if (modal) modal.hidden = true;
+};
+
+var handleCreateEvent = function() {
+  if (!state.isAdmin || !state.user) return;
+
+  var title    = document.getElementById('evTitle').value.trim();
+  var dateVal  = document.getElementById('evDate').value;
+  var timeVal  = document.getElementById('evTime').value;
+  var location = document.getElementById('evLocation').value.trim();
+  var circle   = document.getElementById('evCircle').value;
+  var desc     = document.getElementById('evDesc').value.trim();
+
+  if (!title)    { alert('Title is required.');    return; }
+  if (!dateVal)  { alert('Date is required.');     return; }
+  if (!timeVal)  { alert('Time is required.');     return; }
+  if (!location) { alert('Location is required.'); return; }
+
+  // Combine date + time into a JS Date, then Firestore Timestamp
+  var combined = new Date(dateVal + 'T' + timeVal);
+  if (isNaN(combined.getTime())) {
+    alert('Invalid date/time.');
+    return;
+  }
+
+  var saveBtn = document.getElementById('evSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Creating...';
+  }
+
+  var newEvent = {
+    title:       title,
+    date:        Timestamp.fromDate(combined),
+    location:    location,
+    circle:      circle,
+    description: desc,
+    createdBy:   state.user.uid,
+    createdAt:   serverTimestamp(),
+    rsvpCount:   0
+  };
+
+  addDoc(collection(db, 'events'), newEvent).then(function() {
+    closeEventModal();
+    loadEvents();
+  }).catch(function(err) {
+    console.error('Failed to create event:', err);
+    alert('Failed to create event. Check console for details.');
+    if (saveBtn) {
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Create';
+    }
   });
 };
 
