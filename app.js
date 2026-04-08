@@ -752,6 +752,23 @@ var initEventsPage = function() {
   var createBtn = document.getElementById('createEventBtn');
   if (createBtn) {
     createBtn.hidden = !state.isAdmin;
+    createBtn.addEventListener('click', function() {
+      window.enclaveCreateEvent();
+    });
+  }
+
+  var modalCloseBtn = document.querySelector('#eventModal .profile-modal-close');
+  if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', function() {
+      window.enclaveCloseEvent();
+    });
+  }
+
+  var modalBackdrop = document.querySelector('#eventModal .profile-modal-backdrop');
+  if (modalBackdrop) {
+    modalBackdrop.addEventListener('click', function() {
+      window.enclaveCloseEvent();
+    });
   }
   loadEvents();
 };
@@ -975,9 +992,23 @@ var openCreateEventModal = function() {
       '<textarea id="evDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
     '</div>' +
     '<div class="edit-actions">' +
-      '<button class="btn" onclick="window.enclaveCloseEvent()">Cancel</button>' +
-      '<button class="btn btn-primary" id="evSaveBtn" onclick="window.enclaveSubmitEvent()">Create</button>' +
+      '<button class="btn" id="evCancelBtn">Cancel</button>' +
+      '<button class="btn btn-primary" id="evSaveBtn">Create</button>' +
     '</div>';
+
+  var cancelBtn = document.getElementById('evCancelBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', function() {
+      window.enclaveCloseEvent();
+    });
+  }
+
+  var saveBtn = document.getElementById('evSaveBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function() {
+      window.enclaveSubmitEvent();
+    });
+  }
 
   modal.hidden = false;
 };
