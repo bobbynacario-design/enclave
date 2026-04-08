@@ -1137,27 +1137,40 @@ window.enclaveInlineCreate = function() {
 };
 
 var handleInlineCreateEvent = function() {
-  console.log('[enclave] handleInlineCreateEvent called, user=', state.user && state.user.email, 'isAdmin=', state.isAdmin);
+  console.log('[enclave] handleInlineCreateEvent START');
+  console.log('[enclave] user=', state.user && state.user.email, 'isAdmin=', state.isAdmin);
+
   if (!state.user) {
     alert('Not signed in.');
     return;
   }
 
-  var titleEl = document.getElementById('inlineEvTitle');
-  var dateEl = document.getElementById('inlineEvDate');
-  var timeEl = document.getElementById('inlineEvTime');
+  var titleEl    = document.getElementById('inlineEvTitle');
+  var dateEl     = document.getElementById('inlineEvDate');
+  var timeEl     = document.getElementById('inlineEvTime');
   var locationEl = document.getElementById('inlineEvLocation');
-  var circleEl = document.getElementById('inlineEvCircle');
-  var descEl = document.getElementById('inlineEvDesc');
-  var saveBtn = document.getElementById('inlineEvSaveBtn');
-  if (!titleEl || !dateEl || !timeEl || !locationEl || !circleEl || !descEl) return;
+  var circleEl   = document.getElementById('inlineEvCircle');
+  var descEl     = document.getElementById('inlineEvDesc');
+  var saveBtn    = document.getElementById('inlineEvSaveBtn');
 
-  var title = titleEl.value.trim();
-  var dateVal = dateEl.value;
-  var timeVal = timeEl.value;
+  console.log('[enclave] elements found:', {
+    title: !!titleEl, date: !!dateEl, time: !!timeEl,
+    location: !!locationEl, circle: !!circleEl, desc: !!descEl
+  });
+
+  if (!titleEl || !dateEl || !timeEl || !locationEl || !circleEl || !descEl) {
+    alert('Form elements missing. See console.');
+    return;
+  }
+
+  var title    = titleEl.value.trim();
+  var dateVal  = dateEl.value;
+  var timeVal  = timeEl.value;
   var location = locationEl.value.trim();
-  var circle = circleEl.value;
-  var desc = descEl.value.trim();
+  var circle   = circleEl.value;
+  var desc     = descEl.value.trim();
+
+  console.log('[enclave] values:', { title: title, dateVal: dateVal, timeVal: timeVal, location: location, circle: circle });
 
   if (!title)    { alert('Title is required.');    return; }
   if (!dateVal)  { alert('Date is required.');     return; }
@@ -1169,12 +1182,14 @@ var handleInlineCreateEvent = function() {
     alert('Invalid date/time.');
     return;
   }
+  console.log('[enclave] combined date:', combined);
 
   if (saveBtn) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Creating...';
   }
 
+  console.log('[enclave] calling addDoc...');
   addDoc(collection(db, 'events'), {
     title:       title,
     date:        Timestamp.fromDate(combined),
@@ -1184,7 +1199,8 @@ var handleInlineCreateEvent = function() {
     createdBy:   state.user.uid,
     createdAt:   serverTimestamp(),
     rsvpCount:   0
-  }).then(function() {
+  }).then(function(ref) {
+    console.log('[enclave] addDoc SUCCESS, id=', ref.id);
     titleEl.value = '';
     locationEl.value = '';
     descEl.value = '';
