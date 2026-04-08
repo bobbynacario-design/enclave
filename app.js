@@ -60,6 +60,14 @@ var adminState = {
   allowlist: []
 };
 
+var VALID_PAGES = {
+  feed:     true,
+  events:   true,
+  members:  true,
+  admin:    true,
+  messages: true
+};
+
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var handleSignIn = function() {
   state.accessDenied = false;
@@ -91,9 +99,11 @@ var checkAllowlist = function(user) {
     if (snap.exists()) {
       state.user = user;
       upsertUserDoc(user, snap.data() || {}).then(function() {
+        applyURLState();
         renderShell();
       }).catch(function(err) {
         console.error('User bootstrap failed:', err);
+        applyURLState();
         renderShell();
       });
     } else {
@@ -189,7 +199,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v22';
+var ASSET_VERSION = 'v23';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -206,14 +216,16 @@ var renderShell = function() {
     if (adminLink) adminLink.hidden = !state.isAdmin;
 
     document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
         window.enclaveGoPage(btn.dataset.page);
       });
     });
 
     document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
       btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
-      btn.addEventListener('click', function() {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
         window.enclaveGoCircle(btn.dataset.circle);
       });
     });
@@ -290,6 +302,38 @@ var refreshCurrentUserState = function() {
   });
 };
 
+var applyURLState = function() {
+  var params = new URLSearchParams(window.location.search);
+  var page = params.get('page');
+  var circle = params.get('circle');
+
+  if (page && VALID_PAGES[page]) {
+    state.currentPage = page;
+  }
+
+  if (state.currentPage === 'feed') {
+    if (circle && getVisibleCircles().indexOf(circle) !== -1) {
+      feedState.filter = circle;
+    } else {
+      feedState.filter = 'all';
+    }
+  }
+};
+
+var syncURLState = function() {
+  var params = new URLSearchParams(window.location.search);
+  params.set('page', state.currentPage);
+
+  if (state.currentPage === 'feed' && feedState.filter !== 'all') {
+    params.set('circle', feedState.filter);
+  } else {
+    params.delete('circle');
+  }
+
+  var nextURL = window.location.pathname + '?' + params.toString();
+  window.history.replaceState({}, '', nextURL);
+};
+
 // ─── Right panel: upcoming events ────────────────────────────────────────────
 var loadPanelEvents = function() {
   console.log('[enclave] loadPanelEvents START');
@@ -353,6 +397,7 @@ var loadPage = function(page) {
   }
 
   state.currentPage = page;
+  syncURLState();
 
   // Clean up any previous page subscriptions
   if (feedState.unsubscribe) {

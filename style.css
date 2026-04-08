@@ -81,6 +81,7 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
+  text-decoration: none;
   font-family: var(--font);
   font-size: 14px;
   padding: 8px 12px;
