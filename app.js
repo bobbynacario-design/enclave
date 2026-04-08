@@ -11,7 +11,6 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
   collection,
   addDoc,
   getDocs,
@@ -21,17 +20,25 @@ import {
   where,
   orderBy,
   limit,
-  onSnapshot
+  onSnapshot,
+  runTransaction
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 import { auth, db, googleProvider } from './firebase.js';
+
+var ALL_CIRCLES = [
+  'poker-crew',
+  'work-network',
+  'family'
+];
 
 // ─── State ───────────────────────────────────────────────────────────────────
 var state = {
   currentPage:  'feed',
   user:         null,
   accessDenied: false,
-  isAdmin:      false
+  isAdmin:      false,
+  circles:      []
 };
 
 var eventsState = {
@@ -58,6 +65,8 @@ var handleSignIn = function() {
 
 var handleSignOut = function() {
   state.accessDenied = false;
+  state.isAdmin = false;
+  state.circles = [];
   signOut(auth);
 };
 
@@ -75,8 +84,12 @@ var checkAllowlist = function(user) {
   getDoc(ref).then(function(snap) {
     if (snap.exists()) {
       state.user = user;
-      upsertUserDoc(user);
-      renderShell();
+      upsertUserDoc(user).then(function() {
+        renderShell();
+      }).catch(function(err) {
+        console.error('User bootstrap failed:', err);
+        renderShell();
+      });
     } else {
       state.accessDenied = true;
       signOut(auth);
@@ -93,7 +106,7 @@ var upsertUserDoc = function(user) {
   var ref = doc(db, 'users', user.uid);
   var displayName = user.displayName || user.email;
 
-  getDoc(ref).then(function(snap) {
+  return getDoc(ref).then(function(snap) {
     var base = {
       uid:      user.uid,
       email:    user.email,
@@ -104,17 +117,20 @@ var upsertUserDoc = function(user) {
     };
 
     if (snap.exists()) {
-      var existing = snap.data();
+      var existing = snap.data() || {};
       state.isAdmin = existing.role === 'admin';
-      updateDoc(ref, base).catch(function(err) {
+      state.circles = Array.isArray(existing.circles) ? existing.circles.slice() : [];
+      return updateDoc(ref, base).catch(function(err) {
         console.error('User doc update failed:', err);
       });
     } else {
+      state.isAdmin = false;
+      state.circles = [];
       base.joinedAt = serverTimestamp();
       base.bio      = '';
       base.role     = '';
       base.circles  = [];
-      setDoc(ref, base).catch(function(err) {
+      return setDoc(ref, base).catch(function(err) {
         console.error('User doc create failed:', err);
       });
     }
@@ -169,7 +185,18 @@ var renderShell = function() {
     // Nav links
     document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
       btn.addEventListener('click', function() {
+        if (btn.dataset.page === 'feed') {
+          feedState.filter = 'all';
+        }
         loadPage(btn.dataset.page);
+      });
+    });
+
+    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
+      btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+      btn.addEventListener('click', function() {
+        feedState.filter = btn.dataset.circle;
+        loadPage('feed');
       });
     });
 
@@ -189,6 +216,7 @@ var renderShell = function() {
       }
     }
 
+    syncSidebarSelection();
     loadPage(state.currentPage);
   }).catch(function(err) {
     console.error('Failed to load shell:', err);
@@ -210,9 +238,7 @@ var loadPage = function(page) {
   if (!slot) return;
 
   // Highlight active nav link
-  document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.page === page);
-  });
+  syncSidebarSelection();
 
   fetch('pages/' + page + '.html').then(function(res) {
     if (!res.ok) throw new Error('page HTTP ' + res.status);
@@ -232,6 +258,12 @@ var loadPage = function(page) {
 
 // ─── Feed: init ──────────────────────────────────────────────────────────────
 var initFeedPage = function() {
+  var visibleCircles = getVisibleCircles();
+
+  if (visibleCircles.indexOf(feedState.filter) === -1) {
+    feedState.filter = 'all';
+  }
+
   var composeAv = document.querySelector('[data-slot="compose-avatar"]');
   if (composeAv && state.user) {
     if (state.user.photoURL) {
@@ -245,12 +277,28 @@ var initFeedPage = function() {
   var submitBtn = document.getElementById('composeSubmit');
   if (submitBtn) submitBtn.addEventListener('click', handleComposeSubmit);
 
+  var composeCircle = document.getElementById('composeCircle');
+  if (composeCircle) {
+    composeCircle.querySelectorAll('option').forEach(function(option) {
+      option.hidden = visibleCircles.indexOf(option.value) === -1;
+    });
+
+    if (visibleCircles.indexOf(composeCircle.value) === -1) {
+      composeCircle.value = 'all';
+    }
+  }
+
+  document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
+    pill.hidden = visibleCircles.indexOf(pill.dataset.filter) === -1;
+  });
+
   document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
     pill.addEventListener('click', function() {
       feedState.filter = pill.dataset.filter;
       document.querySelectorAll('.filter-pills .pill').forEach(function(p) {
         p.classList.toggle('active', p === pill);
       });
+      syncSidebarSelection();
       renderFeedList();
     });
   });
@@ -259,12 +307,17 @@ var initFeedPage = function() {
     p.classList.toggle('active', p.dataset.filter === feedState.filter);
   });
 
+  syncSidebarSelection();
   subscribeFeed();
 };
 
 // ─── Feed: live subscription ─────────────────────────────────────────────────
 var subscribeFeed = function() {
-  var q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+  var q = query(
+    collection(db, 'posts'),
+    where('circle', 'in', getVisibleCircles()),
+    orderBy('timestamp', 'desc')
+  );
 
   feedState.unsubscribe = onSnapshot(q, function(snap) {
     feedState.posts = [];
@@ -400,30 +453,17 @@ var initMembersPage = function() {
   });
 };
 
-// ─── Members: load (cross-check against allowlist) ──────────────────────────
+// ─── Members: load ───────────────────────────────────────────────────────────
 var loadMembers = function() {
   var list = document.getElementById('membersList');
   if (!list) return;
 
-  Promise.all([
-    getDocs(collection(db, 'users')),
-    getDocs(collection(db, 'allowlist'))
-  ]).then(function(results) {
-    var usersSnap = results[0];
-    var allowSnap = results[1];
-
-    var allowedEmails = {};
-    allowSnap.forEach(function(d) {
-      allowedEmails[d.id.toLowerCase()] = true;
-    });
-
+  getDocs(collection(db, 'users')).then(function(usersSnap) {
     var members = [];
     usersSnap.forEach(function(d) {
       var data = d.data();
       data.uid = d.id;
-      if (data.email && allowedEmails[data.email.toLowerCase()]) {
-        members.push(data);
-      }
+      members.push(data);
     });
 
     // Sort alphabetically by name
@@ -640,6 +680,12 @@ var handleSaveProfile = function(uid) {
     bio:     newBio,
     circles: newCircles
   }).then(function() {
+    state.circles = newCircles.slice();
+    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
+      btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+    });
+    syncSidebarSelection();
+
     // Update local cache so UI reflects change without a full reload
     var member = membersState.members.find(function(m) { return m.uid === uid; });
     if (member) {
@@ -672,6 +718,7 @@ var loadRecentPosts = function(uid) {
   var q = query(
     collection(db, 'posts'),
     where('authorId', '==', uid),
+    where('circle', 'in', getVisibleCircles()),
     orderBy('timestamp', 'desc'),
     limit(5)
   );
@@ -702,41 +749,16 @@ var loadRecentPosts = function(uid) {
 
 // ─── Events: init ────────────────────────────────────────────────────────────
 var initEventsPage = function() {
-  console.log('[enclave] initEventsPage, isAdmin=', state.isAdmin);
   var createBtn = document.getElementById('createEventBtn');
   if (createBtn) {
     createBtn.hidden = !state.isAdmin;
-    console.log('[enclave] createBtn found, hidden=', createBtn.hidden);
-  } else {
-    console.warn('[enclave] createBtn NOT found in DOM');
   }
   loadEvents();
 };
 
-// Single document-level delegated click handler for events page actions.
-// Attached once at module load — survives page navigation.
-document.addEventListener('click', function(e) {
-  var target = e.target;
-
-  // Walk up to find [id="createEventBtn"] or [data-action="close-event"]
-  var createBtn = target.closest && target.closest('#createEventBtn');
-  if (createBtn) {
-    console.log('[enclave] createEventBtn clicked');
-    openCreateEventModal();
-    return;
-  }
-
-  var closeBtn = target.closest && target.closest('[data-action="close-event"]');
-  if (closeBtn) {
-    closeEventModal();
-    return;
-  }
-});
-
 // Globally-exposed functions for inline onclick handlers in page HTML.
-// This is bulletproof — no addEventListener timing, no delegation.
 window.enclaveCreateEvent = function() {
-  console.log('[enclave] enclaveCreateEvent called, isAdmin=', state.isAdmin);
+  if (!state.isAdmin) return;
   openCreateEventModal();
 };
 
@@ -744,25 +766,16 @@ window.enclaveCloseEvent = function() {
   closeEventModal();
 };
 
-// Debug hook
-window.__enclave = {
-  state: state,
-  forceAdmin: function() {
-    state.isAdmin = true;
-    console.log('[enclave] admin forced on');
-    if (state.currentPage === 'events') {
-      var b = document.getElementById('createEventBtn');
-      if (b) b.hidden = false;
-    }
-  }
-};
-
 // ─── Events: load upcoming ───────────────────────────────────────────────────
 var loadEvents = function() {
   var list = document.getElementById('eventsList');
   if (!list) return;
 
-  var q = query(collection(db, 'events'), orderBy('date', 'asc'));
+  var q = query(
+    collection(db, 'events'),
+    where('circle', 'in', getVisibleCircles()),
+    orderBy('date', 'asc')
+  );
 
   getDocs(q).then(function(snap) {
     var events = [];
@@ -799,7 +812,6 @@ var renderEventsList = function() {
 
   list.innerHTML = eventsState.events.map(renderEventCard).join('');
 
-  // Wire RSVP buttons
   list.querySelectorAll('[data-rsvp]').forEach(function(btn) {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -807,18 +819,17 @@ var renderEventsList = function() {
     });
   });
 
-  // Preload RSVP state for current user on each event
   if (state.user) {
     eventsState.events.forEach(function(ev) {
       var rsvpRef = doc(db, 'events', ev.id, 'rsvps', state.user.uid);
       getDoc(rsvpRef).then(function(snap) {
-        if (snap.exists()) {
-          var btn = list.querySelector('[data-rsvp="' + ev.id + '"]');
-          if (btn) {
-            btn.classList.add('rsvped');
-            btn.textContent = 'Going ✓';
-          }
-        }
+        if (!snap.exists()) return;
+
+        var btn = list.querySelector('[data-rsvp="' + ev.id + '"]');
+        if (!btn) return;
+
+        btn.classList.add('rsvped');
+        btn.textContent = rsvpButtonLabel(ev.rsvpCount, true);
       }).catch(function() { /* ignore */ });
     });
   }
@@ -842,7 +853,6 @@ var renderEventCard = function(ev) {
   }
 
   var rsvpCount = (typeof ev.rsvpCount === 'number') ? ev.rsvpCount : 0;
-  var countLbl  = rsvpCount > 0 ? ' (' + rsvpCount + ')' : '';
 
   return '' +
     '<div class="event-card">' +
@@ -856,7 +866,7 @@ var renderEventCard = function(ev) {
       '</div>' +
       (descEsc ? '<div class="event-desc">' + descEsc + '</div>' : '') +
       '<div class="event-actions">' +
-        '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">RSVP' + countLbl + '</button>' +
+        '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">' + rsvpButtonLabel(rsvpCount, false) + '</button>' +
       '</div>' +
     '</div>';
 };
@@ -865,43 +875,58 @@ var renderEventCard = function(ev) {
 var handleRsvp = function(eventId, btn) {
   if (!state.user || !eventId) return;
 
+  var eventRef = doc(db, 'events', eventId);
   var rsvpRef = doc(db, 'events', eventId, 'rsvps', state.user.uid);
-  var isRsvped = btn.classList.contains('rsvped');
 
   btn.disabled = true;
 
-  if (isRsvped) {
-    // Toggle off
-    deleteDoc(rsvpRef).then(function() {
-      btn.classList.remove('rsvped');
-      btn.textContent = 'RSVP';
-      btn.disabled = false;
-    }).catch(function(err) {
-      console.error('Failed to cancel RSVP:', err);
-      btn.disabled = false;
+  runTransaction(db, function(transaction) {
+    return transaction.get(eventRef).then(function(eventSnap) {
+      if (!eventSnap.exists()) throw new Error('Event not found.');
+
+      return transaction.get(rsvpRef).then(function(rsvpSnap) {
+        var eventData = eventSnap.data() || {};
+        var currentCount = typeof eventData.rsvpCount === 'number' ? eventData.rsvpCount : 0;
+
+        if (rsvpSnap.exists()) {
+          var nextCount = currentCount > 0 ? currentCount - 1 : 0;
+          transaction.delete(rsvpRef);
+          transaction.update(eventRef, { rsvpCount: nextCount });
+          return {
+            count:    nextCount,
+            isRsvped: false
+          };
+        }
+
+        var nextCount = currentCount + 1;
+        transaction.set(rsvpRef, {
+          uid:       state.user.uid,
+          name:      state.user.displayName || state.user.email,
+          email:     state.user.email,
+          timestamp: serverTimestamp()
+        });
+        transaction.update(eventRef, { rsvpCount: nextCount });
+        return {
+          count:    nextCount,
+          isRsvped: true
+        };
+      });
     });
-  } else {
-    // Toggle on
-    setDoc(rsvpRef, {
-      uid:       state.user.uid,
-      name:      state.user.displayName || state.user.email,
-      email:     state.user.email,
-      timestamp: serverTimestamp()
-    }).then(function() {
-      btn.classList.add('rsvped');
-      btn.textContent = 'Going ✓';
-      btn.disabled = false;
-    }).catch(function(err) {
-      console.error('Failed to RSVP:', err);
-      alert('Failed to RSVP. Check console for details.');
-      btn.disabled = false;
-    });
-  }
+  }).then(function(result) {
+    setLocalEventRsvpCount(eventId, result.count);
+    btn.classList.toggle('rsvped', result.isRsvped);
+    btn.textContent = rsvpButtonLabel(result.count, result.isRsvped);
+    btn.disabled = false;
+  }).catch(function(err) {
+    console.error('Failed to update RSVP:', err);
+    alert('Failed to update RSVP. Check console for details.');
+    btn.disabled = false;
+  });
 };
 
 // ─── Events: create event modal (admin only) ────────────────────────────────
 var openCreateEventModal = function() {
-  console.log('[enclave] openCreateEventModal running');
+  if (!state.isAdmin) return;
   var modal = document.getElementById('eventModal');
   var body  = document.getElementById('eventModalBody');
   if (!modal || !body) return;
@@ -1045,6 +1070,46 @@ var circleLabel = function(id) {
   return labels[id] || id;
 };
 
+var getVisibleCircles = function() {
+  var circles = state.isAdmin
+    ? ALL_CIRCLES.slice()
+    : (Array.isArray(state.circles) ? state.circles.slice() : []);
+
+  circles.unshift('all');
+
+  return circles.filter(function(circle, index) {
+    return circles.indexOf(circle) === index;
+  });
+};
+
+var syncSidebarSelection = function() {
+  document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.page === state.currentPage);
+  });
+
+  document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
+    var isActive = state.currentPage === 'feed' &&
+      feedState.filter !== 'all' &&
+      btn.dataset.circle === feedState.filter;
+
+    btn.classList.toggle('active', isActive);
+  });
+};
+
+var rsvpButtonLabel = function(count, isRsvped) {
+  var total = typeof count === 'number' ? count : 0;
+  var countLabel = total > 0 ? ' (' + total + ')' : '';
+  return (isRsvped ? 'Going' : 'RSVP') + countLabel;
+};
+
+var setLocalEventRsvpCount = function(eventId, count) {
+  eventsState.events = eventsState.events.map(function(eventItem) {
+    if (eventItem.id !== eventId) return eventItem;
+    eventItem.rsvpCount = count;
+    return eventItem;
+  });
+};
+
 var escapeHTML = function(str) {
   var d = document.createElement('div');
   d.textContent = str == null ? '' : String(str);
@@ -1062,6 +1127,8 @@ onAuthStateChanged(auth, function(user) {
     checkAllowlist(user);
   } else {
     state.user = null;
+    state.isAdmin = false;
+    state.circles = [];
     renderLogin();
   }
 });

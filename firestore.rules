@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocExists() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return userDocExists() && userData().role == 'admin';
+    }
+
+    function canAccessCircle(circle) {
+      return circle == 'all' ||
+        isAdmin() ||
+        (
+          userDocExists() &&
+          userData().circles is list &&
+          circle in userData().circles
+        );
+    }
+
+    function eventExists(eventId) {
+      return exists(/databases/$(database)/documents/events/$(eventId));
+    }
+
+    function canAccessEvent(eventId) {
+      return eventExists(eventId) &&
+        canAccessCircle(
+          get(/databases/$(database)/documents/events/$(eventId)).data.circle
+        );
+    }
+
+    match /allowlist/{email} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get, list: if signedIn();
+
+      allow create: if signedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.role == '' &&
+        request.resource.data.circles is list;
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.role != 'admin'
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /posts/{postId} {
+      allow get, list: if signedIn();
+
+      allow create: if signedIn() &&
+        request.resource.data.authorId == request.auth.uid &&
+        canAccessCircle(request.resource.data.circle);
+
+      allow update, delete: if isAdmin() || (
+        signedIn() &&
+        resource.data.authorId == request.auth.uid &&
+        request.resource.data.authorId == resource.data.authorId &&
+        canAccessCircle(resource.data.circle) &&
+        canAccessCircle(request.resource.data.circle)
+      );
+    }
+
+    match /events/{eventId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if isAdmin();
+
+      match /rsvps/{userId} {
+        allow get, list: if signedIn();
+
+        allow create, update, delete: if signedIn() &&
+          request.auth.uid == userId &&
+          canAccessEvent(eventId);
+      }
+    }
+  }
+}
