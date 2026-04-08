@@ -1136,7 +1136,11 @@ var renderInlineEventComposer = function() {
 };
 
 var handleInlineCreateEvent = function() {
-  if (!state.isAdmin || !state.user) return;
+  console.log('[enclave] handleInlineCreateEvent called, user=', state.user && state.user.email, 'isAdmin=', state.isAdmin);
+  if (!state.user) {
+    alert('Not signed in.');
+    return;
+  }
 
   var titleEl = document.getElementById('inlineEvTitle');
   var dateEl = document.getElementById('inlineEvDate');
@@ -1191,7 +1195,16 @@ var handleInlineCreateEvent = function() {
     loadEvents();
   }).catch(function(err) {
     console.error('Failed to create event:', err);
-    alert('Failed to create event. Check console for details.');
+    var msg;
+    if (err.code === 'permission-denied') {
+      msg = 'PERMISSION DENIED.\n\n' +
+        'Firestore rejected the write. Two things to check:\n\n' +
+        '1. Firebase Console → Firestore → Rules: paste the full ruleset that includes the /events/{eventId} block (with the /rsvps/{uid} subcollection) and click Publish.\n\n' +
+        '2. Firebase Console → Firestore → users → your uid doc: the "role" field must be exactly the string "admin" (lowercase).';
+    } else {
+      msg = 'Failed to create event.\n\n' + (err.code || '') + '\n' + (err.message || '');
+    }
+    alert(msg);
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Create Event';
