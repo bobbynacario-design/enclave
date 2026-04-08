@@ -3,6 +3,32 @@
   <p class="text-muted">What's happening in the enclave.</p>
 </div>
 
-<div class="card">
-  <p class="text-muted">Your feed is empty. Posts from your circles will appear here.</p>
+<!-- Compose box -->
+<div class="compose-box">
+  <div class="compose-top">
+    <div class="compose-avatar" data-slot="compose-avatar"></div>
+    <select class="compose-circle" id="composeCircle">
+      <option value="all">All</option>
+      <option value="poker-crew">Poker Crew</option>
+      <option value="work-network">Work Network</option>
+      <option value="family">Family</option>
+    </select>
+  </div>
+  <textarea class="compose-body" id="composeBody" placeholder="Share something with the enclave..." rows="3"></textarea>
+  <div class="compose-actions">
+    <button class="btn btn-primary" id="composeSubmit">Post</button>
+  </div>
+</div>
+
+<!-- Circle filter pills -->
+<div class="filter-pills">
+  <button class="pill active" data-filter="all">All</button>
+  <button class="pill" data-filter="poker-crew">Poker Crew</button>
+  <button class="pill" data-filter="work-network">Work Network</button>
+  <button class="pill" data-filter="family">Family</button>
+</div>
+
+<!-- Feed list -->
+<div class="feed-list" id="feedList">
+  <div class="feed-loading text-muted">Loading posts...</div>
 </div>

@@ -8,7 +8,13 @@ import {
 
 import {
   doc,
-  getDoc
+  getDoc,
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 import { auth, db, googleProvider } from './firebase.js';
@@ -18,6 +24,12 @@ var state = {
   currentPage:  'feed',
   user:         null,
   accessDenied: false
+};
+
+var feedState = {
+  posts:       [],
+  filter:      'all',
+  unsubscribe: null
 };
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
@@ -95,8 +107,6 @@ var renderLogin = function() {
 };
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
-// Fetches components/shell.html, injects it into #app, wires up handlers,
-// populates the user profile, and loads the initial page into the slot.
 var renderShell = function() {
   var appEl = document.getElementById('app');
 
@@ -137,9 +147,14 @@ var renderShell = function() {
 };
 
 // ─── Page loader ─────────────────────────────────────────────────────────────
-// Fetches pages/{page}.html and injects it into the center slot.
 var loadPage = function(page) {
   state.currentPage = page;
+
+  // Clean up any previous page subscriptions
+  if (feedState.unsubscribe) {
+    feedState.unsubscribe();
+    feedState.unsubscribe = null;
+  }
 
   var slot = document.querySelector('[data-slot="page"]');
   if (!slot) return;
@@ -154,10 +169,202 @@ var loadPage = function(page) {
     return res.text();
   }).then(function(pageHTML) {
     slot.innerHTML = pageHTML;
+
+    // Page-specific init
+    if (page === 'feed') initFeedPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
   });
+};
+
+// ─── Feed: init ──────────────────────────────────────────────────────────────
+var initFeedPage = function() {
+  // Compose avatar
+  var composeAv = document.querySelector('[data-slot="compose-avatar"]');
+  if (composeAv && state.user) {
+    if (state.user.photoURL) {
+      composeAv.style.backgroundImage = 'url(' + state.user.photoURL + ')';
+      composeAv.textContent = '';
+    } else {
+      composeAv.textContent = getInitials(state.user.displayName || state.user.email);
+    }
+  }
+
+  // Compose submit
+  var submitBtn = document.getElementById('composeSubmit');
+  if (submitBtn) submitBtn.addEventListener('click', handleComposeSubmit);
+
+  // Filter pills
+  document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
+    pill.addEventListener('click', function() {
+      feedState.filter = pill.dataset.filter;
+      document.querySelectorAll('.filter-pills .pill').forEach(function(p) {
+        p.classList.toggle('active', p === pill);
+      });
+      renderFeedList();
+    });
+  });
+
+  // Reset filter to current (in case re-entering page)
+  document.querySelectorAll('.filter-pills .pill').forEach(function(p) {
+    p.classList.toggle('active', p.dataset.filter === feedState.filter);
+  });
+
+  // Subscribe to live posts feed
+  subscribeFeed();
+};
+
+// ─── Feed: live subscription ─────────────────────────────────────────────────
+var subscribeFeed = function() {
+  var q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+
+  feedState.unsubscribe = onSnapshot(q, function(snap) {
+    feedState.posts = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      feedState.posts.push(data);
+    });
+    renderFeedList();
+  }, function(err) {
+    console.error('Feed subscribe error:', err);
+    var list = document.getElementById('feedList');
+    if (list) list.innerHTML = '<div class="card"><p class="text-muted">Failed to load feed. Check Firestore rules.</p></div>';
+  });
+};
+
+// ─── Feed: compose submit ────────────────────────────────────────────────────
+var handleComposeSubmit = function() {
+  var bodyEl   = document.getElementById('composeBody');
+  var circleEl = document.getElementById('composeCircle');
+  if (!bodyEl || !circleEl || !state.user) return;
+
+  var body   = bodyEl.value.trim();
+  var circle = circleEl.value;
+  if (!body) return;
+
+  var displayName = state.user.displayName || state.user.email;
+
+  var post = {
+    authorId:       state.user.uid,
+    authorName:     displayName,
+    authorInitials: getInitials(displayName),
+    circle:         circle,
+    body:           body,
+    timestamp:      serverTimestamp(),
+    reacts:         [],
+    comments:       []
+  };
+
+  var submitBtn = document.getElementById('composeSubmit');
+  if (submitBtn) {
+    submitBtn.disabled    = true;
+    submitBtn.textContent = 'Posting...';
+  }
+
+  addDoc(collection(db, 'posts'), post).then(function() {
+    bodyEl.value = '';
+    if (submitBtn) {
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Post';
+    }
+  }).catch(function(err) {
+    console.error('Failed to post:', err);
+    if (submitBtn) {
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Post';
+    }
+    alert('Failed to post. Check console for details.');
+  });
+};
+
+// ─── Feed: render list ───────────────────────────────────────────────────────
+var renderFeedList = function() {
+  var list = document.getElementById('feedList');
+  if (!list) return;
+
+  var posts = feedState.posts;
+  if (feedState.filter !== 'all') {
+    posts = posts.filter(function(p) { return p.circle === feedState.filter; });
+  }
+
+  if (posts.length === 0) {
+    list.innerHTML = '<div class="card"><p class="text-muted">No posts yet. Be the first to share.</p></div>';
+    return;
+  }
+
+  list.innerHTML = posts.map(renderPostCard).join('');
+};
+
+// ─── Feed: render single post card ───────────────────────────────────────────
+var renderPostCard = function(p) {
+  var circleLabels = {
+    'all':          'All',
+    'poker-crew':   'Poker Crew',
+    'work-network': 'Work Network',
+    'family':       'Family'
+  };
+  var circleLabel = circleLabels[p.circle] || p.circle || 'All';
+
+  var time = (p.timestamp && typeof p.timestamp.toDate === 'function')
+    ? relativeTime(p.timestamp.toDate())
+    : 'just now';
+
+  var nameEsc     = escapeHTML(p.authorName || 'Unknown');
+  var initialsEsc = escapeHTML(p.authorInitials || '?');
+  var bodyEsc     = escapeHTML(p.body || '');
+
+  var reactCount   = (p.reacts   || []).length;
+  var commentCount = (p.comments || []).length;
+
+  var reactLbl   = 'React'   + (reactCount   ? ' ' + reactCount   : '');
+  var commentLbl = 'Comment' + (commentCount ? ' ' + commentCount : '');
+
+  return '' +
+    '<div class="post-card">' +
+      '<div class="post-header">' +
+        '<div class="post-avatar">' + initialsEsc + '</div>' +
+        '<div class="post-meta">' +
+          '<div class="post-author">' + nameEsc + '</div>' +
+          '<div class="post-submeta">' +
+            '<span class="post-circle">' + circleLabel + '</span>' +
+            '<span class="post-dot">&middot;</span>' +
+            '<span class="post-time">' + time + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="post-body">' + bodyEsc + '</div>' +
+      '<div class="post-actions">' +
+        '<button class="post-action">&#9825; ' + reactLbl + '</button>' +
+        '<button class="post-action">&#128172; ' + commentLbl + '</button>' +
+        '<button class="post-action">&#8599; Share</button>' +
+      '</div>' +
+    '</div>';
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+var getInitials = function(name) {
+  if (!name) return '?';
+  var parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
+
+var relativeTime = function(date) {
+  var sec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (sec < 5)      return 'just now';
+  if (sec < 60)     return sec + 's ago';
+  if (sec < 3600)   return Math.floor(sec / 60)    + 'm ago';
+  if (sec < 86400)  return Math.floor(sec / 3600)  + 'h ago';
+  if (sec < 604800) return Math.floor(sec / 86400) + 'd ago';
+  return date.toLocaleDateString();
+};
+
+var escapeHTML = function(str) {
+  var d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
