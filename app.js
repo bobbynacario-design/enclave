@@ -189,7 +189,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v21';
+var ASSET_VERSION = 'v22';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -244,6 +244,20 @@ var renderShell = function() {
 };
 
 window.enclaveGoPage = function(page) {
+  if (page === 'admin' && state.user) {
+    refreshCurrentUserState().then(function() {
+      if (!state.isAdmin) {
+        loadPage('feed');
+        return;
+      }
+      loadPage('admin');
+    }).catch(function(err) {
+      console.error('Failed to refresh user state before admin nav:', err);
+      loadPage('feed');
+    });
+    return;
+  }
+
   if (page === 'feed') {
     feedState.filter = 'all';
   }
@@ -253,6 +267,27 @@ window.enclaveGoPage = function(page) {
 window.enclaveGoCircle = function(circle) {
   feedState.filter = circle;
   loadPage('feed');
+};
+
+var refreshCurrentUserState = function() {
+  if (!state.user) return Promise.resolve();
+
+  return getDoc(doc(db, 'users', state.user.uid)).then(function(snap) {
+    if (!snap.exists()) return;
+
+    var data = snap.data() || {};
+    state.isAdmin = data.role === 'admin';
+    state.circles = normalizeCircles(data.circles);
+
+    var adminLink = document.querySelector('.sidebar-link[data-page="admin"]');
+    if (adminLink) adminLink.hidden = !state.isAdmin;
+
+    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
+      btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+    });
+
+    syncSidebarSelection();
+  });
 };
 
 // ─── Right panel: upcoming events ────────────────────────────────────────────
