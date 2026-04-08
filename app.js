@@ -199,7 +199,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v23';
+var ASSET_VERSION = 'v24';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -258,14 +258,10 @@ var renderShell = function() {
 window.enclaveGoPage = function(page) {
   if (page === 'admin' && state.user) {
     refreshCurrentUserState().then(function() {
-      if (!state.isAdmin) {
-        loadPage('feed');
-        return;
-      }
       loadPage('admin');
     }).catch(function(err) {
       console.error('Failed to refresh user state before admin nav:', err);
-      loadPage('feed');
+      loadPage('admin');
     });
     return;
   }
@@ -392,10 +388,6 @@ var loadPanelEvents = function() {
 
 // ─── Page loader ─────────────────────────────────────────────────────────────
 var loadPage = function(page) {
-  if (page === 'admin' && !state.isAdmin) {
-    page = 'feed';
-  }
-
   state.currentPage = page;
   syncURLState();
 
@@ -654,7 +646,7 @@ var loadMembers = function() {
 // ─── Admin: init ──────────────────────────────────────────────────────────────
 var initAdminPage = function() {
   if (!state.isAdmin) {
-    loadPage('feed');
+    renderAdminAccessDenied();
     return;
   }
 
@@ -662,6 +654,32 @@ var initAdminPage = function() {
   if (inviteBtn) inviteBtn.addEventListener('click', handleAdminInvite);
 
   loadAllowlistMembers();
+};
+
+var renderAdminAccessDenied = function() {
+  var list = document.querySelector('[data-slot="page"]');
+  if (!list) return;
+
+  list.innerHTML =
+    '<div class="page-header">' +
+      '<h1>Admin</h1>' +
+      '<p class="text-muted">Manage invites and circle access.</p>' +
+    '</div>' +
+    '<div class="card">' +
+      '<h2 class="profile-name">Admin access required</h2>' +
+      '<p class="text-muted">This signed-in account is not loading as an admin.</p>' +
+      '<p class="text-muted mt-16">Signed in as: ' + escapeHTML((state.user && state.user.email) || 'Unknown account') + '</p>' +
+      '<div class="edit-actions">' +
+        '<button class="btn btn-primary" id="adminBackToFeedBtn">Back to Feed</button>' +
+      '</div>' +
+    '</div>';
+
+  var backBtn = document.getElementById('adminBackToFeedBtn');
+  if (backBtn) {
+    backBtn.addEventListener('click', function() {
+      loadPage('feed');
+    });
+  }
 };
 
 // ─── Admin: load allowlist ────────────────────────────────────────────────────
