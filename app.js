@@ -94,87 +94,70 @@ var renderLogin = function() {
   document.getElementById('googleSignInBtn').addEventListener('click', handleSignIn);
 };
 
-// ─── Router ──────────────────────────────────────────────────────────────────
-var navigate = function(page) {
-  state.currentPage = page;
-
-  document.querySelectorAll('.page').forEach(function(el) {
-    el.classList.remove('active');
-  });
-
-  var target = document.getElementById('page-' + page);
-  if (target) target.classList.add('active');
-
-  document.querySelectorAll('#nav .nav-links button').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.page === page);
-  });
-};
-
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
+// Fetches components/shell.html, injects it into #app, wires up handlers,
+// populates the user profile, and loads the initial page into the slot.
 var renderShell = function() {
-  var app = document.getElementById('app');
+  var appEl = document.getElementById('app');
 
-  app.innerHTML =
-    '<nav id="nav">' +
-      '<span class="logo">Enclave</span>' +
-      '<div class="nav-links">' +
-        '<button data-page="feed">Feed</button>' +
-        '<button data-page="events">Events</button>' +
-        '<button data-page="members">Members</button>' +
-        '<button data-page="messages">Messages</button>' +
-      '</div>' +
-      '<button id="signOutBtn" class="btn-ghost">Sign out</button>' +
-    '</nav>' +
-    '<div id="page-feed"     class="page"></div>' +
-    '<div id="page-events"   class="page"></div>' +
-    '<div id="page-members"  class="page"></div>' +
-    '<div id="page-messages" class="page"></div>';
+  fetch('components/shell.html').then(function(res) {
+    if (!res.ok) throw new Error('shell HTTP ' + res.status);
+    return res.text();
+  }).then(function(shellHTML) {
+    appEl.innerHTML = shellHTML;
 
-  document.querySelectorAll('#nav .nav-links button').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var page = btn.dataset.page;
-      loadPage(page);
-      navigate(page);
+    // Nav links
+    document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        loadPage(btn.dataset.page);
+      });
     });
+
+    // Sign out
+    var signOutBtn = document.querySelector('[data-action="sign-out"]');
+    if (signOutBtn) signOutBtn.addEventListener('click', handleSignOut);
+
+    // User profile row
+    if (state.user) {
+      var nameEl  = document.querySelector('[data-slot="user-name"]');
+      var emailEl = document.querySelector('[data-slot="user-email"]');
+      var avEl    = document.querySelector('[data-slot="user-avatar"]');
+      if (nameEl)  nameEl.textContent  = state.user.displayName || 'Member';
+      if (emailEl) emailEl.textContent = state.user.email || '';
+      if (avEl && state.user.photoURL) {
+        avEl.style.backgroundImage = 'url(' + state.user.photoURL + ')';
+      }
+    }
+
+    loadPage(state.currentPage);
+  }).catch(function(err) {
+    console.error('Failed to load shell:', err);
+    appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
   });
-
-  document.getElementById('signOutBtn').addEventListener('click', handleSignOut);
-
-  loadPage(state.currentPage);
-  navigate(state.currentPage);
 };
 
 // ─── Page loader ─────────────────────────────────────────────────────────────
+// Fetches pages/{page}.html and injects it into the center slot.
 var loadPage = function(page) {
-  var pages = {
-    feed:     renderFeed,
-    events:   renderEvents,
-    members:  renderMembers,
-    messages: renderMessages
-  };
+  state.currentPage = page;
 
-  if (pages[page]) pages[page]();
-};
+  var slot = document.querySelector('[data-slot="page"]');
+  if (!slot) return;
 
-// ─── Pages (stubs — build out in /pages/) ────────────────────────────────────
-var renderFeed = function() {
-  var el = document.getElementById('page-feed');
-  el.innerHTML = '<div class="card"><p class="text-muted">Feed coming soon.</p></div>';
-};
+  // Highlight active nav link
+  document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.page === page);
+  });
 
-var renderEvents = function() {
-  var el = document.getElementById('page-events');
-  el.innerHTML = '<div class="card"><p class="text-muted">Events coming soon.</p></div>';
-};
-
-var renderMembers = function() {
-  var el = document.getElementById('page-members');
-  el.innerHTML = '<div class="card"><p class="text-muted">Members coming soon.</p></div>';
-};
-
-var renderMessages = function() {
-  var el = document.getElementById('page-messages');
-  el.innerHTML = '<div class="card"><p class="text-muted">Messages coming soon.</p></div>';
+  fetch('pages/' + page + '.html').then(function(res) {
+    if (!res.ok) throw new Error('page HTTP ' + res.status);
+    return res.text();
+  }).then(function(pageHTML) {
+    slot.innerHTML = pageHTML;
+  }).catch(function(err) {
+    console.error('Failed to load page ' + page + ':', err);
+    slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
+  });
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
