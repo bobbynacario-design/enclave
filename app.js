@@ -702,21 +702,41 @@ var loadRecentPosts = function(uid) {
 
 // ─── Events: init ────────────────────────────────────────────────────────────
 var initEventsPage = function() {
+  console.log('[enclave] initEventsPage, isAdmin=', state.isAdmin);
   var createBtn = document.getElementById('createEventBtn');
   if (createBtn) {
-    if (state.isAdmin) {
-      createBtn.hidden = false;
-      createBtn.addEventListener('click', openCreateEventModal);
-    } else {
-      createBtn.hidden = true;
-    }
+    createBtn.hidden = !state.isAdmin;
+    console.log('[enclave] createBtn found, hidden=', createBtn.hidden);
+  } else {
+    console.warn('[enclave] createBtn NOT found in DOM');
+  }
+  loadEvents();
+};
+
+// Single document-level delegated click handler for events page actions.
+// Attached once at module load — survives page navigation.
+document.addEventListener('click', function(e) {
+  var target = e.target;
+
+  // Walk up to find [id="createEventBtn"] or [data-action="close-event"]
+  var createBtn = target.closest && target.closest('#createEventBtn');
+  if (createBtn) {
+    console.log('[enclave] createEventBtn clicked');
+    openCreateEventModal();
+    return;
   }
 
-  document.querySelectorAll('[data-action="close-event"]').forEach(function(el) {
-    el.addEventListener('click', closeEventModal);
-  });
+  var closeBtn = target.closest && target.closest('[data-action="close-event"]');
+  if (closeBtn) {
+    closeEventModal();
+    return;
+  }
+});
 
-  loadEvents();
+// Expose for manual debugging from DevTools console
+window.__enclave = {
+  openCreateEvent: function() { openCreateEventModal(); },
+  state:           state
 };
 
 // ─── Events: load upcoming ───────────────────────────────────────────────────
