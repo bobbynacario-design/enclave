@@ -217,10 +217,61 @@ var renderShell = function() {
     }
 
     syncSidebarSelection();
+    loadPanelEvents();
     loadPage(state.currentPage);
   }).catch(function(err) {
     console.error('Failed to load shell:', err);
     appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
+  });
+};
+
+// ─── Right panel: upcoming events ────────────────────────────────────────────
+var loadPanelEvents = function() {
+  var el = document.getElementById('panelEvents');
+  if (!el) return;
+
+  var q = query(collection(db, 'events'), orderBy('date', 'asc'), limit(5));
+  getDocs(q).then(function(snap) {
+    var now = Date.now();
+    var items = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      var t = data.date && typeof data.date.toDate === 'function'
+        ? data.date.toDate().getTime()
+        : 0;
+      if (t >= now - 3600000) {
+        items.push(data);
+      }
+    });
+
+    if (items.length === 0) {
+      el.className = 'panel-empty';
+      el.textContent = 'No upcoming events.';
+      return;
+    }
+
+    el.className = 'panel-events';
+    el.innerHTML = items.slice(0, 4).map(function(ev) {
+      var titleEsc = escapeHTML(ev.title || 'Untitled');
+      var when = '';
+      if (ev.date && typeof ev.date.toDate === 'function') {
+        var d = ev.date.toDate();
+        when = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+          ' · ' +
+          d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      }
+      var locEsc = escapeHTML(ev.location || '');
+      return '' +
+        '<div class="panel-event">' +
+          '<div class="panel-event-title">' + titleEsc + '</div>' +
+          '<div class="panel-event-meta">' + escapeHTML(when) + '</div>' +
+          (locEsc ? '<div class="panel-event-meta">' + locEsc + '</div>' : '') +
+        '</div>';
+    }).join('');
+  }).catch(function(err) {
+    console.error('Failed to load panel events:', err);
+    el.className = 'panel-empty';
+    el.textContent = 'Failed to load events.';
   });
 };
 
@@ -1224,6 +1275,7 @@ var handleInlineCreateEvent = function() {
     rsvpCount:   0
   }).then(function(ref) {
     console.log('[enclave] addDoc SUCCESS, id=', ref.id);
+    loadPanelEvents();
     titleEl.value = '';
     locationEl.value = '';
     descEl.value = '';

@@ -216,6 +216,32 @@ body {
   font-style: italic;
 }
 
+.panel-events {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px;
+}
+
+.panel-event {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.panel-event-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.panel-event-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* Responsive: hide right panel on smaller screens */
 @media (max-width: 1100px) {
   .shell {
