@@ -598,6 +598,47 @@ label {
   gap: 12px;
 }
 
+.admin-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.admin-member-meta {
+  min-width: 0;
+}
+
+.admin-member-email {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.admin-remove-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .admin-member-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-remove-btn {
+    width: 100%;
+  }
+}
+
 .member-card {
   background: var(--surface);
   border: 1px solid var(--border);

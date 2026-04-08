@@ -11,6 +11,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   addDoc,
   getDocs,
@@ -55,6 +56,10 @@ var membersState = {
   members: []
 };
 
+var adminState = {
+  allowlist: []
+};
+
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var handleSignIn = function() {
   state.accessDenied = false;
@@ -67,6 +72,7 @@ var handleSignOut = function() {
   state.accessDenied = false;
   state.isAdmin = false;
   state.circles = [];
+  adminState.allowlist = [];
   signOut(auth);
 };
 
@@ -84,7 +90,7 @@ var checkAllowlist = function(user) {
   getDoc(ref).then(function(snap) {
     if (snap.exists()) {
       state.user = user;
-      upsertUserDoc(user).then(function() {
+      upsertUserDoc(user, snap.data() || {}).then(function() {
         renderShell();
       }).catch(function(err) {
         console.error('User bootstrap failed:', err);
@@ -102,9 +108,10 @@ var checkAllowlist = function(user) {
 };
 
 // ─── User doc upsert (runs on every sign-in) ─────────────────────────────────
-var upsertUserDoc = function(user) {
+var upsertUserDoc = function(user, allowlistEntry) {
   var ref = doc(db, 'users', user.uid);
   var displayName = user.displayName || user.email;
+  var allowedCircles = normalizeCircles(allowlistEntry && allowlistEntry.circles);
 
   return getDoc(ref).then(function(snap) {
     var base = {
@@ -119,17 +126,25 @@ var upsertUserDoc = function(user) {
     if (snap.exists()) {
       var existing = snap.data() || {};
       state.isAdmin = existing.role === 'admin';
-      state.circles = Array.isArray(existing.circles) ? existing.circles.slice() : [];
-      return updateDoc(ref, base).catch(function(err) {
+      state.circles = state.isAdmin
+        ? normalizeCircles(existing.circles)
+        : allowedCircles.slice();
+
+      var updatePayload = Object.assign({}, base);
+      if (!state.isAdmin) {
+        updatePayload.circles = allowedCircles.slice();
+      }
+
+      return updateDoc(ref, updatePayload).catch(function(err) {
         console.error('User doc update failed:', err);
       });
     } else {
       state.isAdmin = false;
-      state.circles = [];
+      state.circles = allowedCircles.slice();
       base.joinedAt = serverTimestamp();
       base.bio      = '';
       base.role     = '';
-      base.circles  = [];
+      base.circles  = allowedCircles.slice();
       return setDoc(ref, base).catch(function(err) {
         console.error('User doc create failed:', err);
       });
@@ -174,7 +189,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v19';
+var ASSET_VERSION = 'v20';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -187,6 +202,9 @@ var renderShell = function() {
     appEl.innerHTML = shellHTML;
 
     // Nav links
+    var adminLink = document.querySelector('.sidebar-link[data-page="admin"]');
+    if (adminLink) adminLink.hidden = !state.isAdmin;
+
     document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         if (btn.dataset.page === 'feed') {
@@ -287,6 +305,10 @@ var loadPanelEvents = function() {
 
 // ─── Page loader ─────────────────────────────────────────────────────────────
 var loadPage = function(page) {
+  if (page === 'admin' && !state.isAdmin) {
+    page = 'feed';
+  }
+
   state.currentPage = page;
 
   // Clean up any previous page subscriptions
@@ -311,6 +333,7 @@ var loadPage = function(page) {
     if (page === 'feed')    initFeedPage();
     if (page === 'members') initMembersPage();
     if (page === 'events')  initEventsPage();
+    if (page === 'admin')   initAdminPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -540,6 +563,83 @@ var loadMembers = function() {
   });
 };
 
+// ─── Admin: init ──────────────────────────────────────────────────────────────
+var initAdminPage = function() {
+  if (!state.isAdmin) {
+    loadPage('feed');
+    return;
+  }
+
+  var inviteBtn = document.getElementById('adminInviteBtn');
+  if (inviteBtn) inviteBtn.addEventListener('click', handleAdminInvite);
+
+  loadAllowlistMembers();
+};
+
+// ─── Admin: load allowlist ────────────────────────────────────────────────────
+var loadAllowlistMembers = function() {
+  var list = document.getElementById('adminMembersList');
+  if (!list) return;
+
+  getDocs(collection(db, 'allowlist')).then(function(snap) {
+    var entries = [];
+
+    snap.forEach(function(d) {
+      var data = d.data() || {};
+      entries.push({
+        email:   (data.email || d.id || '').toLowerCase(),
+        circles: normalizeCircles(data.circles)
+      });
+    });
+
+    entries.sort(function(a, b) {
+      return a.email.localeCompare(b.email);
+    });
+
+    adminState.allowlist = entries;
+    renderAllowlistMembers();
+  }).catch(function(err) {
+    console.error('Failed to load allowlist:', err);
+    list.innerHTML = '<div class="card"><p class="text-muted">Failed to load allowlist. Check Firestore rules.</p></div>';
+  });
+};
+
+// ─── Admin: render allowlist ──────────────────────────────────────────────────
+var renderAllowlistMembers = function() {
+  var list = document.getElementById('adminMembersList');
+  if (!list) return;
+
+  if (adminState.allowlist.length === 0) {
+    list.innerHTML = '<div class="card"><p class="text-muted">No invited emails yet.</p></div>';
+    return;
+  }
+
+  list.innerHTML = adminState.allowlist.map(function(entry) {
+    var circleTags = entry.circles.map(function(circleId) {
+      return '<span class="circle-tag">' + escapeHTML(circleLabel(circleId)) + '</span>';
+    }).join('');
+
+    if (!circleTags) {
+      circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
+    }
+
+    return '' +
+      '<div class="card admin-member-row">' +
+        '<div class="admin-member-meta">' +
+          '<div class="admin-member-email">' + escapeHTML(entry.email) + '</div>' +
+          '<div class="member-circles">' + circleTags + '</div>' +
+        '</div>' +
+        '<button class="btn btn-ghost admin-remove-btn" data-remove-email="' + escapeAttr(entry.email) + '">Remove</button>' +
+      '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-remove-email]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handleAdminRemove(btn.dataset.removeEmail);
+    });
+  });
+};
+
 // ─── Members: render grid ────────────────────────────────────────────────────
 var renderMembersList = function() {
   var list = document.getElementById('membersList');
@@ -557,6 +657,116 @@ var renderMembersList = function() {
     card.addEventListener('click', function() {
       openProfile(card.dataset.uid);
     });
+  });
+};
+
+// ─── Admin: invite / remove actions ───────────────────────────────────────────
+var handleAdminInvite = function() {
+  if (!state.isAdmin || !state.user) return;
+
+  var emailEl = document.getElementById('adminInviteEmail');
+  var saveBtn = document.getElementById('adminInviteBtn');
+  if (!emailEl || !saveBtn) return;
+
+  var email = emailEl.value.trim().toLowerCase();
+  var circles = getCheckedCircles('#adminInviteCircles');
+
+  if (!email) {
+    alert('Email is required.');
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    alert('Enter a valid email address.');
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+
+  var ref = doc(db, 'allowlist', email);
+  var existing = adminState.allowlist.find(function(entry) {
+    return entry.email === email;
+  });
+
+  var payload = {
+    email:     email,
+    circles:   circles,
+    invitedBy: state.user.uid,
+    updatedAt: serverTimestamp()
+  };
+
+  if (!existing) {
+    payload.createdAt = serverTimestamp();
+  }
+
+  setDoc(ref, payload, { merge: true }).then(function() {
+    return syncUserDocsForAllowlist(email, circles);
+  }).then(function() {
+    emailEl.value = '';
+    setCheckedCircles('#adminInviteCircles', []);
+    return loadAllowlistMembers();
+  }).catch(function(err) {
+    console.error('Failed to save allowlist entry:', err);
+    alert('Failed to save invite. Check console for details.');
+  }).finally(function() {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Invite';
+  });
+};
+
+var handleAdminRemove = function(email) {
+  if (!state.isAdmin || !email) return;
+
+  if (!window.confirm('Remove ' + email + ' from the allowlist?')) {
+    return;
+  }
+
+  deleteDoc(doc(db, 'allowlist', email)).then(function() {
+    return syncUserDocsForAllowlist(email, []);
+  }).then(function() {
+    adminState.allowlist = adminState.allowlist.filter(function(entry) {
+      return entry.email !== email;
+    });
+    renderAllowlistMembers();
+  }).catch(function(err) {
+    console.error('Failed to remove allowlist entry:', err);
+    alert('Failed to remove invite. Check console for details.');
+  });
+};
+
+var syncUserDocsForAllowlist = function(email, circles) {
+  var normalized = normalizeCircles(circles);
+  var usersQuery = query(collection(db, 'users'), where('email', '==', email));
+
+  return getDocs(usersQuery).then(function(snap) {
+    var updates = [];
+
+    snap.forEach(function(userSnap) {
+      var userData = userSnap.data() || {};
+      if (userData.role === 'admin') return;
+
+      updates.push(updateDoc(doc(db, 'users', userSnap.id), {
+        circles: normalized.slice()
+      }));
+
+      if (state.user && state.user.uid === userSnap.id) {
+        state.circles = normalized.slice();
+        document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
+          btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+        });
+        syncSidebarSelection();
+      }
+
+      var member = membersState.members.find(function(item) {
+        return item.uid === userSnap.id;
+      });
+      if (member) {
+        member.circles = normalized.slice();
+      }
+    });
+
+    return Promise.all(updates);
   });
 };
 
@@ -1315,6 +1525,32 @@ var handleInlineCreateEvent = function() {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+var normalizeCircles = function(circles) {
+  if (!Array.isArray(circles)) return [];
+
+  return circles.filter(function(circle, index) {
+    return ALL_CIRCLES.indexOf(circle) !== -1 && circles.indexOf(circle) === index;
+  });
+};
+
+var getCheckedCircles = function(containerSelector) {
+  var selected = [];
+
+  document.querySelectorAll(containerSelector + ' input[type="checkbox"]').forEach(function(cb) {
+    if (cb.checked) selected.push(cb.value);
+  });
+
+  return normalizeCircles(selected);
+};
+
+var setCheckedCircles = function(containerSelector, circles) {
+  var normalized = normalizeCircles(circles);
+
+  document.querySelectorAll(containerSelector + ' input[type="checkbox"]').forEach(function(cb) {
+    cb.checked = normalized.indexOf(cb.value) !== -1;
+  });
+};
+
 var getInitials = function(name) {
   if (!name) return '?';
   var parts = name.trim().split(/\s+/);
@@ -1401,6 +1637,7 @@ onAuthStateChanged(auth, function(user) {
     state.user = null;
     state.isAdmin = false;
     state.circles = [];
+    adminState.allowlist = [];
     renderLogin();
   }
 });
