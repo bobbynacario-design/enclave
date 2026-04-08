@@ -172,11 +172,15 @@ var renderLogin = function() {
   document.getElementById('googleSignInBtn').addEventListener('click', handleSignIn);
 };
 
+// Cache-buster for HTML fragment fetches — bumped per release to defeat
+// browser/CDN caching of components and pages.
+var ASSET_VERSION = 'v19';
+
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
   var appEl = document.getElementById('app');
 
-  fetch('components/shell.html').then(function(res) {
+  fetch('components/shell.html?' + ASSET_VERSION).then(function(res) {
     if (!res.ok) throw new Error('shell HTTP ' + res.status);
     return res.text();
   }).then(function(shellHTML) {
@@ -227,11 +231,17 @@ var renderShell = function() {
 
 // ─── Right panel: upcoming events ────────────────────────────────────────────
 var loadPanelEvents = function() {
+  console.log('[enclave] loadPanelEvents START');
   var el = document.getElementById('panelEvents');
-  if (!el) return;
+  if (!el) {
+    console.warn('[enclave] #panelEvents element NOT FOUND — shell may be cached. Hard refresh required.');
+    return;
+  }
+  console.log('[enclave] #panelEvents found, querying...');
 
   var q = query(collection(db, 'events'), orderBy('date', 'asc'), limit(5));
   getDocs(q).then(function(snap) {
+    console.log('[enclave] panel events query returned', snap.size, 'docs');
     var now = Date.now();
     var items = [];
     snap.forEach(function(d) {
@@ -291,7 +301,7 @@ var loadPage = function(page) {
   // Highlight active nav link
   syncSidebarSelection();
 
-  fetch('pages/' + page + '.html').then(function(res) {
+  fetch('pages/' + page + '.html?' + ASSET_VERSION).then(function(res) {
     if (!res.ok) throw new Error('page HTTP ' + res.status);
     return res.text();
   }).then(function(pageHTML) {
