@@ -189,7 +189,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v20';
+var ASSET_VERSION = 'v21';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -207,18 +207,14 @@ var renderShell = function() {
 
     document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        if (btn.dataset.page === 'feed') {
-          feedState.filter = 'all';
-        }
-        loadPage(btn.dataset.page);
+        window.enclaveGoPage(btn.dataset.page);
       });
     });
 
     document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
       btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
       btn.addEventListener('click', function() {
-        feedState.filter = btn.dataset.circle;
-        loadPage('feed');
+        window.enclaveGoCircle(btn.dataset.circle);
       });
     });
 
@@ -245,6 +241,18 @@ var renderShell = function() {
     console.error('Failed to load shell:', err);
     appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
   });
+};
+
+window.enclaveGoPage = function(page) {
+  if (page === 'feed') {
+    feedState.filter = 'all';
+  }
+  loadPage(page);
+};
+
+window.enclaveGoCircle = function(circle) {
+  feedState.filter = circle;
+  loadPage('feed');
 };
 
 // ─── Right panel: upcoming events ────────────────────────────────────────────

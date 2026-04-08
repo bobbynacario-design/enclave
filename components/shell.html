@@ -6,18 +6,18 @@
     <div class="sidebar-logo">ENCLAVE</div>
 
     <nav class="sidebar-nav">
-      <button class="sidebar-link" data-page="feed">Feed</button>
-      <button class="sidebar-link" data-page="events">Events</button>
-      <button class="sidebar-link" data-page="members">Members</button>
-      <button class="sidebar-link" data-page="admin">Admin</button>
-      <button class="sidebar-link" data-page="messages">Messages</button>
+      <button type="button" class="sidebar-link" data-page="feed" onclick="window.enclaveGoPage('feed')">Feed</button>
+      <button type="button" class="sidebar-link" data-page="events" onclick="window.enclaveGoPage('events')">Events</button>
+      <button type="button" class="sidebar-link" data-page="members" onclick="window.enclaveGoPage('members')">Members</button>
+      <button type="button" class="sidebar-link" data-page="admin" onclick="window.enclaveGoPage('admin')">Admin</button>
+      <button type="button" class="sidebar-link" data-page="messages" onclick="window.enclaveGoPage('messages')">Messages</button>
     </nav>
 
     <div class="sidebar-section">
       <div class="sidebar-heading">Circles</div>
-      <button class="sidebar-link sidebar-sublink" data-circle="poker-crew">Poker Crew</button>
-      <button class="sidebar-link sidebar-sublink" data-circle="work-network">Work Network</button>
-      <button class="sidebar-link sidebar-sublink" data-circle="family">Family</button>
+      <button type="button" class="sidebar-link sidebar-sublink" data-circle="poker-crew" onclick="window.enclaveGoCircle('poker-crew')">Poker Crew</button>
+      <button type="button" class="sidebar-link sidebar-sublink" data-circle="work-network" onclick="window.enclaveGoCircle('work-network')">Work Network</button>
+      <button type="button" class="sidebar-link sidebar-sublink" data-circle="family" onclick="window.enclaveGoCircle('family')">Family</button>
     </div>
 
     <div class="sidebar-profile">
