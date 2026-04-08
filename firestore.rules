@@ -80,7 +80,8 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow get, list: if signedIn();
+      allow get, list: if signedIn() &&
+        canAccessCircle(resource.data.circle);
 
       allow create: if signedIn() &&
         request.resource.data.authorId == request.auth.uid &&
@@ -96,11 +97,13 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      allow get, list: if signedIn();
+      allow get, list: if signedIn() &&
+        canAccessCircle(resource.data.circle);
       allow create, update, delete: if isAdmin();
 
       match /rsvps/{userId} {
-        allow get, list: if signedIn();
+        allow get, list: if signedIn() &&
+          canAccessEvent(eventId);
 
         allow create, update, delete: if signedIn() &&
           request.auth.uid == userId &&

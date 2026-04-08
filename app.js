@@ -205,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v25';
+var ASSET_VERSION = 'v26';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -346,7 +346,12 @@ var loadPanelEvents = function() {
   }
   console.log('[enclave] #panelEvents found, querying...');
 
-  var q = query(collection(db, 'events'), orderBy('date', 'asc'), limit(5));
+  var q = query(
+    collection(db, 'events'),
+    where('circle', 'in', getVisibleCircles()),
+    orderBy('date', 'asc'),
+    limit(5)
+  );
   getDocs(q).then(function(snap) {
     console.log('[enclave] panel events query returned', snap.size, 'docs');
     var now = Date.now();
