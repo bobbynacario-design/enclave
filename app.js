@@ -205,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v27';
+var ASSET_VERSION = 'v28';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1048,27 +1048,18 @@ var renderEditProfileForm = function(member) {
   var bioVal  = escapeAttr(member.bio  || '');
   var roleVal = escapeAttr(member.role || '');
   var currentCircles = Array.isArray(member.circles) ? member.circles : [];
-
-  var allCircles = [
-    { id: 'poker-crew',   label: 'Poker Crew'   },
-    { id: 'work-network', label: 'Work Network' },
-    { id: 'family',       label: 'Family'       }
-  ];
-
-  var circleChecks = allCircles.map(function(c) {
-    var checked = currentCircles.indexOf(c.id) !== -1 ? ' checked' : '';
-    return '' +
-      '<label class="circle-check">' +
-        '<input type="checkbox" value="' + c.id + '"' + checked + ' />' +
-        '<span>' + c.label + '</span>' +
-      '</label>';
+  var circleTags = currentCircles.map(function(c) {
+    return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
   }).join('');
+  if (!circleTags) {
+    circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
+  }
 
   body.innerHTML =
     '<div class="profile-header">' +
       '<div class="profile-header-meta">' +
         '<h2 class="profile-name">Edit Profile</h2>' +
-        '<p class="text-muted">Update your bio, role, and circles.</p>' +
+        '<p class="text-muted">Update your bio and role. Circles are managed by admins.</p>' +
       '</div>' +
     '</div>' +
     '<div class="profile-section">' +
@@ -1081,7 +1072,8 @@ var renderEditProfileForm = function(member) {
     '</div>' +
     '<div class="profile-section">' +
       '<div class="profile-section-title">Circles</div>' +
-      '<div class="circle-checks">' + circleChecks + '</div>' +
+      '<div class="member-circles">' + circleTags + '</div>' +
+      '<p class="text-muted mt-8">Ask an admin if you need circle access changed.</p>' +
     '</div>' +
     '<div class="edit-actions">' +
       '<button class="btn" id="editCancelBtn">Cancel</button>' +
@@ -1108,12 +1100,6 @@ var handleSaveProfile = function(uid) {
   var newRole = roleEl.value.trim();
   var newBio  = bioEl.value.trim();
 
-  var checks = document.querySelectorAll('.circle-checks input[type="checkbox"]');
-  var newCircles = [];
-  checks.forEach(function(cb) {
-    if (cb.checked) newCircles.push(cb.value);
-  });
-
   if (saveBtn) {
     saveBtn.disabled    = true;
     saveBtn.textContent = 'Saving...';
@@ -1122,21 +1108,13 @@ var handleSaveProfile = function(uid) {
   var ref = doc(db, 'users', uid);
   updateDoc(ref, {
     role:    newRole,
-    bio:     newBio,
-    circles: newCircles
+    bio:     newBio
   }).then(function() {
-    state.circles = newCircles.slice();
-    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-      btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
-    });
-    syncSidebarSelection();
-
     // Update local cache so UI reflects change without a full reload
     var member = membersState.members.find(function(m) { return m.uid === uid; });
     if (member) {
       member.role    = newRole;
       member.bio     = newBio;
-      member.circles = newCircles;
     }
     renderMembersList();
     openProfile(uid);
@@ -1194,6 +1172,7 @@ var loadRecentPosts = function(uid) {
 
 // ─── Events: init ────────────────────────────────────────────────────────────
 var initEventsPage = function() {
+  var composer = document.getElementById('eventAdminComposer');
   var createBtn = document.getElementById('createEventBtn');
   if (createBtn) {
     createBtn.hidden = true;
@@ -1218,7 +1197,11 @@ var initEventsPage = function() {
 
   // Always render the composer if user is signed in. Firestore rules enforce
   // admin-only writes — non-admins will get a clear permission error.
-  if (state.user) {
+  if (composer) {
+    composer.innerHTML = '';
+  }
+
+  if (state.isAdmin) {
     renderInlineEventComposer();
   }
   loadEvents();

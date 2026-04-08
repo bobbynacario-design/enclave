@@ -80,6 +80,7 @@ service cloud.firestore {
         request.auth.uid == userId &&
         request.resource.data.uid == resource.data.uid &&
         request.resource.data.email == resource.data.email &&
+        request.resource.data.circles == resource.data.circles &&
         request.resource.data.role != 'admin'
       );
 
