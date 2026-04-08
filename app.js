@@ -771,7 +771,9 @@ var initEventsPage = function() {
     });
   }
 
-  if (state.isAdmin) {
+  // Always render the composer if user is signed in. Firestore rules enforce
+  // admin-only writes — non-admins will get a clear permission error.
+  if (state.user) {
     renderInlineEventComposer();
   }
   loadEvents();
@@ -1125,9 +1127,22 @@ var renderInlineEventComposer = function() {
         '<textarea id="inlineEvDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
       '</div>' +
       '<div class="edit-actions">' +
-        '<button class="btn btn-primary" id="inlineEvSaveBtn" onclick="window.enclaveInlineCreate()">Create Event</button>' +
+        '<button type="button" class="btn btn-primary" id="inlineEvSaveBtn">Create Event</button>' +
       '</div>' +
     '</div>';
+
+  // Direct onclick assignment — not addEventListener, not inline attribute.
+  // This is the single most reliable handler wiring in the DOM.
+  var btn = document.getElementById('inlineEvSaveBtn');
+  if (btn) {
+    btn.onclick = function() {
+      btn.textContent = 'Working...';
+      btn.disabled = true;
+      setTimeout(function() {
+        handleInlineCreateEvent();
+      }, 0);
+    };
+  }
 };
 
 // Expose for inline onclick — bulletproof against addEventListener timing issues
@@ -1172,14 +1187,22 @@ var handleInlineCreateEvent = function() {
 
   console.log('[enclave] values:', { title: title, dateVal: dateVal, timeVal: timeVal, location: location, circle: circle });
 
-  if (!title)    { alert('Title is required.');    return; }
-  if (!dateVal)  { alert('Date is required.');     return; }
-  if (!timeVal)  { alert('Time is required.');     return; }
-  if (!location) { alert('Location is required.'); return; }
+  var resetBtn = function() {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Create Event';
+    }
+  };
+
+  if (!title)    { alert('Title is required.');    resetBtn(); return; }
+  if (!dateVal)  { alert('Date is required.');     resetBtn(); return; }
+  if (!timeVal)  { alert('Time is required.');     resetBtn(); return; }
+  if (!location) { alert('Location is required.'); resetBtn(); return; }
 
   var combined = new Date(dateVal + 'T' + timeVal);
   if (isNaN(combined.getTime())) {
     alert('Invalid date/time.');
+    resetBtn();
     return;
   }
   console.log('[enclave] combined date:', combined);
