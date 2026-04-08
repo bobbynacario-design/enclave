@@ -15,8 +15,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function ownerAdmin() {
+      return signedIn() &&
+        request.auth.token.email == 'bobbynacario@gmail.com';
+    }
+
     function isAdmin() {
-      return userDocExists() && userData().role == 'admin';
+      return ownerAdmin() ||
+        (userDocExists() && userData().role == 'admin');
     }
 
     function canAccessCircle(circle) {
@@ -56,7 +62,10 @@ service cloud.firestore {
         request.auth.uid == userId &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.email == request.auth.token.email &&
-        request.resource.data.role == '' &&
+        (
+          request.resource.data.role == '' ||
+          (ownerAdmin() && request.resource.data.role == 'admin')
+        ) &&
         request.resource.data.circles is list;
 
       allow update: if isAdmin() || (

@@ -33,6 +33,8 @@ var ALL_CIRCLES = [
   'family'
 ];
 
+var OWNER_ADMIN_EMAIL = 'bobbynacario@gmail.com';
+
 // ─── State ───────────────────────────────────────────────────────────────────
 var state = {
   currentPage:  'feed',
@@ -122,6 +124,7 @@ var upsertUserDoc = function(user, allowlistEntry) {
   var ref = doc(db, 'users', user.uid);
   var displayName = user.displayName || user.email;
   var allowedCircles = normalizeCircles(allowlistEntry && allowlistEntry.circles);
+  var ownerAdmin = isOwnerAdminEmail(user.email);
 
   return getDoc(ref).then(function(snap) {
     var base = {
@@ -135,12 +138,15 @@ var upsertUserDoc = function(user, allowlistEntry) {
 
     if (snap.exists()) {
       var existing = snap.data() || {};
-      state.isAdmin = existing.role === 'admin';
+      state.isAdmin = existing.role === 'admin' || ownerAdmin;
       state.circles = state.isAdmin
         ? normalizeCircles(existing.circles)
         : allowedCircles.slice();
 
       var updatePayload = Object.assign({}, base);
+      if (ownerAdmin && existing.role !== 'admin') {
+        updatePayload.role = 'admin';
+      }
       if (!state.isAdmin) {
         updatePayload.circles = allowedCircles.slice();
       }
@@ -149,11 +155,11 @@ var upsertUserDoc = function(user, allowlistEntry) {
         console.error('User doc update failed:', err);
       });
     } else {
-      state.isAdmin = false;
+      state.isAdmin = ownerAdmin;
       state.circles = allowedCircles.slice();
       base.joinedAt = serverTimestamp();
       base.bio      = '';
-      base.role     = '';
+      base.role     = ownerAdmin ? 'admin' : '';
       base.circles  = allowedCircles.slice();
       return setDoc(ref, base).catch(function(err) {
         console.error('User doc create failed:', err);
@@ -199,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v24';
+var ASSET_VERSION = 'v25';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -284,7 +290,7 @@ var refreshCurrentUserState = function() {
     if (!snap.exists()) return;
 
     var data = snap.data() || {};
-    state.isAdmin = data.role === 'admin';
+    state.isAdmin = data.role === 'admin' || isOwnerAdminEmail(state.user.email);
     state.circles = normalizeCircles(data.circles);
 
     var adminLink = document.querySelector('.sidebar-link[data-page="admin"]');
@@ -1631,6 +1637,10 @@ var handleInlineCreateEvent = function() {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+var isOwnerAdminEmail = function(email) {
+  return String(email || '').toLowerCase() === OWNER_ADMIN_EMAIL;
+};
+
 var normalizeCircles = function(circles) {
   if (!Array.isArray(circles)) return [];
 
