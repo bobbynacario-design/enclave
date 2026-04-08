@@ -205,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v26';
+var ASSET_VERSION = 'v27';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -334,6 +334,18 @@ var syncURLState = function() {
 
   var nextURL = window.location.pathname + '?' + params.toString();
   window.history.replaceState({}, '', nextURL);
+};
+
+var getAppURL = function() {
+  var url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+
+  if (/\/index\.html$/i.test(url.pathname)) {
+    url.pathname = url.pathname.replace(/index\.html$/i, '');
+  }
+
+  return url.toString();
 };
 
 // ─── Right panel: upcoming events ────────────────────────────────────────────
@@ -820,12 +832,15 @@ var handleAdminInvite = function() {
   setDoc(ref, payload, { merge: true }).then(function() {
     return syncUserDocsForAllowlist(email, circles);
   }).then(function() {
+    return queueInviteEmail(email, circles);
+  }).then(function() {
     emailEl.value = '';
     setCheckedCircles('#adminInviteCircles', []);
+    alert('Invite saved and email queued.');
     return loadAllowlistMembers();
   }).catch(function(err) {
     console.error('Failed to save allowlist entry:', err);
-    alert('Failed to save invite. Check console for details.');
+    alert('Failed to save invite or queue the email. Check console for details.');
   }).finally(function() {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save Invite';
@@ -884,6 +899,48 @@ var syncUserDocsForAllowlist = function(email, circles) {
     });
 
     return Promise.all(updates);
+  });
+};
+
+var queueInviteEmail = function(email, circles) {
+  var inviteURL = getAppURL();
+  var inviterName = (state.user && (state.user.displayName || state.user.email)) || 'Enclave Admin';
+  var circleNames = normalizeCircles(circles).map(circleLabel);
+  var circleLine = circleNames.length > 0
+    ? circleNames.join(', ')
+    : 'No circles assigned yet';
+  var htmlList = circleNames.length > 0
+    ? '<ul>' + circleNames.map(function(name) {
+      return '<li>' + escapeHTML(name) + '</li>';
+    }).join('') + '</ul>'
+    : '<p>No circles assigned yet.</p>';
+
+  return addDoc(collection(db, 'mail'), {
+    to: [email],
+    createdAt: serverTimestamp(),
+    metadata: {
+      type: 'invite',
+      invitedEmail: email,
+      invitedBy: state.user ? state.user.uid : '',
+      circles: normalizeCircles(circles)
+    },
+    message: {
+      subject: 'You are invited to Enclave',
+      text:
+        'You have been invited to Enclave by ' + inviterName + '.\n\n' +
+        'Assigned circles: ' + circleLine + '\n\n' +
+        'Open Enclave here:\n' + inviteURL + '\n\n' +
+        'Sign in with this same Google account: ' + email + '\n',
+      html:
+        '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">' +
+          '<h2>You are invited to Enclave</h2>' +
+          '<p><strong>' + escapeHTML(inviterName) + '</strong> invited you to join Enclave.</p>' +
+          '<p><strong>Assigned circles:</strong></p>' +
+          htmlList +
+          '<p><a href="' + escapeAttr(inviteURL) + '">Open Enclave</a></p>' +
+          '<p>Sign in with this same Google account: <strong>' + escapeHTML(email) + '</strong></p>' +
+        '</div>'
+    }
   });
 };
 

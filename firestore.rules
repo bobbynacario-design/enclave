@@ -55,6 +55,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /mail/{mailId} {
+      allow create: if isAdmin() &&
+        request.resource.data.to is list &&
+        request.resource.data.message is map;
+      allow get, list, update, delete: if false;
+    }
+
     match /users/{userId} {
       allow get, list: if signedIn();
 

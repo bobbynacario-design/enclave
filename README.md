@@ -21,3 +21,4 @@ enclave/
 
 1. Replace the placeholder values in `firebase.js` with your Firebase project credentials.
 2. Deploy the repo root to GitHub Pages.
+3. For real invite emails, install Firebase's `Trigger Email` extension and point it at the `mail` collection. The admin invite flow now writes outbound email jobs there automatically.
