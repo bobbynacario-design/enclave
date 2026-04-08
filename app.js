@@ -751,7 +751,7 @@ var loadRecentPosts = function(uid) {
 var initEventsPage = function() {
   var createBtn = document.getElementById('createEventBtn');
   if (createBtn) {
-    createBtn.hidden = !state.isAdmin;
+    createBtn.hidden = true;
     createBtn.addEventListener('click', function() {
       window.enclaveCreateEvent();
     });
@@ -769,6 +769,10 @@ var initEventsPage = function() {
     modalBackdrop.addEventListener('click', function() {
       window.enclaveCloseEvent();
     });
+  }
+
+  if (state.isAdmin) {
+    renderInlineEventComposer();
   }
   loadEvents();
 };
@@ -1069,6 +1073,128 @@ var handleCreateEvent = function() {
     if (saveBtn) {
       saveBtn.disabled    = false;
       saveBtn.textContent = 'Create';
+    }
+  });
+};
+
+var renderInlineEventComposer = function() {
+  var composer = document.getElementById('eventAdminComposer');
+  if (!composer) return;
+
+  var tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var defaultDate = tomorrow.toISOString().slice(0, 10);
+
+  composer.innerHTML =
+    '<div class="card">' +
+      '<div class="page-header-row">' +
+        '<div>' +
+          '<h2 class="profile-name">Create Event</h2>' +
+          '<p class="text-muted">Add a new gathering to the enclave.</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<label class="profile-section-title" for="inlineEvTitle">Title</label>' +
+        '<input type="text" id="inlineEvTitle" class="edit-input" maxlength="80" placeholder="e.g. Poker Night" />' +
+      '</div>' +
+      '<div class="profile-section event-date-row">' +
+        '<div style="flex:1;">' +
+          '<label class="profile-section-title" for="inlineEvDate">Date</label>' +
+          '<input type="date" id="inlineEvDate" class="edit-input" value="' + defaultDate + '" />' +
+        '</div>' +
+        '<div style="flex:1;">' +
+          '<label class="profile-section-title" for="inlineEvTime">Time</label>' +
+          '<input type="time" id="inlineEvTime" class="edit-input" value="19:00" />' +
+        '</div>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<label class="profile-section-title" for="inlineEvLocation">Location</label>' +
+        '<input type="text" id="inlineEvLocation" class="edit-input" maxlength="120" placeholder="e.g. Bob\'s place" />' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<label class="profile-section-title" for="inlineEvCircle">Circle</label>' +
+        '<select id="inlineEvCircle" class="edit-input">' +
+          '<option value="all">All</option>' +
+          '<option value="poker-crew">Poker Crew</option>' +
+          '<option value="work-network">Work Network</option>' +
+          '<option value="family">Family</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<label class="profile-section-title" for="inlineEvDesc">Description</label>' +
+        '<textarea id="inlineEvDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
+      '</div>' +
+      '<div class="edit-actions">' +
+        '<button class="btn btn-primary" id="inlineEvSaveBtn">Create Event</button>' +
+      '</div>' +
+    '</div>';
+
+  var saveBtn = document.getElementById('inlineEvSaveBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', handleInlineCreateEvent);
+  }
+};
+
+var handleInlineCreateEvent = function() {
+  if (!state.isAdmin || !state.user) return;
+
+  var titleEl = document.getElementById('inlineEvTitle');
+  var dateEl = document.getElementById('inlineEvDate');
+  var timeEl = document.getElementById('inlineEvTime');
+  var locationEl = document.getElementById('inlineEvLocation');
+  var circleEl = document.getElementById('inlineEvCircle');
+  var descEl = document.getElementById('inlineEvDesc');
+  var saveBtn = document.getElementById('inlineEvSaveBtn');
+  if (!titleEl || !dateEl || !timeEl || !locationEl || !circleEl || !descEl) return;
+
+  var title = titleEl.value.trim();
+  var dateVal = dateEl.value;
+  var timeVal = timeEl.value;
+  var location = locationEl.value.trim();
+  var circle = circleEl.value;
+  var desc = descEl.value.trim();
+
+  if (!title)    { alert('Title is required.');    return; }
+  if (!dateVal)  { alert('Date is required.');     return; }
+  if (!timeVal)  { alert('Time is required.');     return; }
+  if (!location) { alert('Location is required.'); return; }
+
+  var combined = new Date(dateVal + 'T' + timeVal);
+  if (isNaN(combined.getTime())) {
+    alert('Invalid date/time.');
+    return;
+  }
+
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Creating...';
+  }
+
+  addDoc(collection(db, 'events'), {
+    title:       title,
+    date:        Timestamp.fromDate(combined),
+    location:    location,
+    circle:      circle,
+    description: desc,
+    createdBy:   state.user.uid,
+    createdAt:   serverTimestamp(),
+    rsvpCount:   0
+  }).then(function() {
+    titleEl.value = '';
+    locationEl.value = '';
+    descEl.value = '';
+    circleEl.value = 'all';
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Create Event';
+    }
+    loadEvents();
+  }).catch(function(err) {
+    console.error('Failed to create event:', err);
+    alert('Failed to create event. Check console for details.');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Create Event';
     }
   });
 };
