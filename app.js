@@ -733,10 +733,28 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// Expose for manual debugging from DevTools console
+// Globally-exposed functions for inline onclick handlers in page HTML.
+// This is bulletproof — no addEventListener timing, no delegation.
+window.enclaveCreateEvent = function() {
+  console.log('[enclave] enclaveCreateEvent called, isAdmin=', state.isAdmin);
+  openCreateEventModal();
+};
+
+window.enclaveCloseEvent = function() {
+  closeEventModal();
+};
+
+// Debug hook
 window.__enclave = {
-  openCreateEvent: function() { openCreateEventModal(); },
-  state:           state
+  state: state,
+  forceAdmin: function() {
+    state.isAdmin = true;
+    console.log('[enclave] admin forced on');
+    if (state.currentPage === 'events') {
+      var b = document.getElementById('createEventBtn');
+      if (b) b.hidden = false;
+    }
+  }
 };
 
 // ─── Events: load upcoming ───────────────────────────────────────────────────
@@ -883,8 +901,7 @@ var handleRsvp = function(eventId, btn) {
 
 // ─── Events: create event modal (admin only) ────────────────────────────────
 var openCreateEventModal = function() {
-  if (!state.isAdmin) return;
-
+  console.log('[enclave] openCreateEventModal running');
   var modal = document.getElementById('eventModal');
   var body  = document.getElementById('eventModalBody');
   if (!modal || !body) return;

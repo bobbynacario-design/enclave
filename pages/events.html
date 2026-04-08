@@ -4,7 +4,7 @@
       <h1>Events</h1>
       <p class="text-muted">Upcoming gatherings and meetups.</p>
     </div>
-    <button class="btn btn-primary" id="createEventBtn" hidden>+ Create Event</button>
+    <button class="btn btn-primary" id="createEventBtn" onclick="window.enclaveCreateEvent()" hidden>+ Create Event</button>
   </div>
 </div>
 
@@ -13,9 +13,9 @@
 </div>
 
 <div class="profile-modal" id="eventModal" hidden>
-  <div class="profile-modal-backdrop" data-action="close-event"></div>
+  <div class="profile-modal-backdrop" onclick="window.enclaveCloseEvent()"></div>
   <div class="profile-modal-content">
-    <button class="profile-modal-close" data-action="close-event" title="Close">&times;</button>
+    <button class="profile-modal-close" onclick="window.enclaveCloseEvent()" title="Close">&times;</button>
     <div id="eventModalBody"></div>
   </div>
 </div>
