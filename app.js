@@ -1125,14 +1125,15 @@ var renderInlineEventComposer = function() {
         '<textarea id="inlineEvDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
       '</div>' +
       '<div class="edit-actions">' +
-        '<button class="btn btn-primary" id="inlineEvSaveBtn">Create Event</button>' +
+        '<button class="btn btn-primary" id="inlineEvSaveBtn" onclick="window.enclaveInlineCreate()">Create Event</button>' +
       '</div>' +
     '</div>';
+};
 
-  var saveBtn = document.getElementById('inlineEvSaveBtn');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', handleInlineCreateEvent);
-  }
+// Expose for inline onclick — bulletproof against addEventListener timing issues
+window.enclaveInlineCreate = function() {
+  console.log('[enclave] enclaveInlineCreate clicked');
+  handleInlineCreateEvent();
 };
 
 var handleInlineCreateEvent = function() {
