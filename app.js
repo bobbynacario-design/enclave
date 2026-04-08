@@ -9,11 +9,16 @@ import {
 import {
   doc,
   getDoc,
+  setDoc,
+  updateDoc,
   collection,
   addDoc,
+  getDocs,
   serverTimestamp,
   query,
+  where,
   orderBy,
+  limit,
   onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
@@ -30,6 +35,10 @@ var feedState = {
   posts:       [],
   filter:      'all',
   unsubscribe: null
+};
+
+var membersState = {
+  members: []
 };
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
@@ -59,6 +68,7 @@ var checkAllowlist = function(user) {
   getDoc(ref).then(function(snap) {
     if (snap.exists()) {
       state.user = user;
+      upsertUserDoc(user);
       renderShell();
     } else {
       state.accessDenied = true;
@@ -68,6 +78,37 @@ var checkAllowlist = function(user) {
     console.error('Allowlist check failed:', err);
     state.accessDenied = true;
     signOut(auth);
+  });
+};
+
+// ─── User doc upsert (runs on every sign-in) ─────────────────────────────────
+var upsertUserDoc = function(user) {
+  var ref = doc(db, 'users', user.uid);
+  var displayName = user.displayName || user.email;
+
+  getDoc(ref).then(function(snap) {
+    var base = {
+      uid:      user.uid,
+      email:    user.email,
+      name:     displayName,
+      initials: getInitials(displayName),
+      photoURL: user.photoURL || '',
+      lastSeen: serverTimestamp()
+    };
+
+    if (snap.exists()) {
+      updateDoc(ref, base).catch(function(err) {
+        console.error('User doc update failed:', err);
+      });
+    } else {
+      base.joinedAt = serverTimestamp();
+      base.bio      = '';
+      base.role     = '';
+      base.circles  = [];
+      setDoc(ref, base).catch(function(err) {
+        console.error('User doc create failed:', err);
+      });
+    }
   });
 };
 
@@ -171,7 +212,8 @@ var loadPage = function(page) {
     slot.innerHTML = pageHTML;
 
     // Page-specific init
-    if (page === 'feed') initFeedPage();
+    if (page === 'feed')    initFeedPage();
+    if (page === 'members') initMembersPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -180,7 +222,6 @@ var loadPage = function(page) {
 
 // ─── Feed: init ──────────────────────────────────────────────────────────────
 var initFeedPage = function() {
-  // Compose avatar
   var composeAv = document.querySelector('[data-slot="compose-avatar"]');
   if (composeAv && state.user) {
     if (state.user.photoURL) {
@@ -191,11 +232,9 @@ var initFeedPage = function() {
     }
   }
 
-  // Compose submit
   var submitBtn = document.getElementById('composeSubmit');
   if (submitBtn) submitBtn.addEventListener('click', handleComposeSubmit);
 
-  // Filter pills
   document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
     pill.addEventListener('click', function() {
       feedState.filter = pill.dataset.filter;
@@ -206,12 +245,10 @@ var initFeedPage = function() {
     });
   });
 
-  // Reset filter to current (in case re-entering page)
   document.querySelectorAll('.filter-pills .pill').forEach(function(p) {
     p.classList.toggle('active', p.dataset.filter === feedState.filter);
   });
 
-  // Subscribe to live posts feed
   subscribeFeed();
 };
 
@@ -343,6 +380,197 @@ var renderPostCard = function(p) {
     '</div>';
 };
 
+// ─── Members: init ───────────────────────────────────────────────────────────
+var initMembersPage = function() {
+  loadMembers();
+
+  // Delegate close handlers on the modal
+  document.querySelectorAll('[data-action="close-profile"]').forEach(function(el) {
+    el.addEventListener('click', closeProfile);
+  });
+};
+
+// ─── Members: load (cross-check against allowlist) ──────────────────────────
+var loadMembers = function() {
+  var list = document.getElementById('membersList');
+  if (!list) return;
+
+  Promise.all([
+    getDocs(collection(db, 'users')),
+    getDocs(collection(db, 'allowlist'))
+  ]).then(function(results) {
+    var usersSnap = results[0];
+    var allowSnap = results[1];
+
+    var allowedEmails = {};
+    allowSnap.forEach(function(d) {
+      allowedEmails[d.id.toLowerCase()] = true;
+    });
+
+    var members = [];
+    usersSnap.forEach(function(d) {
+      var data = d.data();
+      data.uid = d.id;
+      if (data.email && allowedEmails[data.email.toLowerCase()]) {
+        members.push(data);
+      }
+    });
+
+    // Sort alphabetically by name
+    members.sort(function(a, b) {
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    membersState.members = members;
+    renderMembersList();
+  }).catch(function(err) {
+    console.error('Failed to load members:', err);
+    list.innerHTML = '<div class="card"><p class="text-muted">Failed to load members. Check Firestore rules.</p></div>';
+  });
+};
+
+// ─── Members: render grid ────────────────────────────────────────────────────
+var renderMembersList = function() {
+  var list = document.getElementById('membersList');
+  if (!list) return;
+
+  if (membersState.members.length === 0) {
+    list.innerHTML = '<div class="card"><p class="text-muted">No members yet. As people sign in, they\'ll appear here.</p></div>';
+    return;
+  }
+
+  list.innerHTML = membersState.members.map(renderMemberCard).join('');
+
+  // Wire card clicks
+  list.querySelectorAll('.member-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      openProfile(card.dataset.uid);
+    });
+  });
+};
+
+// ─── Members: render single card ─────────────────────────────────────────────
+var renderMemberCard = function(m) {
+  var nameEsc     = escapeHTML(m.name || 'Unknown');
+  var initialsEsc = escapeHTML(m.initials || '?');
+  var roleBio     = m.role || m.bio || '';
+  var roleBioEsc  = escapeHTML(roleBio || '—');
+
+  var avatarStyle = m.photoURL
+    ? ' style="background-image:url(' + escapeAttr(m.photoURL) + ')"'
+    : '';
+  var avatarText = m.photoURL ? '' : initialsEsc;
+
+  var circles = Array.isArray(m.circles) ? m.circles : [];
+  var circleTags = circles.map(function(c) {
+    return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
+  }).join('');
+  if (!circleTags) {
+    circleTags = '<span class="circle-tag circle-tag-empty">No circles</span>';
+  }
+
+  return '' +
+    '<div class="member-card" data-uid="' + escapeAttr(m.uid) + '">' +
+      '<div class="member-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
+      '<div class="member-name">' + nameEsc + '</div>' +
+      '<div class="member-role">' + roleBioEsc + '</div>' +
+      '<div class="member-circles">' + circleTags + '</div>' +
+    '</div>';
+};
+
+// ─── Members: profile modal open/close ──────────────────────────────────────
+var openProfile = function(uid) {
+  var member = membersState.members.find(function(m) { return m.uid === uid; });
+  if (!member) return;
+
+  var modal = document.getElementById('profileModal');
+  var body  = document.getElementById('profileModalBody');
+  if (!modal || !body) return;
+
+  var nameEsc     = escapeHTML(member.name || 'Unknown');
+  var initialsEsc = escapeHTML(member.initials || '?');
+  var bioEsc      = escapeHTML(member.bio || 'No bio yet.');
+  var roleEsc     = escapeHTML(member.role || 'Member');
+
+  var avatarStyle = member.photoURL
+    ? ' style="background-image:url(' + escapeAttr(member.photoURL) + ')"'
+    : '';
+  var avatarText = member.photoURL ? '' : initialsEsc;
+
+  var circles = Array.isArray(member.circles) ? member.circles : [];
+  var circleTags = circles.map(function(c) {
+    return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
+  }).join('');
+  if (!circleTags) {
+    circleTags = '<span class="text-muted">Not in any circles.</span>';
+  }
+
+  body.innerHTML =
+    '<div class="profile-header">' +
+      '<div class="profile-avatar-lg"' + avatarStyle + '>' + avatarText + '</div>' +
+      '<div>' +
+        '<h2 class="profile-name">' + nameEsc + '</h2>' +
+        '<p class="text-muted">' + roleEsc + '</p>' +
+      '</div>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<div class="profile-section-title">Bio</div>' +
+      '<p>' + bioEsc + '</p>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<div class="profile-section-title">Circles</div>' +
+      '<div class="member-circles">' + circleTags + '</div>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<div class="profile-section-title">Recent Posts</div>' +
+      '<div id="profilePosts"><p class="text-muted">Loading...</p></div>' +
+    '</div>';
+
+  modal.hidden = false;
+  loadRecentPosts(uid);
+};
+
+var closeProfile = function() {
+  var modal = document.getElementById('profileModal');
+  if (modal) modal.hidden = true;
+};
+
+// ─── Members: recent posts for profile modal ────────────────────────────────
+var loadRecentPosts = function(uid) {
+  var container = document.getElementById('profilePosts');
+  if (!container) return;
+
+  var q = query(
+    collection(db, 'posts'),
+    where('authorId', '==', uid),
+    orderBy('timestamp', 'desc'),
+    limit(5)
+  );
+
+  getDocs(q).then(function(snap) {
+    var posts = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      posts.push(data);
+    });
+
+    if (posts.length === 0) {
+      container.innerHTML = '<p class="text-muted">No posts yet.</p>';
+      return;
+    }
+
+    container.innerHTML = posts.map(renderPostCard).join('');
+  }).catch(function(err) {
+    console.error('Failed to load recent posts:', err);
+    // If it's a missing-index error, Firestore returns a specific message
+    var msg = err && err.message && err.message.indexOf('index') !== -1
+      ? 'Posts query needs a Firestore index. Check browser console for a link to create it.'
+      : 'Failed to load posts.';
+    container.innerHTML = '<p class="text-muted">' + msg + '</p>';
+  });
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 var getInitials = function(name) {
   if (!name) return '?';
@@ -361,10 +589,24 @@ var relativeTime = function(date) {
   return date.toLocaleDateString();
 };
 
+var circleLabel = function(id) {
+  var labels = {
+    'all':          'All',
+    'poker-crew':   'Poker Crew',
+    'work-network': 'Work Network',
+    'family':       'Family'
+  };
+  return labels[id] || id;
+};
+
 var escapeHTML = function(str) {
   var d = document.createElement('div');
-  d.textContent = str;
+  d.textContent = str == null ? '' : String(str);
   return d.innerHTML;
+};
+
+var escapeAttr = function(str) {
+  return String(str == null ? '' : str).replace(/"/g, '&quot;').replace(/</g, '&lt;');
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
