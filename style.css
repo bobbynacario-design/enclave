@@ -753,6 +753,81 @@ label {
   line-height: 1.5;
 }
 
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.profile-header-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-edit-btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.edit-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  outline: none;
+}
+
+.edit-input:focus {
+  border-color: var(--accent);
+}
+
+.edit-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+.circle-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.circle-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.circle-check:hover {
+  border-color: var(--accent);
+}
+
+.circle-check input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
 /* ─── Utility ────────────────────────────────────────────────────────────── */
 .text-muted  { color: var(--text-muted); }
 .text-accent { color: var(--accent); }

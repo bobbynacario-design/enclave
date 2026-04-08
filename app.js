@@ -505,13 +505,19 @@ var openProfile = function(uid) {
     circleTags = '<span class="text-muted">Not in any circles.</span>';
   }
 
+  var isSelf = state.user && state.user.uid === uid;
+  var editBtnHTML = isSelf
+    ? '<button class="btn btn-primary profile-edit-btn" id="profileEditBtn">Edit Profile</button>'
+    : '';
+
   body.innerHTML =
     '<div class="profile-header">' +
       '<div class="profile-avatar-lg"' + avatarStyle + '>' + avatarText + '</div>' +
-      '<div>' +
+      '<div class="profile-header-meta">' +
         '<h2 class="profile-name">' + nameEsc + '</h2>' +
         '<p class="text-muted">' + roleEsc + '</p>' +
       '</div>' +
+      editBtnHTML +
     '</div>' +
     '<div class="profile-section">' +
       '<div class="profile-section-title">Bio</div>' +
@@ -526,8 +532,121 @@ var openProfile = function(uid) {
       '<div id="profilePosts"><p class="text-muted">Loading...</p></div>' +
     '</div>';
 
+  if (isSelf) {
+    var editBtn = document.getElementById('profileEditBtn');
+    if (editBtn) {
+      editBtn.addEventListener('click', function() {
+        renderEditProfileForm(member);
+      });
+    }
+  }
+
   modal.hidden = false;
   loadRecentPosts(uid);
+};
+
+// ─── Members: edit profile form ─────────────────────────────────────────────
+var renderEditProfileForm = function(member) {
+  var body = document.getElementById('profileModalBody');
+  if (!body) return;
+
+  var bioVal  = escapeAttr(member.bio  || '');
+  var roleVal = escapeAttr(member.role || '');
+  var currentCircles = Array.isArray(member.circles) ? member.circles : [];
+
+  var allCircles = [
+    { id: 'poker-crew',   label: 'Poker Crew'   },
+    { id: 'work-network', label: 'Work Network' },
+    { id: 'family',       label: 'Family'       }
+  ];
+
+  var circleChecks = allCircles.map(function(c) {
+    var checked = currentCircles.indexOf(c.id) !== -1 ? ' checked' : '';
+    return '' +
+      '<label class="circle-check">' +
+        '<input type="checkbox" value="' + c.id + '"' + checked + ' />' +
+        '<span>' + c.label + '</span>' +
+      '</label>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="profile-header">' +
+      '<div class="profile-header-meta">' +
+        '<h2 class="profile-name">Edit Profile</h2>' +
+        '<p class="text-muted">Update your bio, role, and circles.</p>' +
+      '</div>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<label class="profile-section-title" for="editRole">Role</label>' +
+      '<input type="text" id="editRole" class="edit-input" maxlength="60" placeholder="e.g. Founder, Developer" value="' + roleVal + '" />' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<label class="profile-section-title" for="editBio">Bio</label>' +
+      '<textarea id="editBio" class="edit-input edit-textarea" rows="4" maxlength="280" placeholder="Tell the enclave about yourself...">' + bioVal + '</textarea>' +
+    '</div>' +
+    '<div class="profile-section">' +
+      '<div class="profile-section-title">Circles</div>' +
+      '<div class="circle-checks">' + circleChecks + '</div>' +
+    '</div>' +
+    '<div class="edit-actions">' +
+      '<button class="btn" id="editCancelBtn">Cancel</button>' +
+      '<button class="btn btn-primary" id="editSaveBtn">Save</button>' +
+    '</div>';
+
+  document.getElementById('editCancelBtn').addEventListener('click', function() {
+    openProfile(member.uid);
+  });
+  document.getElementById('editSaveBtn').addEventListener('click', function() {
+    handleSaveProfile(member.uid);
+  });
+};
+
+// ─── Members: save profile edits ────────────────────────────────────────────
+var handleSaveProfile = function(uid) {
+  if (!state.user || state.user.uid !== uid) return;
+
+  var roleEl = document.getElementById('editRole');
+  var bioEl  = document.getElementById('editBio');
+  var saveBtn = document.getElementById('editSaveBtn');
+  if (!roleEl || !bioEl) return;
+
+  var newRole = roleEl.value.trim();
+  var newBio  = bioEl.value.trim();
+
+  var checks = document.querySelectorAll('.circle-checks input[type="checkbox"]');
+  var newCircles = [];
+  checks.forEach(function(cb) {
+    if (cb.checked) newCircles.push(cb.value);
+  });
+
+  if (saveBtn) {
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving...';
+  }
+
+  var ref = doc(db, 'users', uid);
+  updateDoc(ref, {
+    role:    newRole,
+    bio:     newBio,
+    circles: newCircles
+  }).then(function() {
+    // Update local cache so UI reflects change without a full reload
+    var member = membersState.members.find(function(m) { return m.uid === uid; });
+    if (member) {
+      member.role    = newRole;
+      member.bio     = newBio;
+      member.circles = newCircles;
+    }
+    renderMembersList();
+    openProfile(uid);
+  }).catch(function(err) {
+    console.error('Failed to save profile:', err);
+    alert('Failed to save profile. Check console for details.');
+    if (saveBtn) {
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save';
+    }
+  });
 };
 
 var closeProfile = function() {
