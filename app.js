@@ -950,15 +950,15 @@ var openCreateEventModal = function() {
       '<textarea id="evDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
     '</div>' +
     '<div class="edit-actions">' +
-      '<button class="btn" id="evCancelBtn">Cancel</button>' +
-      '<button class="btn btn-primary" id="evSaveBtn">Create</button>' +
+      '<button class="btn" onclick="window.enclaveCloseEvent()">Cancel</button>' +
+      '<button class="btn btn-primary" id="evSaveBtn" onclick="window.enclaveSubmitEvent()">Create</button>' +
     '</div>';
-
-  document.getElementById('evCancelBtn').addEventListener('click', closeEventModal);
-  document.getElementById('evSaveBtn').addEventListener('click', handleCreateEvent);
 
   modal.hidden = false;
 };
+
+// Expose for inline onclick handlers
+window.enclaveSubmitEvent = function() { handleCreateEvent(); };
 
 var closeEventModal = function() {
   var modal = document.getElementById('eventModal');
