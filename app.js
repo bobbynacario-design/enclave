@@ -205,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v30';
+var ASSET_VERSION = 'v31';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -505,13 +505,9 @@ var initFeedPage = function() {
 
 // ─── Feed: live subscription ─────────────────────────────────────────────────
 var subscribeFeed = function() {
-  var queryCircles = getVisibleCircles().filter(function(c) {
-    return c !== 'all';
-  });
-
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', queryCircles),
+    where('circle', 'in', getVisibleCircles()),
     orderBy('timestamp', 'desc')
   );
 
