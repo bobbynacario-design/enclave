@@ -205,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v28';
+var ASSET_VERSION = 'v29';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -446,6 +446,8 @@ var loadPage = function(page) {
 // ─── Feed: init ──────────────────────────────────────────────────────────────
 var initFeedPage = function() {
   var visibleCircles = getVisibleCircles();
+  var composeCircle = document.getElementById('composeCircle');
+  var filterPills = document.querySelector('.filter-pills');
 
   if (visibleCircles.indexOf(feedState.filter) === -1) {
     feedState.filter = 'all';
@@ -464,7 +466,10 @@ var initFeedPage = function() {
   var submitBtn = document.getElementById('composeSubmit');
   if (submitBtn) submitBtn.addEventListener('click', handleComposeSubmit);
 
-  var composeCircle = document.getElementById('composeCircle');
+  if (composeCircle) {
+    composeCircle.innerHTML = renderCircleOptions(true);
+  }
+
   if (composeCircle) {
     composeCircle.querySelectorAll('option').forEach(function(option) {
       option.hidden = visibleCircles.indexOf(option.value) === -1;
@@ -473,6 +478,10 @@ var initFeedPage = function() {
     if (visibleCircles.indexOf(composeCircle.value) === -1) {
       composeCircle.value = 'all';
     }
+  }
+
+  if (filterPills) {
+    filterPills.innerHTML = renderCirclePills();
   }
 
   document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
@@ -671,6 +680,11 @@ var initAdminPage = function() {
   if (!state.isAdmin) {
     renderAdminAccessDenied();
     return;
+  }
+
+  var checks = document.getElementById('adminInviteCircles');
+  if (checks) {
+    checks.innerHTML = renderCircleChecks([]);
   }
 
   var inviteBtn = document.getElementById('adminInviteBtn');
@@ -1543,12 +1557,7 @@ var renderInlineEventComposer = function() {
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvCircle">Circle</label>' +
-        '<select id="inlineEvCircle" class="edit-input">' +
-          '<option value="all">All</option>' +
-          '<option value="poker-crew">Poker Crew</option>' +
-          '<option value="work-network">Work Network</option>' +
-          '<option value="family">Family</option>' +
-        '</select>' +
+        '<select id="inlineEvCircle" class="edit-input">' + renderCircleOptions(true) + '</select>' +
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvDesc">Description</label>' +
@@ -1686,6 +1695,44 @@ var isOwnerAdminEmail = function(email) {
   return String(email || '').toLowerCase() === OWNER_ADMIN_EMAIL;
 };
 
+var getCircleDefinitions = function() {
+  return [
+    { id: 'poker-crew',   label: 'Poker Crew' },
+    { id: 'work-network', label: 'Work Network' },
+    { id: 'family',       label: 'Family' }
+  ];
+};
+
+var renderCircleOptions = function(includeAll) {
+  var html = includeAll
+    ? '<option value="all">All</option>'
+    : '';
+
+  return html + getCircleDefinitions().map(function(circle) {
+    return '<option value="' + circle.id + '">' + escapeHTML(circle.label) + '</option>';
+  }).join('');
+};
+
+var renderCirclePills = function() {
+  return '<button class="pill active" data-filter="all">All</button>' +
+    getCircleDefinitions().map(function(circle) {
+      return '<button class="pill" data-filter="' + circle.id + '">' + escapeHTML(circle.label) + '</button>';
+    }).join('');
+};
+
+var renderCircleChecks = function(selectedCircles) {
+  var selected = normalizeCircles(selectedCircles);
+
+  return getCircleDefinitions().map(function(circle) {
+    var checked = selected.indexOf(circle.id) !== -1 ? ' checked' : '';
+    return '' +
+      '<label class="circle-check">' +
+        '<input type="checkbox" value="' + circle.id + '"' + checked + ' />' +
+        '<span>' + escapeHTML(circle.label) + '</span>' +
+      '</label>';
+  }).join('');
+};
+
 var normalizeCircles = function(circles) {
   if (!Array.isArray(circles)) return [];
 
@@ -1730,13 +1777,13 @@ var relativeTime = function(date) {
 };
 
 var circleLabel = function(id) {
-  var labels = {
-    'all':          'All',
-    'poker-crew':   'Poker Crew',
-    'work-network': 'Work Network',
-    'family':       'Family'
-  };
-  return labels[id] || id;
+  if (id === 'all') return 'All';
+
+  var circle = getCircleDefinitions().find(function(item) {
+    return item.id === id;
+  });
+
+  return circle ? circle.label : id;
 };
 
 var getVisibleCircles = function() {
