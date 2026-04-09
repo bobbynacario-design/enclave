@@ -350,13 +350,10 @@ var getAppURL = function() {
 
 // ─── Right panel: upcoming events ────────────────────────────────────────────
 var loadPanelEvents = function() {
-  console.log('[enclave] loadPanelEvents START');
   var el = document.getElementById('panelEvents');
   if (!el) {
-    console.warn('[enclave] #panelEvents element NOT FOUND — shell may be cached. Hard refresh required.');
     return;
   }
-  console.log('[enclave] #panelEvents found, querying...');
 
   var q = query(
     collection(db, 'events'),
@@ -365,7 +362,6 @@ var loadPanelEvents = function() {
     limit(5)
   );
   getDocs(q).then(function(snap) {
-    console.log('[enclave] panel events query returned', snap.size, 'docs');
     var now = Date.now();
     var items = [];
     snap.forEach(function(d) {
@@ -509,9 +505,13 @@ var initFeedPage = function() {
 
 // ─── Feed: live subscription ─────────────────────────────────────────────────
 var subscribeFeed = function() {
+  var queryCircles = getVisibleCircles().filter(function(c) {
+    return c !== 'all';
+  });
+
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', queryCircles),
     orderBy('timestamp', 'desc')
   );
 
@@ -1618,16 +1618,11 @@ var renderInlineEventComposer = function() {
   }
 };
 
-// Expose for inline onclick — bulletproof against addEventListener timing issues
 window.enclaveInlineCreate = function() {
-  console.log('[enclave] enclaveInlineCreate clicked');
   handleInlineCreateEvent();
 };
 
 var handleInlineCreateEvent = function() {
-  console.log('[enclave] handleInlineCreateEvent START');
-  console.log('[enclave] user=', state.user && state.user.email, 'isAdmin=', state.isAdmin);
-
   if (!state.user) {
     alert('Not signed in.');
     return;
@@ -1641,11 +1636,6 @@ var handleInlineCreateEvent = function() {
   var descEl     = document.getElementById('inlineEvDesc');
   var saveBtn    = document.getElementById('inlineEvSaveBtn');
 
-  console.log('[enclave] elements found:', {
-    title: !!titleEl, date: !!dateEl, time: !!timeEl,
-    location: !!locationEl, circle: !!circleEl, desc: !!descEl
-  });
-
   if (!titleEl || !dateEl || !timeEl || !locationEl || !circleEl || !descEl) {
     alert('Form elements missing. See console.');
     return;
@@ -1657,8 +1647,6 @@ var handleInlineCreateEvent = function() {
   var location = locationEl.value.trim();
   var circle   = circleEl.value;
   var desc     = descEl.value.trim();
-
-  console.log('[enclave] values:', { title: title, dateVal: dateVal, timeVal: timeVal, location: location, circle: circle });
 
   var resetBtn = function() {
     if (saveBtn) {
@@ -1678,14 +1666,12 @@ var handleInlineCreateEvent = function() {
     resetBtn();
     return;
   }
-  console.log('[enclave] combined date:', combined);
 
   if (saveBtn) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Creating...';
   }
 
-  console.log('[enclave] calling addDoc...');
   addDoc(collection(db, 'events'), {
     title:       title,
     date:        Timestamp.fromDate(combined),
@@ -1696,7 +1682,6 @@ var handleInlineCreateEvent = function() {
     createdAt:   serverTimestamp(),
     rsvpCount:   0
   }).then(function(ref) {
-    console.log('[enclave] addDoc SUCCESS, id=', ref.id);
     loadPanelEvents();
     titleEl.value = '';
     locationEl.value = '';
