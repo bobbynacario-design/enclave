@@ -1352,24 +1352,12 @@ var handleSendMessage = function() {
   input.disabled = true;
   sendBtn.disabled = true;
 
-  getDoc(conversationRef).then(function(snap) {
-    if (snap.exists()) {
-      return updateDoc(conversationRef, {
-        members: members,
-        updatedAt: serverTimestamp(),
-        lastMessage: preview,
-        lastSenderId: state.user.uid
-      });
-    }
-
-    return setDoc(conversationRef, {
-      members: members,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      lastMessage: preview,
-      lastSenderId: state.user.uid
-    });
-  }).then(function() {
+  setDoc(conversationRef, {
+    members: members,
+    updatedAt: serverTimestamp(),
+    lastMessage: preview,
+    lastSenderId: state.user.uid
+  }, { merge: true }).then(function() {
     return addDoc(collection(db, 'conversations', conversationId, 'messages'), {
       authorId: state.user.uid,
       authorName: state.user.displayName || state.user.email || 'Member',
