@@ -241,7 +241,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v39';
+var ASSET_VERSION = 'v40';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -640,7 +640,7 @@ var loadMoreFeedPosts = function() {
     }
   }).catch(function(err) {
     console.error('Failed to load more posts:', err);
-    alert('Failed to load more posts. Check console for details.');
+    showToast('Failed to load more posts. Check console for details.', 'error');
   }).finally(function() {
     feedState.loadingMore = false;
     renderFeedList();
@@ -688,7 +688,7 @@ var handleComposeSubmit = function() {
       submitBtn.disabled    = false;
       submitBtn.textContent = 'Post';
     }
-    alert('Failed to post. Check console for details.');
+    showToast('Failed to post. Check console for details.', 'error');
   });
 };
 
@@ -875,15 +875,15 @@ var handleSharePost = function(postId) {
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(shareText + '\n\n' + shareURL).then(function() {
-      alert('Post link copied.');
+      showToast('Post link copied.', 'success');
     }).catch(function(err) {
       console.error('Failed to copy share text:', err);
-      alert('Unable to share this post right now.');
+      showToast('Unable to share this post right now.', 'error');
     });
     return;
   }
 
-  alert(shareText + '\n\n' + shareURL);
+  showNoticeModal('Share this post', shareText + '\n\n' + shareURL);
 };
 
 var updateKnownPostReacts = function(postId, reacts) {
@@ -955,7 +955,7 @@ var handleReactPost = function(postId) {
     }
   }).catch(function(err) {
     console.error('React failed:', err);
-    alert('Could not save reaction. Try again.');
+    showToast('Could not save reaction. Try again.', 'error');
   });
 };
 
@@ -1002,7 +1002,7 @@ var handleCommentSubmit = function(postId, authorId, formEl) {
     }
   }).catch(function(err) {
     console.error('Comment failed:', err);
-    alert('Could not save comment. Try again.');
+    showToast('Could not save comment. Try again.', 'error');
   }).finally(function() {
     input.disabled = false;
   });
@@ -1011,17 +1011,18 @@ var handleCommentSubmit = function(postId, authorId, formEl) {
 var handleDeletePost = function(postId, authorId) {
   if (!postId) return;
 
-  if (!window.confirm('Delete this post?')) {
-    return;
-  }
+  showConfirmModal('Delete post', 'Delete this post?', 'Delete').then(function(confirmed) {
+    if (!confirmed) return;
 
-  deleteDoc(doc(db, 'posts', postId)).then(function() {
-    if (authorId && document.getElementById('profilePosts')) {
-      loadRecentPosts(authorId);
-    }
-  }).catch(function(err) {
-    console.error('Failed to delete post:', err);
-    alert('Failed to delete post. Check console for details.');
+    deleteDoc(doc(db, 'posts', postId)).then(function() {
+      if (authorId && document.getElementById('profilePosts')) {
+        loadRecentPosts(authorId);
+      }
+      showToast('Post deleted.', 'success');
+    }).catch(function(err) {
+      console.error('Failed to delete post:', err);
+      showToast('Failed to delete post. Check console for details.', 'error');
+    });
   });
 };
 
@@ -1382,7 +1383,7 @@ var handleSendMessage = function() {
     input.value = '';
   }).catch(function(err) {
     console.error('Failed to send message:', err);
-    alert('Failed to send message. Check console for details.');
+    showToast('Failed to send message. Check console for details.', 'error');
   }).finally(function() {
     input.disabled = false;
     sendBtn.disabled = false;
@@ -1544,12 +1545,12 @@ var handleAdminInvite = function() {
   var circles = getCheckedCircles('#adminInviteCircles');
 
   if (!email) {
-    alert('Email is required.');
+    showToast('Email is required.', 'error');
     return;
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    alert('Enter a valid email address.');
+    showToast('Enter a valid email address.', 'error');
     return;
   }
 
@@ -1579,11 +1580,11 @@ var handleAdminInvite = function() {
   }).then(function() {
     emailEl.value = '';
     setCheckedCircles('#adminInviteCircles', []);
-    alert('Invite saved and email queued.');
+    showToast('Invite saved and email queued.', 'success');
     return loadAllowlistMembers();
   }).catch(function(err) {
     console.error('Failed to save allowlist entry:', err);
-    alert('Failed to save invite or queue the email. Check console for details.');
+    showToast('Failed to save invite or queue the email. Check console for details.', 'error');
   }).finally(function() {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save Invite';
@@ -1593,20 +1594,21 @@ var handleAdminInvite = function() {
 var handleAdminRemove = function(email) {
   if (!state.isAdmin || !email) return;
 
-  if (!window.confirm('Remove ' + email + ' from the allowlist?')) {
-    return;
-  }
+  showConfirmModal('Remove invite', 'Remove ' + email + ' from the allowlist?', 'Remove').then(function(confirmed) {
+    if (!confirmed) return;
 
-  deleteDoc(doc(db, 'allowlist', email)).then(function() {
-    return syncUserDocsForAllowlist(email, []);
-  }).then(function() {
-    adminState.allowlist = adminState.allowlist.filter(function(entry) {
-      return entry.email !== email;
+    deleteDoc(doc(db, 'allowlist', email)).then(function() {
+      return syncUserDocsForAllowlist(email, []);
+    }).then(function() {
+      adminState.allowlist = adminState.allowlist.filter(function(entry) {
+        return entry.email !== email;
+      });
+      renderAllowlistMembers();
+      showToast('Invite removed.', 'success');
+    }).catch(function(err) {
+      console.error('Failed to remove allowlist entry:', err);
+      showToast('Failed to remove invite. Check console for details.', 'error');
     });
-    renderAllowlistMembers();
-  }).catch(function(err) {
-    console.error('Failed to remove allowlist entry:', err);
-    alert('Failed to remove invite. Check console for details.');
   });
 };
 
@@ -1863,7 +1865,7 @@ var handleSaveProfile = function(uid) {
     openProfile(uid);
   }).catch(function(err) {
     console.error('Failed to save profile:', err);
-    alert('Failed to save profile. Check console for details.');
+    showToast('Failed to save profile. Check console for details.', 'error');
     if (saveBtn) {
       saveBtn.disabled    = false;
       saveBtn.textContent = 'Save';
@@ -2138,7 +2140,7 @@ var handleRsvp = function(eventId, btn) {
     btn.disabled = false;
   }).catch(function(err) {
     console.error('Failed to update RSVP:', err);
-    alert('Failed to update RSVP. Check console for details.');
+    showToast('Failed to update RSVP. Check console for details.', 'error');
     btn.disabled = false;
   });
 };
@@ -2233,15 +2235,15 @@ var handleCreateEvent = function() {
   var circle   = document.getElementById('evCircle').value;
   var desc     = document.getElementById('evDesc').value.trim();
 
-  if (!title)    { alert('Title is required.');    return; }
-  if (!dateVal)  { alert('Date is required.');     return; }
-  if (!timeVal)  { alert('Time is required.');     return; }
-  if (!location) { alert('Location is required.'); return; }
+  if (!title)    { showToast('Title is required.', 'error');    return; }
+  if (!dateVal)  { showToast('Date is required.', 'error');     return; }
+  if (!timeVal)  { showToast('Time is required.', 'error');     return; }
+  if (!location) { showToast('Location is required.', 'error'); return; }
 
   // Combine date + time into a JS Date, then Firestore Timestamp
   var combined = new Date(dateVal + 'T' + timeVal);
   if (isNaN(combined.getTime())) {
-    alert('Invalid date/time.');
+    showToast('Invalid date/time.', 'error');
     return;
   }
 
@@ -2267,7 +2269,7 @@ var handleCreateEvent = function() {
     loadEvents();
   }).catch(function(err) {
     console.error('Failed to create event:', err);
-    alert('Failed to create event. Check console for details.');
+    showToast('Failed to create event. Check console for details.', 'error');
     if (saveBtn) {
       saveBtn.disabled    = false;
       saveBtn.textContent = 'Create';
@@ -2342,7 +2344,7 @@ window.enclaveInlineCreate = function() {
 
 var handleInlineCreateEvent = function() {
   if (!state.user) {
-    alert('Not signed in.');
+    showToast('Not signed in.', 'error');
     return;
   }
 
@@ -2355,7 +2357,7 @@ var handleInlineCreateEvent = function() {
   var saveBtn    = document.getElementById('inlineEvSaveBtn');
 
   if (!titleEl || !dateEl || !timeEl || !locationEl || !circleEl || !descEl) {
-    alert('Form elements missing. See console.');
+    showToast('Form elements missing. See console.', 'error');
     return;
   }
 
@@ -2373,14 +2375,14 @@ var handleInlineCreateEvent = function() {
     }
   };
 
-  if (!title)    { alert('Title is required.');    resetBtn(); return; }
-  if (!dateVal)  { alert('Date is required.');     resetBtn(); return; }
-  if (!timeVal)  { alert('Time is required.');     resetBtn(); return; }
-  if (!location) { alert('Location is required.'); resetBtn(); return; }
+  if (!title)    { showToast('Title is required.', 'error');    resetBtn(); return; }
+  if (!dateVal)  { showToast('Date is required.', 'error');     resetBtn(); return; }
+  if (!timeVal)  { showToast('Time is required.', 'error');     resetBtn(); return; }
+  if (!location) { showToast('Location is required.', 'error'); resetBtn(); return; }
 
   var combined = new Date(dateVal + 'T' + timeVal);
   if (isNaN(combined.getTime())) {
-    alert('Invalid date/time.');
+    showToast('Invalid date/time.', 'error');
     resetBtn();
     return;
   }
@@ -2421,7 +2423,7 @@ var handleInlineCreateEvent = function() {
     } else {
       msg = 'Failed to create event.\n\n' + (err.code || '') + '\n' + (err.message || '');
     }
-    alert(msg);
+    showNoticeModal('Create event failed', msg);
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Create Event';
@@ -2576,6 +2578,128 @@ var escapeAttr = function(str) {
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
+var ensureToastRoot = function() {
+  var root = document.getElementById('toastRoot');
+  if (root) return root;
+
+  root = document.createElement('div');
+  root.id = 'toastRoot';
+  root.className = 'toast-root';
+  document.body.appendChild(root);
+  return root;
+};
+
+var showToast = function(message, tone, timeoutMs) {
+  var root = ensureToastRoot();
+  var toast = document.createElement('div');
+
+  toast.className = 'toast toast-' + (tone || 'info');
+  toast.textContent = String(message || '');
+  root.appendChild(toast);
+
+  requestAnimationFrame(function() {
+    toast.classList.add('toast-visible');
+  });
+
+  var dismiss = function() {
+    toast.classList.remove('toast-visible');
+    window.setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 180);
+  };
+
+  toast.addEventListener('click', dismiss);
+  window.setTimeout(dismiss, timeoutMs || 3200);
+};
+
+var showDialogModal = function(opts) {
+  opts = opts || {};
+
+  var existing = document.getElementById('dialogBackdrop');
+  if (existing && existing.parentNode) {
+    existing.parentNode.removeChild(existing);
+  }
+
+  return new Promise(function(resolve) {
+    var backdrop = document.createElement('div');
+    var card = document.createElement('div');
+    var title = document.createElement('div');
+    var message = document.createElement('div');
+    var actions = document.createElement('div');
+    var cancelBtn = document.createElement('button');
+    var confirmBtn = document.createElement('button');
+
+    backdrop.id = 'dialogBackdrop';
+    backdrop.className = 'dialog-backdrop';
+
+    card.className = 'dialog-card';
+    title.className = 'dialog-title';
+    title.textContent = opts.title || 'Notice';
+    message.className = 'dialog-message';
+    message.textContent = opts.message || '';
+    actions.className = 'dialog-actions';
+
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+
+    confirmBtn.type = 'button';
+    confirmBtn.className = opts.tone === 'danger' ? 'btn btn-danger' : 'btn btn-primary';
+    confirmBtn.textContent = opts.confirmLabel || 'OK';
+
+    var close = function(result) {
+      if (backdrop.parentNode) {
+        backdrop.parentNode.removeChild(backdrop);
+      }
+      resolve(result);
+    };
+
+    if (!opts.hideCancel) {
+      actions.appendChild(cancelBtn);
+      cancelBtn.addEventListener('click', function() {
+        close(false);
+      });
+    }
+
+    actions.appendChild(confirmBtn);
+    confirmBtn.addEventListener('click', function() {
+      close(true);
+    });
+
+    backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) {
+        close(false);
+      }
+    });
+
+    card.appendChild(title);
+    card.appendChild(message);
+    card.appendChild(actions);
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    confirmBtn.focus();
+  });
+};
+
+var showNoticeModal = function(title, message, confirmLabel) {
+  return showDialogModal({
+    title: title,
+    message: message,
+    confirmLabel: confirmLabel || 'OK',
+    hideCancel: true
+  });
+};
+
+var showConfirmModal = function(title, message, confirmLabel) {
+  return showDialogModal({
+    title: title,
+    message: message,
+    confirmLabel: confirmLabel || 'Confirm',
+    cancelLabel: 'Cancel',
+    tone: 'danger'
+  });
+};
+
 onAuthStateChanged(auth, function(user) {
   if (user) {
     renderLoading('Checking access...');
