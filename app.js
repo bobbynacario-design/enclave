@@ -79,6 +79,24 @@ var messagesState = {
   unsubscribeThread:        null
 };
 
+var resetMessagesState = function() {
+  if (messagesState.unsubscribeConversations) {
+    messagesState.unsubscribeConversations();
+    messagesState.unsubscribeConversations = null;
+  }
+
+  if (messagesState.unsubscribeThread) {
+    messagesState.unsubscribeThread();
+    messagesState.unsubscribeThread = null;
+  }
+
+  messagesState.members = [];
+  messagesState.conversations = [];
+  messagesState.activePeerId = null;
+  messagesState.activeConversationId = null;
+  messagesState.thread = [];
+};
+
 var VALID_PAGES = {
   feed:     true,
   events:   true,
@@ -100,6 +118,7 @@ var handleSignOut = function() {
   state.isAdmin = false;
   state.circles = [];
   adminState.allowlist = [];
+  resetMessagesState();
   signOut(auth);
 };
 
@@ -222,7 +241,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v36';
+var ASSET_VERSION = 'v37';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -433,15 +452,7 @@ var loadPage = function(page) {
     feedState.unsubscribe = null;
   }
 
-  if (messagesState.unsubscribeConversations) {
-    messagesState.unsubscribeConversations();
-    messagesState.unsubscribeConversations = null;
-  }
-
-  if (messagesState.unsubscribeThread) {
-    messagesState.unsubscribeThread();
-    messagesState.unsubscribeThread = null;
-  }
+  resetMessagesState();
 
   var slot = document.querySelector('[data-slot="page"]');
   if (!slot) return;
@@ -1259,6 +1270,12 @@ var loadMessageMembers = function() {
     });
 
     messagesState.members = members;
+
+    if (messagesState.activePeerId && !findMessageMember(messagesState.activePeerId)) {
+      messagesState.activePeerId = null;
+      messagesState.activeConversationId = null;
+      messagesState.thread = [];
+    }
 
     if (!messagesState.activePeerId && members.length > 0) {
       var firstConversation = messagesState.conversations[0];
@@ -2581,6 +2598,7 @@ onAuthStateChanged(auth, function(user) {
     state.isAdmin = false;
     state.circles = [];
     adminState.allowlist = [];
+    resetMessagesState();
     renderLogin();
   }
 });
