@@ -21,6 +21,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
@@ -34,6 +35,7 @@ var ALL_CIRCLES = [
 ];
 
 var OWNER_ADMIN_EMAIL = 'bobbynacario@gmail.com';
+var FEED_PAGE_SIZE = 20;
 
 // ─── State ───────────────────────────────────────────────────────────────────
 var state = {
@@ -49,9 +51,13 @@ var eventsState = {
 };
 
 var feedState = {
-  posts:       [],
+  livePosts:   [],
+  olderPosts:  [],
   filter:      'all',
-  unsubscribe: null
+  unsubscribe: null,
+  hasMore:     false,
+  loadingMore: false,
+  lastDoc:     null
 };
 
 var membersState = {
@@ -505,24 +511,107 @@ var initFeedPage = function() {
 
 // ─── Feed: live subscription ─────────────────────────────────────────────────
 var subscribeFeed = function() {
+  feedState.livePosts = [];
+  feedState.olderPosts = [];
+  feedState.hasMore = false;
+  feedState.loadingMore = false;
+  feedState.lastDoc = null;
+
   var q = query(
     collection(db, 'posts'),
     where('circle', 'in', getVisibleCircles()),
-    orderBy('timestamp', 'desc')
+    orderBy('timestamp', 'desc'),
+    limit(FEED_PAGE_SIZE)
   );
 
   feedState.unsubscribe = onSnapshot(q, function(snap) {
-    feedState.posts = [];
+    feedState.livePosts = [];
     snap.forEach(function(d) {
       var data = d.data();
       data.id = d.id;
-      feedState.posts.push(data);
+      feedState.livePosts.push(data);
     });
+
+    if (snap.empty) {
+      if (feedState.olderPosts.length === 0) {
+        feedState.lastDoc = null;
+      }
+      feedState.hasMore = false;
+    } else {
+      if (feedState.olderPosts.length === 0 || !feedState.lastDoc) {
+        feedState.lastDoc = snap.docs[snap.docs.length - 1];
+      }
+      feedState.hasMore = snap.docs.length === FEED_PAGE_SIZE;
+    }
+
     renderFeedList();
   }, function(err) {
     console.error('Feed subscribe error:', err);
     var list = document.getElementById('feedList');
     if (list) list.innerHTML = '<div class="card"><p class="text-muted">Failed to load feed. Check Firestore rules.</p></div>';
+  });
+};
+
+var getAllKnownFeedPosts = function() {
+  var combined = [];
+  var seen = {};
+
+  feedState.livePosts.concat(feedState.olderPosts).forEach(function(post) {
+    if (!post || !post.id || seen[post.id]) return;
+    seen[post.id] = true;
+    combined.push(post);
+  });
+
+  return combined;
+};
+
+var getRenderedFeedPosts = function() {
+  var combined = getAllKnownFeedPosts();
+
+  if (feedState.filter !== 'all') {
+    combined = combined.filter(function(post) {
+      return post.circle === feedState.filter;
+    });
+  }
+
+  return combined;
+};
+
+var loadMoreFeedPosts = function() {
+  if (feedState.loadingMore || !feedState.lastDoc) return;
+
+  feedState.loadingMore = true;
+  renderFeedList();
+
+  var q = query(
+    collection(db, 'posts'),
+    where('circle', 'in', getVisibleCircles()),
+    orderBy('timestamp', 'desc'),
+    startAfter(feedState.lastDoc),
+    limit(FEED_PAGE_SIZE)
+  );
+
+  getDocs(q).then(function(snap) {
+    var nextPosts = [];
+
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      nextPosts.push(data);
+    });
+
+    feedState.olderPosts = feedState.olderPosts.concat(nextPosts);
+    feedState.hasMore = snap.docs.length === FEED_PAGE_SIZE;
+
+    if (!snap.empty) {
+      feedState.lastDoc = snap.docs[snap.docs.length - 1];
+    }
+  }).catch(function(err) {
+    console.error('Failed to load more posts:', err);
+    alert('Failed to load more posts. Check console for details.');
+  }).finally(function() {
+    feedState.loadingMore = false;
+    renderFeedList();
   });
 };
 
@@ -576,17 +665,23 @@ var renderFeedList = function() {
   var list = document.getElementById('feedList');
   if (!list) return;
 
-  var posts = feedState.posts;
-  if (feedState.filter !== 'all') {
-    posts = posts.filter(function(p) { return p.circle === feedState.filter; });
-  }
+  var posts = getRenderedFeedPosts();
 
   if (posts.length === 0) {
     list.innerHTML = '<div class="card"><p class="text-muted">No posts yet. Be the first to share.</p></div>';
-    return;
+  } else {
+    list.innerHTML = posts.map(renderPostCard).join('');
   }
 
-  list.innerHTML = posts.map(renderPostCard).join('');
+  if (feedState.hasMore) {
+    list.insertAdjacentHTML('beforeend',
+      '<div class="feed-load-more">' +
+        '<button class="btn btn-ghost load-more-btn" type="button">' +
+          (feedState.loadingMore ? 'Loading...' : 'Load more') +
+        '</button>' +
+      '</div>'
+    );
+  }
 
   list.querySelectorAll('[data-share-post]').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -599,6 +694,12 @@ var renderFeedList = function() {
       handleDeletePost(btn.dataset.deletePost, btn.dataset.postAuthor);
     });
   });
+
+  var loadMoreBtn = list.querySelector('.load-more-btn');
+  if (loadMoreBtn) {
+    loadMoreBtn.disabled = feedState.loadingMore;
+    loadMoreBtn.addEventListener('click', loadMoreFeedPosts);
+  }
 };
 
 // ─── Feed: render single post card ───────────────────────────────────────────
@@ -645,7 +746,7 @@ var renderPostCard = function(p) {
 };
 
 var handleSharePost = function(postId) {
-  var post = feedState.posts.find(function(item) {
+  var post = getAllKnownFeedPosts().find(function(item) {
     return item.id === postId;
   });
   if (!post) return;
