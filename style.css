@@ -592,6 +592,11 @@ label {
   color: var(--text);
 }
 
+.post-action-active {
+  color: var(--accent, #7F77DD);
+  font-weight: 500;
+}
+
 /* ─── Members: grid + cards ──────────────────────────────────────────────── */
 .feed-load-more {
   display: flex;

@@ -683,6 +683,12 @@ var renderFeedList = function() {
     );
   }
 
+  list.querySelectorAll('[data-react-post]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handleReactPost(btn.dataset.reactPost);
+    });
+  });
+
   list.querySelectorAll('[data-share-post]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       handleSharePost(btn.dataset.sharePost);
@@ -719,6 +725,11 @@ var renderPostCard = function(p) {
   var nameEsc     = escapeHTML(p.authorName || 'Unknown');
   var initialsEsc = escapeHTML(p.authorInitials || '?');
   var bodyEsc     = escapeHTML(p.body || '');
+  var reacts = Array.isArray(p.reacts) ? p.reacts : [];
+  var reacted = state.user && reacts.indexOf(state.user.uid) !== -1;
+  var reactBtnClass = reacted
+    ? 'post-action post-react-btn post-action-active'
+    : 'post-action post-react-btn';
   var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid);
   var deleteBtn = canDelete
     ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">Delete</button>'
@@ -739,6 +750,7 @@ var renderPostCard = function(p) {
       '</div>' +
       '<div class="post-body">' + bodyEsc + '</div>' +
       '<div class="post-actions">' +
+        '<button class="' + reactBtnClass + '" data-react-post="' + escapeAttr(p.id) + '">&#128077; ' + reacts.length + '</button>' +
         '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '">&#8599; Share</button>' +
         deleteBtn +
       '</div>' +
@@ -781,6 +793,58 @@ var handleSharePost = function(postId) {
   }
 
   alert(shareText + '\n\n' + shareURL);
+};
+
+var updateKnownPostReacts = function(postId, reacts) {
+  [feedState.livePosts, feedState.olderPosts].forEach(function(posts) {
+    posts.forEach(function(post) {
+      if (post.id === postId) {
+        post.reacts = reacts.slice();
+      }
+    });
+  });
+};
+
+var handleReactPost = function(postId) {
+  if (!state.user) return;
+
+  var ref = doc(db, 'posts', postId);
+  var post = getAllKnownFeedPosts().find(function(item) {
+    return item.id === postId;
+  });
+  var authorId = post && post.authorId ? post.authorId : null;
+  var nextReacts = null;
+  var uid = state.user.uid;
+
+  runTransaction(db, function(tx) {
+    return tx.get(ref).then(function(snap) {
+      if (!snap.exists()) return;
+
+      var current = Array.isArray(snap.data().reacts) ? snap.data().reacts.slice() : [];
+      var idx = current.indexOf(uid);
+
+      if (idx === -1) {
+        current.push(uid);
+      } else {
+        current.splice(idx, 1);
+      }
+
+      nextReacts = current.slice();
+      tx.update(ref, { reacts: current });
+    });
+  }).then(function() {
+    if (!nextReacts) return;
+
+    updateKnownPostReacts(postId, nextReacts);
+    renderFeedList();
+
+    if (authorId && document.getElementById('profilePosts')) {
+      loadRecentPosts(authorId);
+    }
+  }).catch(function(err) {
+    console.error('React failed:', err);
+    alert('Could not save reaction. Try again.');
+  });
 };
 
 var handleDeletePost = function(postId, authorId) {
@@ -1339,6 +1403,12 @@ var loadRecentPosts = function(uid) {
     container.querySelectorAll('[data-share-post]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         handleSharePost(btn.dataset.sharePost);
+      });
+    });
+
+    container.querySelectorAll('[data-react-post]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        handleReactPost(btn.dataset.reactPost);
       });
     });
 

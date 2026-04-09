@@ -95,12 +95,25 @@ service cloud.firestore {
         request.resource.data.authorId == request.auth.uid &&
         canAccessCircle(request.resource.data.circle);
 
-      allow update, delete: if isAdmin() || (
+      allow update: if isAdmin() || (
         signedIn() &&
         resource.data.authorId == request.auth.uid &&
         request.resource.data.authorId == resource.data.authorId &&
         canAccessCircle(resource.data.circle) &&
         canAccessCircle(request.resource.data.circle)
+      ) || (
+        signedIn() &&
+        canAccessCircle(resource.data.circle) &&
+        canAccessCircle(request.resource.data.circle) &&
+        request.resource.data.authorId == resource.data.authorId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reacts']) &&
+        request.resource.data.reacts is list
+      );
+
+      allow delete: if isAdmin() || (
+        signedIn() &&
+        resource.data.authorId == request.auth.uid &&
+        canAccessCircle(resource.data.circle)
       );
     }
 
