@@ -57,7 +57,8 @@ var feedState = {
   unsubscribe: null,
   hasMore:     false,
   loadingMore: false,
-  lastDoc:     null
+  lastDoc:     null,
+  openComments: {}
 };
 
 var membersState = {
@@ -683,6 +684,19 @@ var renderFeedList = function() {
     );
   }
 
+  list.querySelectorAll('[data-toggle-comments-post]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      togglePostComments(btn.dataset.toggleCommentsPost, btn.dataset.postAuthor);
+    });
+  });
+
+  list.querySelectorAll('[data-comment-form]').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      handleCommentSubmit(form.dataset.commentForm, form.dataset.postAuthor, form);
+    });
+  });
+
   list.querySelectorAll('[data-react-post]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       handleReactPost(btn.dataset.reactPost);
@@ -709,6 +723,45 @@ var renderFeedList = function() {
 };
 
 // ─── Feed: render single post card ───────────────────────────────────────────
+var renderPostComments = function(postId, comments, authorId) {
+  var items = comments.map(function(comment) {
+    if (typeof comment === 'string') {
+      return '<div class="post-comment"><div class="post-comment-body">' + escapeHTML(comment) + '</div></div>';
+    }
+
+    var commentAuthor = escapeHTML(comment.authorName || 'Member');
+    var commentBody = escapeHTML(comment.body || '');
+    var commentTime = 'just now';
+
+    if (comment.createdAt && typeof comment.createdAt.toDate === 'function') {
+      commentTime = relativeTime(comment.createdAt.toDate());
+    }
+
+    return '' +
+      '<div class="post-comment">' +
+        '<div class="post-comment-meta">' +
+          '<span class="post-comment-author">' + commentAuthor + '</span>' +
+          '<span class="post-dot">&middot;</span>' +
+          '<span class="post-comment-time">' + escapeHTML(commentTime) + '</span>' +
+        '</div>' +
+        '<div class="post-comment-body">' + commentBody + '</div>' +
+      '</div>';
+  }).join('');
+
+  if (!items) {
+    items = '<div class="post-comments-empty">No comments yet.</div>';
+  }
+
+  return '' +
+    '<div class="post-comments">' +
+      '<div class="post-comments-list">' + items + '</div>' +
+      '<form class="post-comment-compose" data-comment-form="' + escapeAttr(postId) + '" data-post-author="' + escapeAttr(authorId || '') + '">' +
+        '<input class="post-comment-input" type="text" maxlength="280" placeholder="Write a comment..." data-comment-input="' + escapeAttr(postId) + '" />' +
+        '<button class="btn btn-ghost post-comment-submit" type="submit">Send</button>' +
+      '</form>' +
+    '</div>';
+};
+
 var renderPostCard = function(p) {
   var circleLabels = {
     'all':          'All',
@@ -726,10 +779,15 @@ var renderPostCard = function(p) {
   var initialsEsc = escapeHTML(p.authorInitials || '?');
   var bodyEsc     = escapeHTML(p.body || '');
   var reacts = Array.isArray(p.reacts) ? p.reacts : [];
+  var comments = Array.isArray(p.comments) ? p.comments : [];
   var reacted = state.user && reacts.indexOf(state.user.uid) !== -1;
   var reactBtnClass = reacted
     ? 'post-action post-react-btn post-action-active'
     : 'post-action post-react-btn';
+  var commentsOpen = !!feedState.openComments[p.id];
+  var commentBtnClass = commentsOpen
+    ? 'post-action post-comment-btn post-action-active'
+    : 'post-action post-comment-btn';
   var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid);
   var deleteBtn = canDelete
     ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">Delete</button>'
@@ -751,9 +809,11 @@ var renderPostCard = function(p) {
       '<div class="post-body">' + bodyEsc + '</div>' +
       '<div class="post-actions">' +
         '<button class="' + reactBtnClass + '" data-react-post="' + escapeAttr(p.id) + '">&#128077; ' + reacts.length + '</button>' +
+        '<button class="' + commentBtnClass + '" data-toggle-comments-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">&#128172; ' + comments.length + '</button>' +
         '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '">&#8599; Share</button>' +
         deleteBtn +
       '</div>' +
+      (commentsOpen ? renderPostComments(p.id, comments, p.authorId) : '') +
     '</div>';
 };
 
@@ -805,6 +865,27 @@ var updateKnownPostReacts = function(postId, reacts) {
   });
 };
 
+var updateKnownPostComments = function(postId, comments) {
+  [feedState.livePosts, feedState.olderPosts].forEach(function(posts) {
+    posts.forEach(function(post) {
+      if (post.id === postId) {
+        post.comments = comments.slice();
+      }
+    });
+  });
+};
+
+var togglePostComments = function(postId, authorId) {
+  if (!postId) return;
+
+  feedState.openComments[postId] = !feedState.openComments[postId];
+  renderFeedList();
+
+  if (authorId && document.getElementById('profilePosts')) {
+    loadRecentPosts(authorId);
+  }
+};
+
 var handleReactPost = function(postId) {
   if (!state.user) return;
 
@@ -844,6 +925,55 @@ var handleReactPost = function(postId) {
   }).catch(function(err) {
     console.error('React failed:', err);
     alert('Could not save reaction. Try again.');
+  });
+};
+
+var handleCommentSubmit = function(postId, authorId, formEl) {
+  if (!state.user || !postId) return;
+
+  var input = formEl
+    ? formEl.querySelector('[data-comment-input]')
+    : document.querySelector('[data-comment-input="' + postId + '"]');
+  if (!input) return;
+
+  var body = input.value.trim();
+  if (!body) return;
+
+  var ref = doc(db, 'posts', postId);
+  var nextComments = null;
+  var comment = {
+    uid: state.user.uid,
+    authorName: state.user.displayName || state.user.email || 'Member',
+    body: body,
+    createdAt: Timestamp.now()
+  };
+
+  input.disabled = true;
+
+  runTransaction(db, function(tx) {
+    return tx.get(ref).then(function(snap) {
+      if (!snap.exists()) return;
+
+      var current = Array.isArray(snap.data().comments) ? snap.data().comments.slice() : [];
+      current.push(comment);
+      nextComments = current.slice();
+      tx.update(ref, { comments: current });
+    });
+  }).then(function() {
+    if (!nextComments) return;
+
+    updateKnownPostComments(postId, nextComments);
+    feedState.openComments[postId] = true;
+    renderFeedList();
+
+    if (authorId && document.getElementById('profilePosts')) {
+      loadRecentPosts(authorId);
+    }
+  }).catch(function(err) {
+    console.error('Comment failed:', err);
+    alert('Could not save comment. Try again.');
+  }).finally(function() {
+    input.disabled = false;
   });
 };
 
@@ -1403,6 +1533,19 @@ var loadRecentPosts = function(uid) {
     container.querySelectorAll('[data-share-post]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         handleSharePost(btn.dataset.sharePost);
+      });
+    });
+
+    container.querySelectorAll('[data-toggle-comments-post]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        togglePostComments(btn.dataset.toggleCommentsPost, btn.dataset.postAuthor);
+      });
+    });
+
+    container.querySelectorAll('[data-comment-form]').forEach(function(form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        handleCommentSubmit(form.dataset.commentForm, form.dataset.postAuthor, form);
       });
     });
 

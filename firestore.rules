@@ -108,6 +108,13 @@ service cloud.firestore {
         request.resource.data.authorId == resource.data.authorId &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reacts']) &&
         request.resource.data.reacts is list
+      ) || (
+        signedIn() &&
+        canAccessCircle(resource.data.circle) &&
+        canAccessCircle(request.resource.data.circle) &&
+        request.resource.data.authorId == resource.data.authorId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) &&
+        request.resource.data.comments is list
       );
 
       allow delete: if isAdmin() || (
