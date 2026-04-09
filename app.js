@@ -593,6 +593,12 @@ var renderFeedList = function() {
       handleSharePost(btn.dataset.sharePost);
     });
   });
+
+  list.querySelectorAll('[data-delete-post]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handleDeletePost(btn.dataset.deletePost, btn.dataset.postAuthor);
+    });
+  });
 };
 
 // ─── Feed: render single post card ───────────────────────────────────────────
@@ -612,6 +618,10 @@ var renderPostCard = function(p) {
   var nameEsc     = escapeHTML(p.authorName || 'Unknown');
   var initialsEsc = escapeHTML(p.authorInitials || '?');
   var bodyEsc     = escapeHTML(p.body || '');
+  var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid);
+  var deleteBtn = canDelete
+    ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">Delete</button>'
+    : '';
 
   return '' +
     '<div class="post-card">' +
@@ -629,6 +639,7 @@ var renderPostCard = function(p) {
       '<div class="post-body">' + bodyEsc + '</div>' +
       '<div class="post-actions">' +
         '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '">&#8599; Share</button>' +
+        deleteBtn +
       '</div>' +
     '</div>';
 };
@@ -669,6 +680,23 @@ var handleSharePost = function(postId) {
   }
 
   alert(shareText + '\n\n' + shareURL);
+};
+
+var handleDeletePost = function(postId, authorId) {
+  if (!postId) return;
+
+  if (!window.confirm('Delete this post?')) {
+    return;
+  }
+
+  deleteDoc(doc(db, 'posts', postId)).then(function() {
+    if (authorId && document.getElementById('profilePosts')) {
+      loadRecentPosts(authorId);
+    }
+  }).catch(function(err) {
+    console.error('Failed to delete post:', err);
+    alert('Failed to delete post. Check console for details.');
+  });
 };
 
 // ─── Members: init ───────────────────────────────────────────────────────────
@@ -1206,6 +1234,18 @@ var loadRecentPosts = function(uid) {
     }
 
     container.innerHTML = posts.map(renderPostCard).join('');
+
+    container.querySelectorAll('[data-share-post]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        handleSharePost(btn.dataset.sharePost);
+      });
+    });
+
+    container.querySelectorAll('[data-delete-post]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        handleDeletePost(btn.dataset.deletePost, btn.dataset.postAuthor);
+      });
+    });
   }).catch(function(err) {
     console.error('Failed to load recent posts:', err);
     // If it's a missing-index error, Firestore returns a specific message
