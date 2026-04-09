@@ -241,7 +241,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v38';
+var ASSET_VERSION = 'v39';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -384,6 +384,10 @@ var getAppURL = function() {
   return url.toString();
 };
 
+var getUpcomingEventsThreshold = function() {
+  return Timestamp.fromDate(new Date(Date.now() - 3600000));
+};
+
 // ─── Right panel: upcoming events ────────────────────────────────────────────
 var loadPanelEvents = function() {
   var el = document.getElementById('panelEvents');
@@ -394,20 +398,15 @@ var loadPanelEvents = function() {
   var q = query(
     collection(db, 'events'),
     where('circle', 'in', getVisibleCircles()),
+    where('date', '>=', getUpcomingEventsThreshold()),
     orderBy('date', 'asc'),
-    limit(5)
+    limit(4)
   );
   getDocs(q).then(function(snap) {
-    var now = Date.now();
     var items = [];
     snap.forEach(function(d) {
       var data = d.data();
-      var t = data.date && typeof data.date.toDate === 'function'
-        ? data.date.toDate().getTime()
-        : 0;
-      if (t >= now - 3600000) {
-        items.push(data);
-      }
+      items.push(data);
     });
 
     if (items.length === 0) {
@@ -417,7 +416,7 @@ var loadPanelEvents = function() {
     }
 
     el.className = 'panel-events';
-    el.innerHTML = items.slice(0, 4).map(function(ev) {
+    el.innerHTML = items.map(function(ev) {
       var titleEsc = escapeHTML(ev.title || 'Untitled');
       var when = '';
       if (ev.date && typeof ev.date.toDate === 'function') {
@@ -2000,22 +1999,16 @@ var loadEvents = function() {
   var q = query(
     collection(db, 'events'),
     where('circle', 'in', getVisibleCircles()),
+    where('date', '>=', getUpcomingEventsThreshold()),
     orderBy('date', 'asc')
   );
 
   getDocs(q).then(function(snap) {
     var events = [];
-    var now = Date.now();
     snap.forEach(function(d) {
       var data = d.data();
       data.id = d.id;
-      // Filter to upcoming (date >= now) client-side
-      var t = data.date && typeof data.date.toDate === 'function'
-        ? data.date.toDate().getTime()
-        : 0;
-      if (t >= now - 3600000) { // 1h grace period for "in-progress" events
-        events.push(data);
-      }
+      events.push(data);
     });
     eventsState.events = events;
     renderEventsList();
