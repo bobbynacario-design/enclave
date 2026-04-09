@@ -1,8 +1,38 @@
 <div class="page-header">
   <h1>Messages</h1>
-  <p class="text-muted">Direct conversations.</p>
+  <p class="text-muted">Direct conversations with enclave members.</p>
 </div>
 
-<div class="card">
-  <p class="text-muted">Messaging coming soon.</p>
+<div class="messages-shell">
+  <aside class="messages-sidebar">
+    <div class="messages-sidebar-header">People</div>
+    <div class="messages-people-list" id="messagesPeopleList">
+      <div class="text-muted">Loading conversations...</div>
+    </div>
+  </aside>
+
+  <section class="messages-thread card">
+    <div class="messages-thread-header">
+      <div>
+        <div class="messages-thread-title" id="messagesThreadTitle">Select a member</div>
+        <div class="messages-thread-subtitle text-muted" id="messagesThreadSubtitle">Choose someone to start chatting.</div>
+      </div>
+    </div>
+
+    <div class="messages-thread-list" id="messagesThreadList">
+      <div class="messages-empty-state text-muted">No conversation selected yet.</div>
+    </div>
+
+    <form class="messages-compose" id="messagesComposer">
+      <input
+        type="text"
+        class="messages-compose-input"
+        id="messagesComposeInput"
+        maxlength="500"
+        placeholder="Write a message..."
+        disabled
+      />
+      <button type="submit" class="btn" id="messagesSendBtn" disabled>Send</button>
+    </form>
+  </section>
 </div>

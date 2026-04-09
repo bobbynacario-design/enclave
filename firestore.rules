@@ -46,6 +46,15 @@ service cloud.firestore {
         );
     }
 
+    function conversationExists(conversationId) {
+      return exists(/databases/$(database)/documents/conversations/$(conversationId));
+    }
+
+    function canAccessConversation(conversationId) {
+      return conversationExists(conversationId) &&
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members;
+    }
+
     match /allowlist/{email} {
       allow get: if signedIn();
       allow list: if isAdmin();
@@ -122,6 +131,34 @@ service cloud.firestore {
         resource.data.authorId == request.auth.uid &&
         canAccessCircle(resource.data.circle)
       );
+    }
+
+    match /conversations/{conversationId} {
+      allow get, list: if signedIn() &&
+        request.auth.uid in resource.data.members;
+
+      allow create: if signedIn() &&
+        request.resource.data.members is list &&
+        request.resource.data.members.size() == 2 &&
+        request.auth.uid in request.resource.data.members;
+
+      allow update: if signedIn() &&
+        request.auth.uid in resource.data.members &&
+        request.resource.data.members == resource.data.members;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow get, list: if signedIn() &&
+          canAccessConversation(conversationId);
+
+        allow create: if signedIn() &&
+          canAccessConversation(conversationId) &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.body is string;
+
+        allow update, delete: if false;
+      }
     }
 
     match /events/{eventId} {

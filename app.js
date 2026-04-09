@@ -69,6 +69,16 @@ var adminState = {
   allowlist: []
 };
 
+var messagesState = {
+  members:                 [],
+  conversations:           [],
+  activePeerId:            null,
+  activeConversationId:    null,
+  thread:                  [],
+  unsubscribeConversations: null,
+  unsubscribeThread:        null
+};
+
 var VALID_PAGES = {
   feed:     true,
   events:   true,
@@ -212,7 +222,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v31';
+var ASSET_VERSION = 'v36';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -423,6 +433,16 @@ var loadPage = function(page) {
     feedState.unsubscribe = null;
   }
 
+  if (messagesState.unsubscribeConversations) {
+    messagesState.unsubscribeConversations();
+    messagesState.unsubscribeConversations = null;
+  }
+
+  if (messagesState.unsubscribeThread) {
+    messagesState.unsubscribeThread();
+    messagesState.unsubscribeThread = null;
+  }
+
   var slot = document.querySelector('[data-slot="page"]');
   if (!slot) return;
 
@@ -440,6 +460,7 @@ var loadPage = function(page) {
     if (page === 'members') initMembersPage();
     if (page === 'events')  initEventsPage();
     if (page === 'admin')   initAdminPage();
+    if (page === 'messages') initMessagesPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -1031,6 +1052,361 @@ var loadMembers = function() {
 };
 
 // ─── Admin: init ──────────────────────────────────────────────────────────────
+// ─── Messages ────────────────────────────────────────────────────────────────
+var getConversationId = function(uidA, uidB) {
+  return [uidA, uidB].sort().join('__');
+};
+
+var getConversationPeerId = function(conversation) {
+  var members = Array.isArray(conversation.members) ? conversation.members : [];
+  return members.filter(function(uid) {
+    return uid !== (state.user && state.user.uid);
+  })[0] || null;
+};
+
+var getConversationSortValue = function(conversation) {
+  var ts = conversation.updatedAt || conversation.createdAt;
+  if (ts && typeof ts.toMillis === 'function') return ts.toMillis();
+  if (ts && typeof ts.toDate === 'function') return ts.toDate().getTime();
+  return 0;
+};
+
+var findMessageMember = function(uid) {
+  return messagesState.members.find(function(member) {
+    return member.uid === uid;
+  }) || null;
+};
+
+var findConversationForPeer = function(peerId) {
+  return messagesState.conversations.find(function(conversation) {
+    return getConversationPeerId(conversation) === peerId;
+  }) || null;
+};
+
+var renderMessagesPeopleList = function() {
+  var list = document.getElementById('messagesPeopleList');
+  if (!list) return;
+
+  if (messagesState.members.length === 0) {
+    list.innerHTML = '<div class="messages-empty-state text-muted">No other members found yet.</div>';
+    return;
+  }
+
+  var convByPeer = {};
+  messagesState.conversations.forEach(function(conversation) {
+    var peerId = getConversationPeerId(conversation);
+    if (peerId) convByPeer[peerId] = conversation;
+  });
+
+  var members = messagesState.members.slice().sort(function(a, b) {
+    var convA = convByPeer[a.uid];
+    var convB = convByPeer[b.uid];
+
+    if (convA && convB) {
+      return getConversationSortValue(convB) - getConversationSortValue(convA);
+    }
+    if (convA) return -1;
+    if (convB) return 1;
+    return (a.name || a.email || '').localeCompare(b.name || b.email || '');
+  });
+
+  list.innerHTML = members.map(function(member) {
+    var conversation = convByPeer[member.uid];
+    var preview = conversation && conversation.lastMessage
+      ? conversation.lastMessage
+      : 'Start a conversation';
+    var active = member.uid === messagesState.activePeerId ? ' active' : '';
+    var initials = escapeHTML(getInitials(member.name || member.email || '?'));
+    var name = escapeHTML(member.name || member.email || 'Member');
+    var meta = escapeHTML(member.role || member.email || '');
+    var previewEsc = escapeHTML(preview);
+
+    return '' +
+      '<button class="messages-person' + active + '" type="button" data-open-message="' + escapeAttr(member.uid) + '">' +
+        '<div class="messages-person-avatar">' + initials + '</div>' +
+        '<div class="messages-person-meta">' +
+          '<div class="messages-person-name">' + name + '</div>' +
+          '<div class="messages-person-subtitle">' + meta + '</div>' +
+          '<div class="messages-person-preview">' + previewEsc + '</div>' +
+        '</div>' +
+      '</button>';
+  }).join('');
+
+  list.querySelectorAll('[data-open-message]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      openMessageThread(btn.dataset.openMessage);
+    });
+  });
+};
+
+var renderMessagesThread = function() {
+  var titleEl = document.getElementById('messagesThreadTitle');
+  var subtitleEl = document.getElementById('messagesThreadSubtitle');
+  var listEl = document.getElementById('messagesThreadList');
+  var inputEl = document.getElementById('messagesComposeInput');
+  var sendBtn = document.getElementById('messagesSendBtn');
+
+  if (!titleEl || !subtitleEl || !listEl || !inputEl || !sendBtn) return;
+
+  var peer = findMessageMember(messagesState.activePeerId);
+  if (!peer) {
+    titleEl.textContent = 'Select a member';
+    subtitleEl.textContent = 'Choose someone to start chatting.';
+    listEl.innerHTML = '<div class="messages-empty-state text-muted">No conversation selected yet.</div>';
+    inputEl.value = '';
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    return;
+  }
+
+  titleEl.textContent = peer.name || peer.email || 'Member';
+  subtitleEl.textContent = peer.role || peer.email || 'Direct conversation';
+  inputEl.disabled = false;
+  sendBtn.disabled = false;
+
+  if (messagesState.thread.length === 0) {
+    listEl.innerHTML = '<div class="messages-empty-state text-muted">No messages yet. Send the first one.</div>';
+    return;
+  }
+
+  listEl.innerHTML = messagesState.thread.map(function(message) {
+    var mine = message.authorId === (state.user && state.user.uid);
+    var author = escapeHTML(message.authorName || 'Member');
+    var body = escapeHTML(message.body || '');
+    var time = 'just now';
+
+    if (message.createdAt && typeof message.createdAt.toDate === 'function') {
+      time = relativeTime(message.createdAt.toDate());
+    }
+
+    return '' +
+      '<div class="message-bubble-row' + (mine ? ' mine' : '') + '">' +
+        '<div class="message-bubble">' +
+          '<div class="message-bubble-meta">' + author + ' · ' + escapeHTML(time) + '</div>' +
+          '<div class="message-bubble-body">' + body + '</div>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+
+  listEl.scrollTop = listEl.scrollHeight;
+};
+
+var subscribeMessageThread = function(conversationId) {
+  if (messagesState.unsubscribeThread) {
+    messagesState.unsubscribeThread();
+    messagesState.unsubscribeThread = null;
+  }
+
+  messagesState.activeConversationId = conversationId;
+  messagesState.thread = [];
+
+  var q = query(
+    collection(db, 'conversations', conversationId, 'messages'),
+    orderBy('createdAt', 'asc')
+  );
+
+  messagesState.unsubscribeThread = onSnapshot(q, function(snap) {
+    var thread = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      thread.push(data);
+    });
+    messagesState.thread = thread;
+    renderMessagesThread();
+  }, function(err) {
+    console.error('Failed to load thread:', err);
+    var listEl = document.getElementById('messagesThreadList');
+    if (listEl) {
+      listEl.innerHTML = '<div class="messages-empty-state text-muted">Failed to load messages.</div>';
+    }
+  });
+};
+
+var openMessageThread = function(peerId) {
+  messagesState.activePeerId = peerId;
+  var conversation = findConversationForPeer(peerId);
+
+  renderMessagesPeopleList();
+
+  if (!conversation) {
+    if (messagesState.unsubscribeThread) {
+      messagesState.unsubscribeThread();
+      messagesState.unsubscribeThread = null;
+    }
+    messagesState.activeConversationId = null;
+    messagesState.thread = [];
+    renderMessagesThread();
+    return;
+  }
+
+  subscribeMessageThread(conversation.id);
+  renderMessagesThread();
+};
+
+var loadMessageMembers = function() {
+  getDocs(collection(db, 'users')).then(function(snap) {
+    var members = [];
+    snap.forEach(function(d) {
+      if (!state.user || d.id === state.user.uid) return;
+      var data = d.data();
+      data.uid = d.id;
+      members.push(data);
+    });
+
+    members.sort(function(a, b) {
+      return (a.name || a.email || '').localeCompare(b.name || b.email || '');
+    });
+
+    messagesState.members = members;
+
+    if (!messagesState.activePeerId && members.length > 0) {
+      var firstConversation = messagesState.conversations[0];
+      messagesState.activePeerId = firstConversation
+        ? getConversationPeerId(firstConversation)
+        : members[0].uid;
+    }
+
+    renderMessagesPeopleList();
+    renderMessagesThread();
+  }).catch(function(err) {
+    console.error('Failed to load message members:', err);
+    var list = document.getElementById('messagesPeopleList');
+    if (list) {
+      list.innerHTML = '<div class="messages-empty-state text-muted">Failed to load members.</div>';
+    }
+  });
+};
+
+var subscribeConversations = function() {
+  if (!state.user) return;
+
+  if (messagesState.unsubscribeConversations) {
+    messagesState.unsubscribeConversations();
+    messagesState.unsubscribeConversations = null;
+  }
+
+  var q = query(
+    collection(db, 'conversations'),
+    where('members', 'array-contains', state.user.uid)
+  );
+
+  messagesState.unsubscribeConversations = onSnapshot(q, function(snap) {
+    var conversations = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      conversations.push(data);
+    });
+
+    conversations.sort(function(a, b) {
+      return getConversationSortValue(b) - getConversationSortValue(a);
+    });
+
+    messagesState.conversations = conversations;
+
+    if (messagesState.activePeerId) {
+      var activeConversation = findConversationForPeer(messagesState.activePeerId);
+      if (activeConversation) {
+        if (messagesState.activeConversationId !== activeConversation.id) {
+          subscribeMessageThread(activeConversation.id);
+        }
+      } else {
+        messagesState.activeConversationId = null;
+        messagesState.thread = [];
+      }
+    } else if (conversations.length > 0) {
+      messagesState.activePeerId = getConversationPeerId(conversations[0]);
+      subscribeMessageThread(conversations[0].id);
+    }
+
+    renderMessagesPeopleList();
+    renderMessagesThread();
+  }, function(err) {
+    console.error('Failed to load conversations:', err);
+    var list = document.getElementById('messagesPeopleList');
+    if (list) {
+      list.innerHTML = '<div class="messages-empty-state text-muted">Failed to load conversations.</div>';
+    }
+  });
+};
+
+var handleSendMessage = function() {
+  if (!state.user || !messagesState.activePeerId) return;
+
+  var input = document.getElementById('messagesComposeInput');
+  var sendBtn = document.getElementById('messagesSendBtn');
+  if (!input || !sendBtn) return;
+
+  var body = input.value.trim();
+  if (!body) return;
+
+  var peer = findMessageMember(messagesState.activePeerId);
+  if (!peer) return;
+
+  var conversationId = getConversationId(state.user.uid, peer.uid);
+  var conversationRef = doc(db, 'conversations', conversationId);
+  var preview = body.length > 120 ? body.slice(0, 117) + '...' : body;
+  var members = [state.user.uid, peer.uid].sort();
+
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  getDoc(conversationRef).then(function(snap) {
+    if (snap.exists()) {
+      return updateDoc(conversationRef, {
+        members: members,
+        updatedAt: serverTimestamp(),
+        lastMessage: preview,
+        lastSenderId: state.user.uid
+      });
+    }
+
+    return setDoc(conversationRef, {
+      members: members,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastMessage: preview,
+      lastSenderId: state.user.uid
+    });
+  }).then(function() {
+    return addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+      authorId: state.user.uid,
+      authorName: state.user.displayName || state.user.email || 'Member',
+      body: body,
+      createdAt: serverTimestamp()
+    });
+  }).then(function() {
+    messagesState.activePeerId = peer.uid;
+    if (messagesState.activeConversationId !== conversationId) {
+      subscribeMessageThread(conversationId);
+    }
+    input.value = '';
+  }).catch(function(err) {
+    console.error('Failed to send message:', err);
+    alert('Failed to send message. Check console for details.');
+  }).finally(function() {
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  });
+};
+
+var initMessagesPage = function() {
+  var form = document.getElementById('messagesComposer');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      handleSendMessage();
+    });
+  }
+
+  renderMessagesPeopleList();
+  renderMessagesThread();
+  loadMessageMembers();
+  subscribeConversations();
+};
+
 var initAdminPage = function() {
   if (!state.isAdmin) {
     renderAdminAccessDenied();
