@@ -241,7 +241,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v37';
+var ASSET_VERSION = 'v38';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1122,15 +1122,10 @@ var renderMessagesPeopleList = function() {
   });
 
   list.innerHTML = members.map(function(member) {
-    var conversation = convByPeer[member.uid];
-    var preview = conversation && conversation.lastMessage
-      ? conversation.lastMessage
-      : 'Start a conversation';
     var active = member.uid === messagesState.activePeerId ? ' active' : '';
     var initials = escapeHTML(getInitials(member.name || member.email || '?'));
     var name = escapeHTML(member.name || member.email || 'Member');
     var meta = escapeHTML(member.role || member.email || '');
-    var previewEsc = escapeHTML(preview);
 
     return '' +
       '<button class="messages-person' + active + '" type="button" data-open-message="' + escapeAttr(member.uid) + '">' +
@@ -1138,7 +1133,6 @@ var renderMessagesPeopleList = function() {
         '<div class="messages-person-meta">' +
           '<div class="messages-person-name">' + name + '</div>' +
           '<div class="messages-person-subtitle">' + meta + '</div>' +
-          '<div class="messages-person-preview">' + previewEsc + '</div>' +
         '</div>' +
       '</button>';
   }).join('');
