@@ -205,7 +205,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v29';
+var ASSET_VERSION = 'v30';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -591,6 +591,12 @@ var renderFeedList = function() {
   }
 
   list.innerHTML = posts.map(renderPostCard).join('');
+
+  list.querySelectorAll('[data-share-post]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handleSharePost(btn.dataset.sharePost);
+    });
+  });
 };
 
 // ─── Feed: render single post card ───────────────────────────────────────────
@@ -611,12 +617,6 @@ var renderPostCard = function(p) {
   var initialsEsc = escapeHTML(p.authorInitials || '?');
   var bodyEsc     = escapeHTML(p.body || '');
 
-  var reactCount   = (p.reacts   || []).length;
-  var commentCount = (p.comments || []).length;
-
-  var reactLbl   = 'React'   + (reactCount   ? ' ' + reactCount   : '');
-  var commentLbl = 'Comment' + (commentCount ? ' ' + commentCount : '');
-
   return '' +
     '<div class="post-card">' +
       '<div class="post-header">' +
@@ -632,11 +632,47 @@ var renderPostCard = function(p) {
       '</div>' +
       '<div class="post-body">' + bodyEsc + '</div>' +
       '<div class="post-actions">' +
-        '<button class="post-action">&#9825; ' + reactLbl + '</button>' +
-        '<button class="post-action">&#128172; ' + commentLbl + '</button>' +
-        '<button class="post-action">&#8599; Share</button>' +
+        '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '">&#8599; Share</button>' +
       '</div>' +
     '</div>';
+};
+
+var handleSharePost = function(postId) {
+  var post = feedState.posts.find(function(item) {
+    return item.id === postId;
+  });
+  if (!post) return;
+
+  var author = post.authorName || 'Someone';
+  var body = String(post.body || '').trim();
+  var summary = body.length > 140
+    ? body.slice(0, 137) + '...'
+    : body;
+  var shareURL = getAppURL() + '?page=feed';
+  var shareText = author + ' in Enclave: ' + summary;
+
+  if (navigator.share) {
+    navigator.share({
+      title: 'Enclave Post',
+      text: shareText,
+      url: shareURL
+    }).catch(function() {
+      // Ignore cancelled shares.
+    });
+    return;
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(shareText + '\n\n' + shareURL).then(function() {
+      alert('Post link copied.');
+    }).catch(function(err) {
+      console.error('Failed to copy share text:', err);
+      alert('Unable to share this post right now.');
+    });
+    return;
+  }
+
+  alert(shareText + '\n\n' + shareURL);
 };
 
 // ─── Members: init ───────────────────────────────────────────────────────────
