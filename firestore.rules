@@ -164,7 +164,16 @@ service cloud.firestore {
     match /events/{eventId} {
       allow get, list: if signedIn() &&
         canAccessCircle(resource.data.circle);
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        canAccessCircle(resource.data.circle) &&
+        canAccessCircle(request.resource.data.circle) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rsvpCount']) &&
+        request.resource.data.rsvpCount is int &&
+        request.resource.data.rsvpCount >= 0
+      );
 
       match /rsvps/{userId} {
         allow get, list: if signedIn() &&
