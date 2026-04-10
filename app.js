@@ -276,7 +276,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v59';
+var ASSET_VERSION = 'v65';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1157,7 +1157,10 @@ var handleComposeSubmit = function() {
 
   var body   = bodyEl.value.trim();
   var circle = circleEl.value;
-  if (!body) return;
+  if (!body && !driveAttachment.fileUrl) {
+    showToast('Write something or attach a file.', 'error');
+    return;
+  }
 
   var displayName = state.user.displayName || state.user.email;
 
@@ -1185,21 +1188,40 @@ var handleComposeSubmit = function() {
     submitBtn.textContent = 'Posting...';
   }
 
-  addDoc(collection(db, 'posts'), post).then(function() {
-    bodyEl.value = '';
-    clearDriveAttachment();
-    if (submitBtn) {
-      submitBtn.disabled    = false;
-      submitBtn.textContent = 'Post';
-    }
-  }).catch(function(err) {
-    console.error('Failed to post:', err);
-    if (submitBtn) {
-      submitBtn.disabled    = false;
-      submitBtn.textContent = 'Post';
-    }
-    showToast('Failed to post. Check console for details.', 'error');
-  });
+  var savePost = function(postData) {
+    addDoc(collection(db, 'posts'), postData).then(function() {
+      bodyEl.value = '';
+      clearDriveAttachment();
+      if (submitBtn) {
+        submitBtn.disabled    = false;
+        submitBtn.textContent = 'Post';
+      }
+    }).catch(function(err) {
+      console.error('Failed to post:', err);
+      if (submitBtn) {
+        submitBtn.disabled    = false;
+        submitBtn.textContent = 'Post';
+      }
+      showToast('Failed to post. Check console for details.', 'error');
+    });
+  };
+
+  // Fetch link preview if body contains a URL
+  var firstUrl = extractFirstUrl(body);
+  if (firstUrl) {
+    fetchLinkPreview(firstUrl).then(function(og) {
+      if (og) {
+        post.ogTitle       = og.ogTitle;
+        post.ogDescription = og.ogDescription;
+        post.ogImage       = og.ogImage;
+        post.ogUrl         = og.ogUrl;
+        post.ogSite        = og.ogSite;
+      }
+      savePost(post);
+    });
+  } else {
+    savePost(post);
+  }
 };
 
 // ─── Feed: render list ───────────────────────────────────────────────────────
@@ -1320,7 +1342,7 @@ var renderPostCard = function(p) {
 
   var nameEsc     = escapeHTML(p.authorName || 'Unknown');
   var initialsEsc = escapeHTML(p.authorInitials || '?');
-  var bodyEsc     = escapeHTML(p.body || '');
+  var bodyEsc     = linkifyText(escapeHTML(p.body || ''));
   var reacts = Array.isArray(p.reacts) ? p.reacts : [];
   var comments = Array.isArray(p.comments) ? p.comments : [];
   var reacted = state.user && reacts.indexOf(state.user.uid) !== -1;
@@ -1350,6 +1372,7 @@ var renderPostCard = function(p) {
         '</div>' +
       '</div>' +
       '<div class="post-body">' + bodyEsc + '</div>' +
+      (p.ogTitle ? renderLinkPreview(p) : '') +
       (p.fileUrl
         ? '<a class="post-attachment" href="' + escapeAttr(p.fileUrl) + '" target="_blank" rel="noopener">' +
             (p.fileIcon
@@ -3050,31 +3073,42 @@ var PICKER_APP_ID = '834210326738';
 var PICKER_API_KEY = 'AIzaSyBC8nqTgaqMp0R45dnKpA44u0S5C3nnbFE';
 var pickerApiLoaded = false;
 
+var driveTokenClient = null;
+
 var openDrivePicker = function() {
   if (!state.user) {
     showToast('Sign in first.', 'error');
     return;
   }
 
-  // If no token yet (page was refreshed), re-auth to get one
-  if (!state.googleAccessToken) {
-    showToast('Getting Drive access...', 'info');
-    signInWithPopup(auth, googleProvider).then(function(result) {
-      var credential = GAP.credentialFromResult(result);
-      if (credential && credential.accessToken) {
-        state.googleAccessToken = credential.accessToken;
-        loadAndShowPicker();
-      } else {
-        showToast('Could not access Drive. Sign out and back in.', 'error');
-      }
-    }).catch(function(err) {
-      console.error('Drive re-auth failed:', err);
-      showToast('Drive access failed: ' + (err.message || err.code || ''), 'error');
-    });
+  if (!window.google || !window.google.accounts) {
+    showToast('Google Identity Services still loading. Try again.', 'error');
     return;
   }
 
-  loadAndShowPicker();
+  // If we already have a token, go straight to picker
+  if (state.googleAccessToken) {
+    loadAndShowPicker();
+    return;
+  }
+
+  // Use GIS token client to get Drive access token on demand
+  if (!driveTokenClient) {
+    driveTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: '834210326738-mo90co5s9c6fogmb4kse67dkshmigt2l.apps.googleusercontent.com',
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: function(tokenResponse) {
+        if (tokenResponse && tokenResponse.access_token) {
+          state.googleAccessToken = tokenResponse.access_token;
+          loadAndShowPicker();
+        } else {
+          showToast('Could not get Drive access.', 'error');
+        }
+      }
+    });
+  }
+
+  driveTokenClient.requestAccessToken({ prompt: '' });
 };
 
 var loadAndShowPicker = function() {
@@ -3103,11 +3137,9 @@ var createPicker = function() {
     var picker = new google.picker.PickerBuilder()
       .addView(docsView)
       .setOAuthToken(state.googleAccessToken)
-      .setDeveloperKey(PICKER_API_KEY)
       .setAppId(PICKER_APP_ID)
       .setCallback(handlePickerResult)
       .setTitle('Attach a file from Google Drive')
-      .setOrigin(window.location.protocol + '//' + window.location.host)
       .build();
 
     picker.setVisible(true);
@@ -3148,7 +3180,9 @@ var renderDrivePreview = function() {
       '<button type="button" class="drive-preview-remove" title="Remove attachment">&times;</button>' +
     '</div>' +
     '<div class="drive-preview-reminder">' +
-      '&#9888;&#65039; Make sure this file is set to "Anyone with the link can view" in Google Drive so members can open it.' +
+      '&#9888;&#65039; Before posting, set sharing in Google Drive:<br>' +
+      '<strong>Open file → Share → General access → "Anyone with the link" → Viewer/Commenter/Editor</strong><br>' +
+      'Choose <em>Viewer</em> for read-only, <em>Commenter</em> for feedback, or <em>Editor</em> for full collaboration.' +
     '</div>';
 
   // Wire remove button
@@ -3311,6 +3345,62 @@ var setLocalEventRsvpCount = function(eventId, count) {
       return eventItem;
     });
   });
+};
+
+// ─── URL detection & link preview ───────────────────────────────────────────
+var URL_REGEX = /https?:\/\/[^\s<>"'`,;)}\]]+/gi;
+
+var linkifyText = function(escapedHtml) {
+  return escapedHtml.replace(URL_REGEX, function(url) {
+    var clean = url.replace(/[.,;:!?)]+$/, '');
+    var safeUrl = escapeAttr(clean);
+    return '<a href="' + safeUrl + '" class="post-link" target="_blank" rel="noopener">' + clean + '</a>';
+  });
+};
+
+var extractFirstUrl = function(text) {
+  var match = (text || '').match(URL_REGEX);
+  if (!match) return '';
+  return match[0].replace(/[.,;:!?)]+$/, '');
+};
+
+var fetchLinkPreview = function(url) {
+  return fetch('https://api.microlink.io/?url=' + encodeURIComponent(url))
+    .then(function(res) { return res.json(); })
+    .then(function(json) {
+      if (json.status === 'success' && json.data) {
+        return {
+          ogTitle:       json.data.title || '',
+          ogDescription: json.data.description || '',
+          ogImage:       (json.data.image && json.data.image.url) || '',
+          ogUrl:         json.data.url || url,
+          ogSite:        json.data.publisher || ''
+        };
+      }
+      return null;
+    })
+    .catch(function() { return null; });
+};
+
+var renderLinkPreview = function(og) {
+  if (!og) return '';
+  var img = og.ogImage
+    ? '<img class="link-preview-img" src="' + escapeAttr(og.ogImage) + '" alt="" />'
+    : '';
+  var site = og.ogSite
+    ? '<span class="link-preview-site">' + escapeHTML(og.ogSite) + '</span>'
+    : '';
+  return '' +
+    '<a class="link-preview-card" href="' + escapeAttr(og.ogUrl) + '" target="_blank" rel="noopener">' +
+      img +
+      '<div class="link-preview-text">' +
+        site +
+        '<span class="link-preview-title">' + escapeHTML(og.ogTitle) + '</span>' +
+        (og.ogDescription
+          ? '<span class="link-preview-desc">' + escapeHTML(og.ogDescription.substring(0, 150)) + '</span>'
+          : '') +
+      '</div>' +
+    '</a>';
 };
 
 var escapeHTML = function(str) {
