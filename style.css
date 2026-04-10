@@ -385,10 +385,11 @@ body {
     margin-bottom: 14px;
   }
   .mobile-topbar-brand {
-    font-size: 13px;
+    font-size: 20px;
     font-weight: 700;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.12em;
     color: var(--accent);
+    line-height: 1;
   }
   .shell-right {
     grid-column: 1;
