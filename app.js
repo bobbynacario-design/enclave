@@ -259,7 +259,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v42';
+var ASSET_VERSION = 'v43';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -402,6 +402,27 @@ var getAppURL = function() {
   }
 
   return url.toString();
+};
+
+var renderTimeOptions = function(selectedValue) {
+  var options = [];
+
+  for (var hour = 0; hour < 24; hour++) {
+    for (var minute = 0; minute < 60; minute += 30) {
+      var hh = String(hour).padStart(2, '0');
+      var mm = String(minute).padStart(2, '0');
+      var value = hh + ':' + mm;
+      var labelDate = new Date(2000, 0, 1, hour, minute);
+      var label = labelDate.toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+      var selected = value === selectedValue ? ' selected' : '';
+      options.push('<option value="' + value + '"' + selected + '>' + escapeHTML(label) + '</option>');
+    }
+  }
+
+  return options.join('');
 };
 
 var getUpcomingEventsThreshold = function() {
@@ -2304,7 +2325,9 @@ var openCreateEventModal = function() {
       '</div>' +
       '<div style="flex:1;">' +
         '<label class="profile-section-title" for="evTime">Time</label>' +
-        '<input type="time" id="evTime" class="edit-input" value="19:00" />' +
+        '<select id="evTime" class="edit-input">' +
+          renderTimeOptions('19:00') +
+        '</select>' +
       '</div>' +
     '</div>' +
     '<div class="profile-section">' +
@@ -2431,10 +2454,12 @@ var renderInlineEventComposer = function() {
           '<label class="profile-section-title" for="inlineEvDate">Date</label>' +
           '<input type="date" id="inlineEvDate" class="edit-input" value="' + defaultDate + '" />' +
         '</div>' +
-        '<div style="flex:1;">' +
-          '<label class="profile-section-title" for="inlineEvTime">Time</label>' +
-          '<input type="time" id="inlineEvTime" class="edit-input" value="19:00" />' +
-        '</div>' +
+      '<div style="flex:1;">' +
+        '<label class="profile-section-title" for="inlineEvTime">Time</label>' +
+        '<select id="inlineEvTime" class="edit-input">' +
+          renderTimeOptions('19:00') +
+        '</select>' +
+      '</div>' +
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvLocation">Location</label>' +
