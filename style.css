@@ -1700,6 +1700,21 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   }
 }
 
+@media (max-width: 720px) {
+  .messages-thread {
+    min-height: 460px;
+    margin-bottom: 84px;
+  }
+
+  .messages-thread-list {
+    padding: 18px 16px;
+  }
+
+  .messages-compose {
+    padding: 14px 16px max(88px, env(safe-area-inset-bottom));
+  }
+}
+
 /* ─── Utility ────────────────────────────────────────────────────────────── */
 .text-muted  { color: var(--text-muted); }
 .text-accent { color: var(--accent); }
