@@ -260,7 +260,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v47';
+var ASSET_VERSION = 'v49';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -313,6 +313,7 @@ var renderShell = function() {
     startPresenceHeartbeat();
     loadPanelEvents();
     loadPanelCircles();
+    syncResponsivePanels();
     loadPage(state.currentPage);
   }).catch(function(err) {
     console.error('Failed to load shell:', err);
@@ -363,6 +364,14 @@ var refreshCurrentUserState = function() {
     syncSidebarSelection();
     loadPanelCircles();
   });
+};
+
+var syncResponsivePanels = function() {
+  var rightRail = document.querySelector('.shell-right');
+  if (!rightRail) return;
+
+  var isPhone = window.matchMedia('(max-width: 720px)').matches;
+  rightRail.hidden = isPhone && state.currentPage !== 'feed';
 };
 
 var applyURLState = function() {
@@ -825,6 +834,7 @@ var loadPanelCircles = function() {
 var loadPage = function(page) {
   state.currentPage = page;
   syncURLState();
+  syncResponsivePanels();
 
   // Clean up any previous page subscriptions
   if (feedState.unsubscribe) {
@@ -3193,4 +3203,8 @@ onAuthStateChanged(auth, function(user) {
     resetShellRealtime();
     renderLogin();
   }
+});
+
+window.addEventListener('resize', function() {
+  syncResponsivePanels();
 });
