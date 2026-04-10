@@ -79,6 +79,11 @@ var messagesState = {
   unsubscribeThread:        null
 };
 
+var shellState = {
+  unsubscribeOnline: null,
+  presenceTimer:     null
+};
+
 var resetMessagesState = function() {
   if (messagesState.unsubscribeConversations) {
     messagesState.unsubscribeConversations();
@@ -95,6 +100,18 @@ var resetMessagesState = function() {
   messagesState.activePeerId = null;
   messagesState.activeConversationId = null;
   messagesState.thread = [];
+};
+
+var resetShellRealtime = function() {
+  if (shellState.unsubscribeOnline) {
+    shellState.unsubscribeOnline();
+    shellState.unsubscribeOnline = null;
+  }
+
+  if (shellState.presenceTimer) {
+    window.clearInterval(shellState.presenceTimer);
+    shellState.presenceTimer = null;
+  }
 };
 
 var VALID_PAGES = {
@@ -119,6 +136,7 @@ var handleSignOut = function() {
   state.circles = [];
   adminState.allowlist = [];
   resetMessagesState();
+  resetShellRealtime();
   signOut(auth);
 };
 
@@ -241,7 +259,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v41';
+var ASSET_VERSION = 'v42';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -289,6 +307,8 @@ var renderShell = function() {
     }
 
     syncSidebarSelection();
+    loadOnlineUsers();
+    startPresenceHeartbeat();
     loadPanelEvents();
     loadPage(state.currentPage);
   }).catch(function(err) {
@@ -386,6 +406,93 @@ var getAppURL = function() {
 
 var getUpcomingEventsThreshold = function() {
   return Timestamp.fromDate(new Date(Date.now() - 3600000));
+};
+
+var getOnlineUsersThreshold = function() {
+  return Timestamp.fromDate(new Date(Date.now() - 5 * 60000));
+};
+
+var updatePresenceHeartbeat = function() {
+  if (!state.user) return;
+
+  updateDoc(doc(db, 'users', state.user.uid), {
+    lastSeen: serverTimestamp()
+  }).catch(function(err) {
+    console.error('Failed to update presence heartbeat:', err);
+  });
+};
+
+var startPresenceHeartbeat = function() {
+  if (!state.user) return;
+
+  if (shellState.presenceTimer) {
+    window.clearInterval(shellState.presenceTimer);
+  }
+
+  updatePresenceHeartbeat();
+  shellState.presenceTimer = window.setInterval(updatePresenceHeartbeat, 60000);
+};
+
+var loadOnlineUsers = function() {
+  var el = document.getElementById('panelOnline');
+  if (!el) return;
+
+  if (shellState.unsubscribeOnline) {
+    shellState.unsubscribeOnline();
+    shellState.unsubscribeOnline = null;
+  }
+
+  var q = query(
+    collection(db, 'users'),
+    where('lastSeen', '>=', getOnlineUsersThreshold()),
+    orderBy('lastSeen', 'desc'),
+    limit(8)
+  );
+
+  shellState.unsubscribeOnline = onSnapshot(q, function(snap) {
+    var users = [];
+
+    snap.forEach(function(d) {
+      var data = d.data() || {};
+      data.uid = d.id;
+      users.push(data);
+    });
+
+    users = users.filter(function(user) {
+      return user.uid !== (state.user && state.user.uid);
+    });
+
+    if (users.length === 0) {
+      el.className = 'panel-empty';
+      el.textContent = 'No one else online right now.';
+      return;
+    }
+
+    el.className = 'panel-online-list';
+    el.innerHTML = users.map(function(user) {
+      var initials = escapeHTML(getInitials(user.name || user.email || '?'));
+      var name = escapeHTML(user.name || user.email || 'Member');
+      var meta = escapeHTML(user.role || user.email || '');
+      var avatarStyle = user.photoURL
+        ? ' style="background-image:url(' + escapeAttr(user.photoURL) + ')"'
+        : '';
+      var avatarText = user.photoURL ? '' : initials;
+
+      return '' +
+        '<div class="panel-online-user">' +
+          '<div class="panel-online-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
+          '<div class="panel-online-meta">' +
+            '<div class="panel-online-name">' + name + '</div>' +
+            '<div class="panel-online-subtitle">' + meta + '</div>' +
+          '</div>' +
+          '<div class="panel-online-dot"></div>' +
+        '</div>';
+    }).join('');
+  }, function(err) {
+    console.error('Failed to load online users:', err);
+    el.className = 'panel-empty';
+    el.textContent = 'Failed to load online users.';
+  });
 };
 
 // ─── Right panel: upcoming events ────────────────────────────────────────────
@@ -2732,6 +2839,7 @@ onAuthStateChanged(auth, function(user) {
     state.circles = [];
     adminState.allowlist = [];
     resetMessagesState();
+    resetShellRealtime();
     renderLogin();
   }
 });
