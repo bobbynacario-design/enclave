@@ -260,7 +260,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v46';
+var ASSET_VERSION = 'v47';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -273,10 +273,11 @@ var renderShell = function() {
     appEl.innerHTML = shellHTML;
 
     // Nav links
-    var adminLink = document.querySelector('.sidebar-link[data-page="admin"]');
-    if (adminLink) adminLink.hidden = !state.isAdmin;
+    document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
+      btn.hidden = !state.isAdmin;
+    });
 
-    document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
+    document.querySelectorAll('[data-page]').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         window.enclaveGoPage(btn.dataset.page);
@@ -351,8 +352,9 @@ var refreshCurrentUserState = function() {
     state.isAdmin = data.role === 'admin' || isOwnerAdminEmail(state.user.email);
     state.circles = normalizeCircles(data.circles);
 
-    var adminLink = document.querySelector('.sidebar-link[data-page="admin"]');
-    if (adminLink) adminLink.hidden = !state.isAdmin;
+    document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
+      btn.hidden = !state.isAdmin;
+    });
 
     document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
       btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
@@ -3013,6 +3015,10 @@ var getVisibleCircles = function() {
 
 var syncSidebarSelection = function() {
   document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.page === state.currentPage);
+  });
+
+  document.querySelectorAll('.mobile-nav-link[data-page]').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.page === state.currentPage);
   });
 
