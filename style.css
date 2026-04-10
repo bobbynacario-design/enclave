@@ -346,13 +346,20 @@ body {
   color: var(--text-muted);
 }
 
-/* Responsive: hide right panel on smaller screens */
+/* Responsive: stack right panel under main content on smaller screens */
 @media (max-width: 1100px) {
   .shell {
     grid-template-columns: 220px 1fr;
   }
   .shell-right {
-    display: none;
+    display: block;
+    grid-column: 2;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    position: static;
+    top: auto;
+    height: auto;
+    padding: 20px 32px 28px;
   }
 }
 
@@ -365,7 +372,24 @@ body {
     display: none;
   }
   .shell-main {
-    padding: 16px 16px 96px;
+    padding: 16px;
+  }
+  .shell-right {
+    grid-column: 1;
+    padding: 0 16px 96px;
+    border-top: none;
+    background: transparent;
+  }
+  .panel-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .panel-heading {
+    padding: 0 0 8px;
+    margin-bottom: 10px;
   }
   .mobile-nav {
     position: fixed;
