@@ -3,7 +3,8 @@
 import {
   signInWithPopup,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider as GAP
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
 import {
@@ -139,7 +140,13 @@ var VALID_PAGES = {
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var handleSignIn = function() {
   state.accessDenied = false;
-  signInWithPopup(auth, googleProvider).catch(function(err) {
+  signInWithPopup(auth, googleProvider).then(function(result) {
+    // Capture the Google OAuth access token for Drive Picker
+    var credential = GAP.credentialFromResult(result);
+    if (credential && credential.accessToken) {
+      state.googleAccessToken = credential.accessToken;
+    }
+  }).catch(function(err) {
     console.error('Sign-in error:', err);
   });
 };
@@ -273,7 +280,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v56';
+var ASSET_VERSION = 'v57';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3051,13 +3058,27 @@ var openDrivePicker = function() {
     return;
   }
 
-  // Get the current user's OAuth access token from Firebase Auth
-  auth.currentUser.getIdToken(false).catch(function() { return null; });
-  var accessToken = auth.currentUser && auth.currentUser.stsTokenManager &&
-    auth.currentUser.stsTokenManager.accessToken;
+  if (!state.googleAccessToken) {
+    // Token wasn't captured (page refreshed after login). Re-auth to get it.
+    signInWithPopup(auth, googleProvider).then(function(result) {
+      var credential = GAP.credentialFromResult(result);
+      if (credential && credential.accessToken) {
+        state.googleAccessToken = credential.accessToken;
+        loadPickerThenShow();
+      } else {
+        showToast('Could not get Drive access. Try signing out and back in.', 'error');
+      }
+    }).catch(function(err) {
+      console.error('Re-auth for Drive failed:', err);
+      showToast('Drive access failed. Try again.', 'error');
+    });
+    return;
+  }
 
-  // For Google Picker we need an OAuth access token, not a Firebase ID token.
-  // Firebase Auth with Google provider stores it — we'll extract via getToken approach.
+  loadPickerThenShow();
+};
+
+var loadPickerThenShow = function() {
   if (!window.gapi) {
     showToast('Google API not loaded. Refresh the page.', 'error');
     return;
@@ -3075,24 +3096,17 @@ var openDrivePicker = function() {
 };
 
 var showPicker = function() {
-  // The Google Picker requires an OAuth2 token. Firebase Auth with Google provider
-  // stores the access token internally. We retrieve it from the credential on sign-in,
-  // but since we may not have stored it, we'll use a re-auth approach.
-  // Simplest approach: use the Firebase API key and let Picker work in "no auth" mode
-  // for public/shared files, OR prompt the user.
-  //
-  // For Level 1, we use the API key approach which shows the user's Drive if they're
-  // signed into Google in the browser. The Picker uses cookies-based auth.
-
-  var view = new google.picker.PickerBuilder()
+  var picker = new google.picker.PickerBuilder()
     .addView(google.picker.ViewId.DOCS)
     .addView(google.picker.ViewId.RECENTLY_PICKED)
+    .setOAuthToken(state.googleAccessToken)
     .setDeveloperKey(PICKER_API_KEY)
     .setCallback(handlePickerCallback)
     .setTitle('Attach a file from Google Drive')
+    .setOrigin(window.location.protocol + '//' + window.location.host)
     .build();
 
-  view.setVisible(true);
+  picker.setVisible(true);
 };
 
 var handlePickerCallback = function(data) {
