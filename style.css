@@ -224,6 +224,13 @@ body {
   padding: 4px;
 }
 
+.panel-circles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px;
+}
+
 .panel-online-list {
   display: flex;
   flex-direction: column;
@@ -300,6 +307,37 @@ body {
 }
 
 .panel-event-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.panel-circle-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.panel-circle-btn:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.panel-circle-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.panel-circle-subtitle {
+  display: block;
+  margin-top: 3px;
   font-size: 11px;
   color: var(--text-muted);
 }

@@ -260,7 +260,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v45';
+var ASSET_VERSION = 'v46';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -311,6 +311,7 @@ var renderShell = function() {
     loadOnlineUsers();
     startPresenceHeartbeat();
     loadPanelEvents();
+    loadPanelCircles();
     loadPage(state.currentPage);
   }).catch(function(err) {
     console.error('Failed to load shell:', err);
@@ -358,6 +359,7 @@ var refreshCurrentUserState = function() {
     });
 
     syncSidebarSelection();
+    loadPanelCircles();
   });
 };
 
@@ -784,6 +786,36 @@ var loadPanelEvents = function() {
     console.error('Failed to load panel events:', err);
     el.className = 'panel-empty';
     el.textContent = 'Failed to load events.';
+  });
+};
+
+var loadPanelCircles = function() {
+  var el = document.getElementById('panelCircles');
+  if (!el) return;
+
+  var circles = state.isAdmin
+    ? ALL_CIRCLES.slice()
+    : normalizeCircles(state.circles);
+
+  if (circles.length === 0) {
+    el.className = 'panel-empty';
+    el.textContent = 'Not in any circles yet.';
+    return;
+  }
+
+  el.className = 'panel-circles';
+  el.innerHTML = circles.map(function(circleId) {
+    return '' +
+      '<button type="button" class="panel-circle-btn" data-panel-circle="' + escapeAttr(circleId) + '">' +
+        '<span class="panel-circle-title">' + escapeHTML(circleLabel(circleId)) + '</span>' +
+        '<span class="panel-circle-subtitle">Open feed</span>' +
+      '</button>';
+  }).join('');
+
+  el.querySelectorAll('[data-panel-circle]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      window.enclaveGoCircle(btn.dataset.panelCircle);
+    });
   });
 };
 
@@ -1980,6 +2012,7 @@ var syncUserDocsForAllowlist = function(email, circles) {
           btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
         });
         syncSidebarSelection();
+        loadPanelCircles();
       }
 
       var member = membersState.members.find(function(item) {
@@ -2229,6 +2262,7 @@ var handleSaveProfile = function(uid) {
     }
     if (newCircles && state.user && state.user.uid === uid) {
       state.circles = newCircles.slice();
+      loadPanelCircles();
     }
     renderMembersList();
     openProfile(uid);
