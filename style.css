@@ -916,6 +916,14 @@ label {
   overflow: hidden;
 }
 
+.link-preview-fallback .link-preview-title {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: normal;
+  word-break: break-all;
+}
+
 /* Drive attachment on post card */
 .post-attachment {
   display: flex;

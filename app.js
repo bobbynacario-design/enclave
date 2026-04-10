@@ -276,7 +276,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v65';
+var ASSET_VERSION = 'v66';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1209,6 +1209,7 @@ var handleComposeSubmit = function() {
   // Fetch link preview if body contains a URL
   var firstUrl = extractFirstUrl(body);
   if (firstUrl) {
+    post.ogUrl = firstUrl;
     fetchLinkPreview(firstUrl).then(function(og) {
       if (og) {
         post.ogTitle       = og.ogTitle;
@@ -1372,7 +1373,7 @@ var renderPostCard = function(p) {
         '</div>' +
       '</div>' +
       '<div class="post-body">' + bodyEsc + '</div>' +
-      (p.ogTitle ? renderLinkPreview(p) : '') +
+      (p.ogUrl ? renderLinkPreview(p) : '') +
       (p.fileUrl
         ? '<a class="post-attachment" href="' + escapeAttr(p.fileUrl) + '" target="_blank" rel="noopener">' +
             (p.fileIcon
@@ -3383,7 +3384,21 @@ var fetchLinkPreview = function(url) {
 };
 
 var renderLinkPreview = function(og) {
-  if (!og) return '';
+  if (!og || !og.ogUrl) return '';
+
+  // Fallback card: no title means Microlink couldn't fetch preview
+  if (!og.ogTitle) {
+    var domain = '';
+    try { domain = new URL(og.ogUrl).hostname.replace(/^www\./, ''); } catch(e) { domain = og.ogUrl; }
+    return '' +
+      '<a class="link-preview-card link-preview-fallback" href="' + escapeAttr(og.ogUrl) + '" target="_blank" rel="noopener">' +
+        '<div class="link-preview-text">' +
+          '<span class="link-preview-site">&#128279; ' + escapeHTML(domain) + '</span>' +
+          '<span class="link-preview-title">' + escapeHTML(og.ogUrl) + '</span>' +
+        '</div>' +
+      '</a>';
+  }
+
   var img = og.ogImage
     ? '<img class="link-preview-img" src="' + escapeAttr(og.ogImage) + '" alt="" />'
     : '';
