@@ -259,7 +259,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v43';
+var ASSET_VERSION = 'v44';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -424,6 +424,224 @@ var renderTimeOptions = function(selectedValue) {
 
   return options.join('');
 };
+
+var calendarPickerState = {
+  activeFieldId: '',
+  fields: {}
+};
+
+var formatDateValue = function(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+  var year = String(date.getFullYear());
+  var month = String(date.getMonth() + 1).padStart(2, '0');
+  var day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+};
+
+var parseDateValue = function(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return null;
+
+  var parts = value.split('-');
+  var year = Number(parts[0]);
+  var month = Number(parts[1]) - 1;
+  var day = Number(parts[2]);
+  var date = new Date(year, month, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+var formatDateButtonLabel = function(value) {
+  var date = parseDateValue(value);
+  if (!date) return 'Select a date';
+
+  return date.toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+};
+
+var formatCalendarMonthLabel = function(year, month) {
+  return new Date(year, month, 1).toLocaleDateString([], {
+    month: 'long',
+    year: 'numeric'
+  });
+};
+
+var renderDatePickerField = function(inputId, label, value) {
+  return '' +
+    '<label class="profile-section-title" for="' + inputId + 'Trigger">' + escapeHTML(label) + '</label>' +
+    '<div class="calendar-field" data-calendar-field="' + escapeAttr(inputId) + '">' +
+      '<input type="hidden" id="' + escapeAttr(inputId) + '" value="' + escapeAttr(value) + '" />' +
+      '<button type="button" id="' + escapeAttr(inputId) + 'Trigger" class="edit-input calendar-trigger" aria-haspopup="dialog" aria-expanded="false">' +
+        '<span class="calendar-trigger-label">' + escapeHTML(formatDateButtonLabel(value)) + '</span>' +
+        '<span class="calendar-trigger-icon">&#128197;</span>' +
+      '</button>' +
+      '<div class="calendar-popover" id="' + escapeAttr(inputId) + 'Popover" hidden></div>' +
+    '</div>';
+};
+
+var closeActiveCalendarPicker = function() {
+  var fieldId = calendarPickerState.activeFieldId;
+  if (!fieldId) return;
+
+  var field = calendarPickerState.fields[fieldId];
+  calendarPickerState.activeFieldId = '';
+
+  if (!field) return;
+
+  field.popover.hidden = true;
+  field.trigger.setAttribute('aria-expanded', 'false');
+  field.wrapper.classList.remove('calendar-open');
+};
+
+var renderCalendarPopover = function(fieldId) {
+  var field = calendarPickerState.fields[fieldId];
+  if (!field) return;
+
+  var selectedValue = field.hidden.value;
+  var todayValue = formatDateValue(new Date());
+  var firstDay = new Date(field.viewYear, field.viewMonth, 1).getDay();
+  var daysInMonth = new Date(field.viewYear, field.viewMonth + 1, 0).getDate();
+  var weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var cells = [];
+
+  for (var blank = 0; blank < firstDay; blank++) {
+    cells.push('<span class="calendar-day calendar-day-empty" aria-hidden="true"></span>');
+  }
+
+  for (var day = 1; day <= daysInMonth; day++) {
+    var dateValue = formatDateValue(new Date(field.viewYear, field.viewMonth, day));
+    var classes = ['calendar-day'];
+
+    if (dateValue === selectedValue) classes.push('is-selected');
+    if (dateValue === todayValue) classes.push('is-today');
+
+    cells.push(
+      '<button type="button" class="' + classes.join(' ') + '" data-calendar-date="' + dateValue + '">' +
+        day +
+      '</button>'
+    );
+  }
+
+  field.popover.innerHTML =
+    '<div class="calendar-shell">' +
+      '<div class="calendar-toolbar">' +
+        '<button type="button" class="calendar-nav-btn" data-calendar-nav="prev" aria-label="Previous month">&#8249;</button>' +
+        '<div class="calendar-month-label">' + escapeHTML(formatCalendarMonthLabel(field.viewYear, field.viewMonth)) + '</div>' +
+        '<button type="button" class="calendar-nav-btn" data-calendar-nav="next" aria-label="Next month">&#8250;</button>' +
+      '</div>' +
+      '<div class="calendar-weekdays">' +
+        weekdayLabels.map(function(label) {
+          return '<span class="calendar-weekday">' + label + '</span>';
+        }).join('') +
+      '</div>' +
+      '<div class="calendar-grid">' + cells.join('') + '</div>' +
+    '</div>';
+};
+
+var bindDatePickerField = function(inputId) {
+  var wrapper = document.querySelector('[data-calendar-field="' + inputId + '"]');
+  var hidden = document.getElementById(inputId);
+  var trigger = document.getElementById(inputId + 'Trigger');
+  var popover = document.getElementById(inputId + 'Popover');
+
+  if (!wrapper || !hidden || !trigger || !popover) return;
+
+  var selectedDate = parseDateValue(hidden.value) || new Date();
+  var field = {
+    wrapper: wrapper,
+    hidden: hidden,
+    trigger: trigger,
+    popover: popover,
+    viewYear: selectedDate.getFullYear(),
+    viewMonth: selectedDate.getMonth(),
+    updateLabel: function() {
+      var label = trigger.querySelector('.calendar-trigger-label');
+      if (label) {
+        label.textContent = formatDateButtonLabel(hidden.value);
+      }
+    }
+  };
+
+  calendarPickerState.fields[inputId] = field;
+  field.updateLabel();
+  renderCalendarPopover(inputId);
+
+  trigger.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    var isOpening = calendarPickerState.activeFieldId !== inputId || popover.hidden;
+    closeActiveCalendarPicker();
+
+    if (!isOpening) return;
+
+    var currentDate = parseDateValue(hidden.value) || new Date();
+    field.viewYear = currentDate.getFullYear();
+    field.viewMonth = currentDate.getMonth();
+    renderCalendarPopover(inputId);
+    popover.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    wrapper.classList.add('calendar-open');
+    calendarPickerState.activeFieldId = inputId;
+  });
+
+  popover.addEventListener('click', function(e) {
+    var navBtn = e.target.closest('[data-calendar-nav]');
+    if (navBtn) {
+      if (navBtn.dataset.calendarNav === 'prev') {
+        field.viewMonth -= 1;
+        if (field.viewMonth < 0) {
+          field.viewMonth = 11;
+          field.viewYear -= 1;
+        }
+      } else {
+        field.viewMonth += 1;
+        if (field.viewMonth > 11) {
+          field.viewMonth = 0;
+          field.viewYear += 1;
+        }
+      }
+
+      renderCalendarPopover(inputId);
+      return;
+    }
+
+    var dayBtn = e.target.closest('[data-calendar-date]');
+    if (!dayBtn) return;
+
+    hidden.value = dayBtn.dataset.calendarDate;
+    field.updateLabel();
+    renderCalendarPopover(inputId);
+    closeActiveCalendarPicker();
+  });
+};
+
+document.addEventListener('click', function(e) {
+  var fieldId = calendarPickerState.activeFieldId;
+  if (!fieldId) return;
+
+  var field = calendarPickerState.fields[fieldId];
+  if (!field || !field.wrapper.contains(e.target)) {
+    closeActiveCalendarPicker();
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeActiveCalendarPicker();
+  }
+});
 
 var getUpcomingEventsThreshold = function() {
   return Timestamp.fromDate(new Date(Date.now() - 3600000));
@@ -2320,8 +2538,7 @@ var openCreateEventModal = function() {
     '</div>' +
     '<div class="profile-section event-date-row">' +
       '<div style="flex:1;">' +
-        '<label class="profile-section-title" for="evDate">Date</label>' +
-        '<input type="date" id="evDate" class="edit-input" value="' + defaultDate + '" />' +
+        renderDatePickerField('evDate', 'Date', defaultDate) +
       '</div>' +
       '<div style="flex:1;">' +
         '<label class="profile-section-title" for="evTime">Time</label>' +
@@ -2365,6 +2582,8 @@ var openCreateEventModal = function() {
       window.enclaveSubmitEvent();
     });
   }
+
+  bindDatePickerField('evDate');
 
   modal.hidden = false;
 };
@@ -2451,8 +2670,7 @@ var renderInlineEventComposer = function() {
       '</div>' +
       '<div class="profile-section event-date-row">' +
         '<div style="flex:1;">' +
-          '<label class="profile-section-title" for="inlineEvDate">Date</label>' +
-          '<input type="date" id="inlineEvDate" class="edit-input" value="' + defaultDate + '" />' +
+          renderDatePickerField('inlineEvDate', 'Date', defaultDate) +
         '</div>' +
       '<div style="flex:1;">' +
         '<label class="profile-section-title" for="inlineEvTime">Time</label>' +
@@ -2490,6 +2708,8 @@ var renderInlineEventComposer = function() {
       }, 0);
     };
   }
+
+  bindDatePickerField('inlineEvDate');
 };
 
 window.enclaveInlineCreate = function() {
