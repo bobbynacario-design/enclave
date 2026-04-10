@@ -1289,6 +1289,34 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   gap: 12px;
 }
 
+.events-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.events-section + .events-section {
+  margin-top: 18px;
+}
+
+.events-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.events-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.events-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .event-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1299,6 +1327,10 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 
 .event-card:hover {
   border-color: #3a3a3a;
+}
+
+.event-card-past {
+  opacity: 0.9;
 }
 
 .event-card-header {
@@ -1313,6 +1345,16 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
+}
+
+.event-status-label {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .event-meta {
@@ -1338,6 +1380,10 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.event-actions-static {
+  align-items: center;
 }
 
 .event-actions .btn.rsvped {

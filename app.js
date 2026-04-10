@@ -47,7 +47,8 @@ var state = {
 };
 
 var eventsState = {
-  events: []
+  upcoming: [],
+  past: []
 };
 
 var feedState = {
@@ -259,7 +260,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v44';
+var ASSET_VERSION = 'v45';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -2366,25 +2367,69 @@ var loadEvents = function() {
   var list = document.getElementById('eventsList');
   if (!list) return;
 
-  var q = query(
+  var threshold = getUpcomingEventsThreshold();
+  var upcomingQuery = query(
     collection(db, 'events'),
     where('circle', 'in', getVisibleCircles()),
-    where('date', '>=', getUpcomingEventsThreshold()),
+    where('date', '>=', threshold),
+    orderBy('date', 'asc')
+  );
+  var pastQuery = query(
+    collection(db, 'events'),
+    where('circle', 'in', getVisibleCircles()),
+    where('date', '<', threshold),
     orderBy('date', 'asc')
   );
 
-  getDocs(q).then(function(snap) {
-    var events = [];
-    snap.forEach(function(d) {
+  Promise.all([getDocs(upcomingQuery), getDocs(pastQuery)]).then(function(results) {
+    var upcoming = [];
+    var past = [];
+
+    results[0].forEach(function(d) {
       var data = d.data();
       data.id = d.id;
-      events.push(data);
+      upcoming.push(data);
     });
-    eventsState.events = events;
+
+    results[1].forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      past.push(data);
+    });
+
+    past.reverse();
+    eventsState.upcoming = upcoming;
+    eventsState.past = past;
     renderEventsList();
   }).catch(function(err) {
     console.error('Failed to load events:', err);
     list.innerHTML = '<div class="card"><p class="text-muted">Failed to load events. Check Firestore rules.</p></div>';
+  });
+};
+
+var bindEventRsvpButtons = function(container) {
+  if (!container) return;
+
+  container.querySelectorAll('[data-rsvp]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      handleRsvp(btn.dataset.rsvp, btn);
+    });
+  });
+
+  if (!state.user) return;
+
+  eventsState.upcoming.forEach(function(ev) {
+    var rsvpRef = doc(db, 'events', ev.id, 'rsvps', state.user.uid);
+    getDoc(rsvpRef).then(function(snap) {
+      if (!snap.exists()) return;
+
+      var btn = container.querySelector('[data-rsvp="' + ev.id + '"]');
+      if (!btn) return;
+
+      btn.classList.add('rsvped');
+      btn.textContent = rsvpButtonLabel(ev.rsvpCount, true);
+    }).catch(function() { /* ignore */ });
   });
 };
 
@@ -2393,39 +2438,49 @@ var renderEventsList = function() {
   var list = document.getElementById('eventsList');
   if (!list) return;
 
-  if (eventsState.events.length === 0) {
-    list.innerHTML = '<div class="card"><p class="text-muted">No upcoming events. ' +
-      (state.isAdmin ? 'Click "Create Event" to add one.' : 'Check back soon.') + '</p></div>';
+  var hasUpcoming = eventsState.upcoming.length > 0;
+  var hasPast = eventsState.past.length > 0;
+
+  if (!hasUpcoming && !hasPast) {
+    list.innerHTML = '<div class="card"><p class="text-muted">No events yet. ' +
+      (state.isAdmin ? 'Create one to get the calendar started.' : 'Check back soon.') + '</p></div>';
     return;
   }
 
-  list.innerHTML = eventsState.events.map(renderEventCard).join('');
+  var upcomingHtml = hasUpcoming
+    ? eventsState.upcoming.map(function(ev) {
+      return renderEventCard(ev, { isPast: false });
+    }).join('')
+    : '<div class="card"><p class="text-muted">No upcoming events right now.</p></div>';
 
-  list.querySelectorAll('[data-rsvp]').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      handleRsvp(btn.dataset.rsvp, btn);
-    });
-  });
+  var pastHtml = hasPast
+    ? eventsState.past.map(function(ev) {
+      return renderEventCard(ev, { isPast: true });
+    }).join('')
+    : '<div class="card"><p class="text-muted">No past events yet.</p></div>';
 
-  if (state.user) {
-    eventsState.events.forEach(function(ev) {
-      var rsvpRef = doc(db, 'events', ev.id, 'rsvps', state.user.uid);
-      getDoc(rsvpRef).then(function(snap) {
-        if (!snap.exists()) return;
+  list.innerHTML =
+    '<section class="events-section">' +
+      '<div class="events-section-header">' +
+        '<h2 class="events-section-title">Upcoming Events</h2>' +
+        '<p class="text-muted">What is coming up next.</p>' +
+      '</div>' +
+      '<div class="events-list-stack" id="upcomingEventsList">' + upcomingHtml + '</div>' +
+    '</section>' +
+    '<section class="events-section">' +
+      '<div class="events-section-header">' +
+        '<h2 class="events-section-title">Past Events</h2>' +
+        '<p class="text-muted">A simple archive of gatherings that already happened.</p>' +
+      '</div>' +
+      '<div class="events-list-stack" id="pastEventsList">' + pastHtml + '</div>' +
+    '</section>';
 
-        var btn = list.querySelector('[data-rsvp="' + ev.id + '"]');
-        if (!btn) return;
-
-        btn.classList.add('rsvped');
-        btn.textContent = rsvpButtonLabel(ev.rsvpCount, true);
-      }).catch(function() { /* ignore */ });
-    });
-  }
+  bindEventRsvpButtons(document.getElementById('upcomingEventsList'));
 };
 
 // ─── Events: render single card ──────────────────────────────────────────────
-var renderEventCard = function(ev) {
+var renderEventCard = function(ev, opts) {
+  opts = opts || {};
   var titleEsc    = escapeHTML(ev.title    || 'Untitled');
   var locationEsc = escapeHTML(ev.location || 'TBD');
   var circleLbl   = escapeHTML(circleLabel(ev.circle || 'all'));
@@ -2442,11 +2497,22 @@ var renderEventCard = function(ev) {
   }
 
   var rsvpCount = (typeof ev.rsvpCount === 'number') ? ev.rsvpCount : 0;
+  var statusHtml = opts.isPast
+    ? '<span class="event-status-label">Past Event</span>'
+    : '';
+  var actionsHtml = opts.isPast
+    ? '<div class="event-actions event-actions-static"><span class="text-muted">RSVP closed</span></div>'
+    : '<div class="event-actions">' +
+        '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">' + rsvpButtonLabel(rsvpCount, false) + '</button>' +
+      '</div>';
 
   return '' +
-    '<div class="event-card">' +
+    '<div class="event-card' + (opts.isPast ? ' event-card-past' : '') + '">' +
       '<div class="event-card-header">' +
-        '<div class="event-title">' + titleEsc + '</div>' +
+        '<div>' +
+          '<div class="event-title">' + titleEsc + '</div>' +
+          statusHtml +
+        '</div>' +
         '<span class="post-circle">' + circleLbl + '</span>' +
       '</div>' +
       '<div class="event-meta">' +
@@ -2454,9 +2520,7 @@ var renderEventCard = function(ev) {
         '<div class="event-meta-row">&#128205; ' + locationEsc + '</div>' +
       '</div>' +
       (descEsc ? '<div class="event-desc">' + descEsc + '</div>' : '') +
-      '<div class="event-actions">' +
-        '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">' + rsvpButtonLabel(rsvpCount, false) + '</button>' +
-      '</div>' +
+      actionsHtml +
     '</div>';
 };
 
@@ -2934,10 +2998,12 @@ var rsvpButtonLabel = function(count, isRsvped) {
 };
 
 var setLocalEventRsvpCount = function(eventId, count) {
-  eventsState.events = eventsState.events.map(function(eventItem) {
-    if (eventItem.id !== eventId) return eventItem;
-    eventItem.rsvpCount = count;
-    return eventItem;
+  ['upcoming', 'past'].forEach(function(bucket) {
+    eventsState[bucket] = eventsState[bucket].map(function(eventItem) {
+      if (eventItem.id !== eventId) return eventItem;
+      eventItem.rsvpCount = count;
+      return eventItem;
+    });
   });
 };
 
