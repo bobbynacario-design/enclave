@@ -260,7 +260,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v49';
+var ASSET_VERSION = 'v50';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -370,8 +370,8 @@ var syncResponsivePanels = function() {
   var rightRail = document.querySelector('.shell-right');
   if (!rightRail) return;
 
-  var isPhone = window.matchMedia('(max-width: 720px)').matches;
-  rightRail.hidden = isPhone && state.currentPage !== 'feed';
+  var isCompactLayout = window.matchMedia('(max-width: 1100px)').matches;
+  rightRail.hidden = isCompactLayout && state.currentPage !== 'feed';
 };
 
 var applyURLState = function() {
