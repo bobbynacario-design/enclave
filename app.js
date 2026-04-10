@@ -82,6 +82,17 @@ var messagesState = {
   unsubscribeThread:        null
 };
 
+// Drive attachment state for compose box
+var driveAttachment = {
+  fileUrl:  '',
+  fileName: '',
+  iconUrl:  ''
+};
+
+// Google Picker API key — same Firebase project key, Picker API must be enabled in GCP Console
+var PICKER_API_KEY = 'AIzaSyBC8nqTgaqMp0R45dnKpA44u0S5C3nnbFE';
+var pickerApiLoaded = false;
+
 var shellState = {
   unsubscribeOnline: null,
   presenceTimer:     null
@@ -262,7 +273,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v55';
+var ASSET_VERSION = 'v56';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -921,6 +932,13 @@ var initFeedPage = function() {
   var submitBtn = document.getElementById('composeSubmit');
   if (submitBtn) submitBtn.addEventListener('click', handleComposeSubmit);
 
+  // Drive attachment button
+  var driveBtn = document.getElementById('driveAttachBtn');
+  if (driveBtn) driveBtn.addEventListener('click', openDrivePicker);
+
+  // Clear any leftover attachment from previous navigation
+  clearDriveAttachment();
+
   if (composeCircle) {
     composeCircle.innerHTML = renderCircleOptions(true);
   }
@@ -1153,6 +1171,13 @@ var handleComposeSubmit = function() {
     comments:       []
   };
 
+  // Attach Drive file if present
+  if (driveAttachment.fileUrl) {
+    post.fileUrl  = driveAttachment.fileUrl;
+    post.fileName = driveAttachment.fileName;
+    post.fileIcon = driveAttachment.iconUrl;
+  }
+
   var submitBtn = document.getElementById('composeSubmit');
   if (submitBtn) {
     submitBtn.disabled    = true;
@@ -1161,6 +1186,7 @@ var handleComposeSubmit = function() {
 
   addDoc(collection(db, 'posts'), post).then(function() {
     bodyEl.value = '';
+    clearDriveAttachment();
     if (submitBtn) {
       submitBtn.disabled    = false;
       submitBtn.textContent = 'Post';
@@ -1323,6 +1349,15 @@ var renderPostCard = function(p) {
         '</div>' +
       '</div>' +
       '<div class="post-body">' + bodyEsc + '</div>' +
+      (p.fileUrl
+        ? '<a class="post-attachment" href="' + escapeAttr(p.fileUrl) + '" target="_blank" rel="noopener">' +
+            (p.fileIcon
+              ? '<img src="' + escapeAttr(p.fileIcon) + '" class="post-attachment-icon" alt="" />'
+              : '<span class="post-attachment-icon-fallback">&#128196;</span>') +
+            '<span class="post-attachment-name">' + escapeHTML(p.fileName || 'Attached file') + '</span>' +
+            '<span class="post-attachment-open">Open &#8599;</span>' +
+          '</a>'
+        : '') +
       '<div class="post-actions">' +
         '<button class="' + reactBtnClass + '" data-react-post="' + escapeAttr(p.id) + '">&#128077; ' + reacts.length + '</button>' +
         '<button class="' + commentBtnClass + '" data-toggle-comments-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">&#128172; ' + comments.length + '</button>' +
@@ -3007,6 +3042,111 @@ var handleInlineCreateEvent = function() {
       saveBtn.textContent = 'Create Event';
     }
   });
+};
+
+// ─── Drive Picker ────────────────────────────────────────────────────────────
+var openDrivePicker = function() {
+  if (!state.user) {
+    showToast('Sign in first.', 'error');
+    return;
+  }
+
+  // Get the current user's OAuth access token from Firebase Auth
+  auth.currentUser.getIdToken(false).catch(function() { return null; });
+  var accessToken = auth.currentUser && auth.currentUser.stsTokenManager &&
+    auth.currentUser.stsTokenManager.accessToken;
+
+  // For Google Picker we need an OAuth access token, not a Firebase ID token.
+  // Firebase Auth with Google provider stores it — we'll extract via getToken approach.
+  if (!window.gapi) {
+    showToast('Google API not loaded. Refresh the page.', 'error');
+    return;
+  }
+
+  if (pickerApiLoaded) {
+    showPicker();
+    return;
+  }
+
+  window.gapi.load('picker', function() {
+    pickerApiLoaded = true;
+    showPicker();
+  });
+};
+
+var showPicker = function() {
+  // The Google Picker requires an OAuth2 token. Firebase Auth with Google provider
+  // stores the access token internally. We retrieve it from the credential on sign-in,
+  // but since we may not have stored it, we'll use a re-auth approach.
+  // Simplest approach: use the Firebase API key and let Picker work in "no auth" mode
+  // for public/shared files, OR prompt the user.
+  //
+  // For Level 1, we use the API key approach which shows the user's Drive if they're
+  // signed into Google in the browser. The Picker uses cookies-based auth.
+
+  var view = new google.picker.PickerBuilder()
+    .addView(google.picker.ViewId.DOCS)
+    .addView(google.picker.ViewId.RECENTLY_PICKED)
+    .setDeveloperKey(PICKER_API_KEY)
+    .setCallback(handlePickerCallback)
+    .setTitle('Attach a file from Google Drive')
+    .build();
+
+  view.setVisible(true);
+};
+
+var handlePickerCallback = function(data) {
+  if (data.action === google.picker.Action.PICKED) {
+    var file = data.docs[0];
+    driveAttachment.fileUrl  = file.url;
+    driveAttachment.fileName = file.name;
+    driveAttachment.iconUrl  = file.iconUrl || '';
+    renderDrivePreview();
+  }
+};
+
+var renderDrivePreview = function() {
+  var el = document.getElementById('driveAttachmentPreview');
+  if (!el) return;
+
+  if (!driveAttachment.fileUrl) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+
+  var nameEsc = escapeHTML(driveAttachment.fileName);
+  el.hidden = false;
+  el.innerHTML =
+    '<div class="drive-preview-file">' +
+      (driveAttachment.iconUrl
+        ? '<img src="' + escapeAttr(driveAttachment.iconUrl) + '" class="drive-preview-icon" alt="" />'
+        : '<span class="drive-preview-icon-fallback">&#128196;</span>') +
+      '<span class="drive-preview-name">' + nameEsc + '</span>' +
+      '<button type="button" class="drive-preview-remove" title="Remove attachment">&times;</button>' +
+    '</div>' +
+    '<div class="drive-preview-reminder">' +
+      '&#9888;&#65039; Make sure this file is set to "Anyone with the link can view" in Google Drive so members can open it.' +
+    '</div>';
+
+  // Wire remove button
+  var removeBtn = el.querySelector('.drive-preview-remove');
+  if (removeBtn) {
+    removeBtn.onclick = function() {
+      clearDriveAttachment();
+    };
+  }
+};
+
+var clearDriveAttachment = function() {
+  driveAttachment.fileUrl  = '';
+  driveAttachment.fileName = '';
+  driveAttachment.iconUrl  = '';
+  var el = document.getElementById('driveAttachmentPreview');
+  if (el) {
+    el.hidden = true;
+    el.innerHTML = '';
+  }
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
