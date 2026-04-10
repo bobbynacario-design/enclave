@@ -59,7 +59,9 @@ var feedState = {
   hasMore:     false,
   loadingMore: false,
   lastDoc:     null,
-  openComments: {}
+  openComments: {},
+  targetPostId: '',
+  pendingTargetScroll: false
 };
 
 var membersState = {
@@ -260,7 +262,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v54';
+var ASSET_VERSION = 'v55';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -334,12 +336,16 @@ window.enclaveGoPage = function(page) {
 
   if (page === 'feed') {
     feedState.filter = 'all';
+    feedState.targetPostId = '';
+    feedState.pendingTargetScroll = false;
   }
   loadPage(page);
 };
 
 window.enclaveGoCircle = function(circle) {
   feedState.filter = circle;
+  feedState.targetPostId = '';
+  feedState.pendingTargetScroll = false;
   loadPage('feed');
 };
 
@@ -386,17 +392,27 @@ var applyURLState = function() {
   var params = new URLSearchParams(window.location.search);
   var page = params.get('page');
   var circle = params.get('circle');
+  var postId = params.get('postId');
 
   if (page && VALID_PAGES[page]) {
     state.currentPage = page;
   }
 
   if (state.currentPage === 'feed') {
+    feedState.targetPostId = postId || '';
+    feedState.pendingTargetScroll = !!feedState.targetPostId;
+    if (feedState.targetPostId) {
+      feedState.openComments[feedState.targetPostId] = true;
+    }
+
     if (circle && getVisibleCircles().indexOf(circle) !== -1) {
       feedState.filter = circle;
     } else {
       feedState.filter = 'all';
     }
+  } else {
+    feedState.targetPostId = '';
+    feedState.pendingTargetScroll = false;
   }
 };
 
@@ -408,6 +424,12 @@ var syncURLState = function() {
     params.set('circle', feedState.filter);
   } else {
     params.delete('circle');
+  }
+
+  if (state.currentPage === 'feed' && feedState.targetPostId) {
+    params.set('postId', feedState.targetPostId);
+  } else {
+    params.delete('postId');
   }
 
   var nextURL = window.location.pathname + '?' + params.toString();
@@ -924,6 +946,9 @@ var initFeedPage = function() {
   document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
     pill.addEventListener('click', function() {
       feedState.filter = pill.dataset.filter;
+      feedState.targetPostId = '';
+      feedState.pendingTargetScroll = false;
+      syncURLState();
       document.querySelectorAll('.filter-pills .pill').forEach(function(p) {
         p.classList.toggle('active', p === pill);
       });
@@ -975,7 +1000,9 @@ var subscribeFeed = function() {
       feedState.hasMore = snap.docs.length === FEED_PAGE_SIZE;
     }
 
-    renderFeedList();
+    ensureTargetPostLoaded().then(function() {
+      renderFeedList();
+    });
   }, function(err) {
     console.error('Feed subscribe error:', err);
     var list = document.getElementById('feedList');
@@ -996,6 +1023,34 @@ var getAllKnownFeedPosts = function() {
   return combined;
 };
 
+var ensureTargetPostLoaded = function() {
+  if (!feedState.targetPostId) return Promise.resolve(false);
+
+  var alreadyLoaded = getAllKnownFeedPosts().some(function(post) {
+    return post.id === feedState.targetPostId;
+  });
+  if (alreadyLoaded) return Promise.resolve(true);
+
+  return getDoc(doc(db, 'posts', feedState.targetPostId)).then(function(snap) {
+    if (!snap.exists()) return false;
+
+    var data = snap.data() || {};
+    data.id = snap.id;
+
+    if (getVisibleCircles().indexOf(data.circle || 'all') === -1) {
+      return false;
+    }
+
+    feedState.olderPosts = [data].concat(feedState.olderPosts.filter(function(post) {
+      return post.id !== data.id;
+    }));
+    return true;
+  }).catch(function(err) {
+    console.error('Failed to load shared post:', err);
+    return false;
+  });
+};
+
 var getRenderedFeedPosts = function() {
   var combined = getAllKnownFeedPosts();
 
@@ -1005,7 +1060,34 @@ var getRenderedFeedPosts = function() {
     });
   }
 
+  if (feedState.targetPostId) {
+    var targetIndex = combined.findIndex(function(post) {
+      return post.id === feedState.targetPostId;
+    });
+
+    if (targetIndex > 0) {
+      var targetPost = combined.splice(targetIndex, 1)[0];
+      combined.unshift(targetPost);
+    }
+  }
+
   return combined;
+};
+
+var scrollToTargetPost = function() {
+  if (!feedState.targetPostId || !feedState.pendingTargetScroll) return;
+
+  var card = document.querySelector('[data-post-id="' + feedState.targetPostId + '"]');
+  if (!card) return;
+
+  feedState.pendingTargetScroll = false;
+
+  window.requestAnimationFrame(function() {
+    card.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  });
 };
 
 var loadMoreFeedPosts = function() {
@@ -1042,7 +1124,9 @@ var loadMoreFeedPosts = function() {
     showToast('Failed to load more posts. Check console for details.', 'error');
   }).finally(function() {
     feedState.loadingMore = false;
-    renderFeedList();
+    ensureTargetPostLoaded().then(function() {
+      renderFeedList();
+    });
   });
 };
 
@@ -1150,6 +1234,8 @@ var renderFeedList = function() {
     loadMoreBtn.disabled = feedState.loadingMore;
     loadMoreBtn.addEventListener('click', loadMoreFeedPosts);
   }
+
+  scrollToTargetPost();
 };
 
 // ─── Feed: render single post card ───────────────────────────────────────────
@@ -1224,7 +1310,7 @@ var renderPostCard = function(p) {
     : '';
 
   return '' +
-    '<div class="post-card">' +
+    '<div class="post-card' + (feedState.targetPostId === p.id ? ' post-card-target' : '') + '" data-post-id="' + escapeAttr(p.id) + '">' +
       '<div class="post-header">' +
         '<div class="post-avatar">' + initialsEsc + '</div>' +
         '<div class="post-meta">' +
@@ -1258,7 +1344,7 @@ var handleSharePost = function(postId) {
   var summary = body.length > 140
     ? body.slice(0, 137) + '...'
     : body;
-  var shareURL = getAppURL() + '?page=feed';
+  var shareURL = getAppURL() + '?page=feed&postId=' + encodeURIComponent(postId);
   var shareText = author + ' in Enclave: ' + summary;
 
   if (navigator.share) {

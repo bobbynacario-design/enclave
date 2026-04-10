@@ -791,6 +791,11 @@ label {
   padding: 16px;
 }
 
+.post-card-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(124, 92, 191, 0.35), 0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
 .post-header {
   display: flex;
   align-items: flex-start;
