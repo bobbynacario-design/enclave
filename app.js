@@ -241,7 +241,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v40';
+var ASSET_VERSION = 'v41';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1793,18 +1793,26 @@ var renderEditProfileForm = function(member) {
   var bioVal  = escapeAttr(member.bio  || '');
   var roleVal = escapeAttr(member.role || '');
   var currentCircles = Array.isArray(member.circles) ? member.circles : [];
-  var circleTags = currentCircles.map(function(c) {
-    return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
-  }).join('');
-  if (!circleTags) {
-    circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
-  }
+  var canEditCircles = !!state.isAdmin;
+  var circlesHTML = canEditCircles
+    ? '<div class="circle-check-grid" id="editCircles">' + renderCircleChecks(currentCircles) + '</div>' +
+      '<p class="text-muted mt-8">As an admin, you can update your own circle access here.</p>'
+    : (function() {
+        var circleTags = currentCircles.map(function(c) {
+          return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
+        }).join('');
+        if (!circleTags) {
+          circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
+        }
+        return '<div class="member-circles">' + circleTags + '</div>' +
+          '<p class="text-muted mt-8">Ask an admin if you need circle access changed.</p>';
+      })();
 
   body.innerHTML =
     '<div class="profile-header">' +
       '<div class="profile-header-meta">' +
         '<h2 class="profile-name">Edit Profile</h2>' +
-        '<p class="text-muted">Update your bio and role. Circles are managed by admins.</p>' +
+        '<p class="text-muted">Update your bio and role.' + (canEditCircles ? ' You can also manage your circles.' : ' Circles are managed by admins.') + '</p>' +
       '</div>' +
     '</div>' +
     '<div class="profile-section">' +
@@ -1817,8 +1825,7 @@ var renderEditProfileForm = function(member) {
     '</div>' +
     '<div class="profile-section">' +
       '<div class="profile-section-title">Circles</div>' +
-      '<div class="member-circles">' + circleTags + '</div>' +
-      '<p class="text-muted mt-8">Ask an admin if you need circle access changed.</p>' +
+      circlesHTML +
     '</div>' +
     '<div class="edit-actions">' +
       '<button class="btn" id="editCancelBtn">Cancel</button>' +
@@ -1844,6 +1851,9 @@ var handleSaveProfile = function(uid) {
 
   var newRole = roleEl.value.trim();
   var newBio  = bioEl.value.trim();
+  var newCircles = state.isAdmin
+    ? getCheckedCircles('#editCircles')
+    : null;
 
   if (saveBtn) {
     saveBtn.disabled    = true;
@@ -1851,15 +1861,27 @@ var handleSaveProfile = function(uid) {
   }
 
   var ref = doc(db, 'users', uid);
-  updateDoc(ref, {
+  var updates = {
     role:    newRole,
     bio:     newBio
-  }).then(function() {
+  };
+
+  if (newCircles) {
+    updates.circles = newCircles;
+  }
+
+  updateDoc(ref, updates).then(function() {
     // Update local cache so UI reflects change without a full reload
     var member = membersState.members.find(function(m) { return m.uid === uid; });
     if (member) {
       member.role    = newRole;
       member.bio     = newBio;
+      if (newCircles) {
+        member.circles = newCircles.slice();
+      }
+    }
+    if (newCircles && state.user && state.user.uid === uid) {
+      state.circles = newCircles.slice();
     }
     renderMembersList();
     openProfile(uid);
