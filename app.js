@@ -260,7 +260,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v50';
+var ASSET_VERSION = 'v51';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -367,11 +367,19 @@ var refreshCurrentUserState = function() {
 };
 
 var syncResponsivePanels = function() {
+  var shell = document.querySelector('.shell');
   var rightRail = document.querySelector('.shell-right');
+  if (shell) {
+    shell.setAttribute('data-current-page', state.currentPage || 'feed');
+  }
   if (!rightRail) return;
 
   var isCompactLayout = window.matchMedia('(max-width: 1100px)').matches;
-  rightRail.hidden = isCompactLayout && state.currentPage !== 'feed';
+  if (isCompactLayout) {
+    rightRail.style.display = state.currentPage === 'feed' ? 'block' : 'none';
+  } else {
+    rightRail.style.display = '';
+  }
 };
 
 var applyURLState = function() {
