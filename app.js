@@ -4,6 +4,7 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
+  GoogleAuthProvider as GAP
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
 import {
@@ -136,7 +137,12 @@ var VALID_PAGES = {
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var handleSignIn = function() {
   state.accessDenied = false;
-  signInWithPopup(auth, googleProvider).catch(function(err) {
+  signInWithPopup(auth, googleProvider).then(function(result) {
+    var credential = GAP.credentialFromResult(result);
+    if (credential && credential.accessToken) {
+      state.googleAccessToken = credential.accessToken;
+    }
+  }).catch(function(err) {
     console.error('Sign-in error:', err);
   });
 };
@@ -270,7 +276,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v58';
+var ASSET_VERSION = 'v59';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -932,7 +938,6 @@ var initFeedPage = function() {
   // Drive attachment
   var driveBtn = document.getElementById('driveAttachBtn');
   if (driveBtn) driveBtn.addEventListener('click', openDrivePicker);
-  initDriveLinkHandlers();
   clearDriveAttachment();
 
   if (composeCircle) {
@@ -3040,87 +3045,86 @@ var handleInlineCreateEvent = function() {
   });
 };
 
-// ─── Drive Link Attachment ───────────────────────────────────────────────────
+// ─── Drive Picker ────────────────────────────────────────────────────────────
+var PICKER_APP_ID = '834210326738';
+var PICKER_API_KEY = 'AIzaSyBC8nqTgaqMp0R45dnKpA44u0S5C3nnbFE';
+var pickerApiLoaded = false;
+
 var openDrivePicker = function() {
-  // Show the link input row, hide the button
-  var linkRow = document.getElementById('driveLinkInput');
-  var urlInput = document.getElementById('driveLinkUrl');
-  if (linkRow) {
-    linkRow.hidden = false;
-    if (urlInput) urlInput.focus();
-  }
-};
-
-var initDriveLinkHandlers = function() {
-  var confirmBtn = document.getElementById('driveLinkConfirm');
-  var cancelBtn = document.getElementById('driveLinkCancel');
-  var urlInput = document.getElementById('driveLinkUrl');
-
-  if (confirmBtn) {
-    confirmBtn.onclick = function() {
-      handleDriveLinkConfirm();
-    };
-  }
-
-  if (cancelBtn) {
-    cancelBtn.onclick = function() {
-      closeDriveLinkInput();
-    };
-  }
-
-  // Also confirm on Enter key
-  if (urlInput) {
-    urlInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleDriveLinkConfirm();
-      }
-    });
-  }
-};
-
-var handleDriveLinkConfirm = function() {
-  var urlInput = document.getElementById('driveLinkUrl');
-  if (!urlInput) return;
-
-  var url = urlInput.value.trim();
-  if (!url) {
-    showToast('Paste a Google Drive link first.', 'error');
+  if (!state.user) {
+    showToast('Sign in first.', 'error');
     return;
   }
 
-  // Accept any URL — Drive links, Docs, Sheets, etc.
-  // Extract a filename from the URL if possible
-  var fileName = 'Shared file';
-  if (url.indexOf('drive.google.com') !== -1 || url.indexOf('docs.google.com') !== -1) {
-    // Try to get name from URL path
-    var parts = url.split('/');
-    var nameGuess = parts[parts.length - 1] || parts[parts.length - 2] || '';
-    if (nameGuess && nameGuess !== 'edit' && nameGuess !== 'view') {
-      fileName = decodeURIComponent(nameGuess).substring(0, 60);
-    }
-
-    // Detect doc type from URL
-    if (url.indexOf('/document/') !== -1) fileName = 'Google Doc';
-    else if (url.indexOf('/spreadsheets/') !== -1) fileName = 'Google Sheet';
-    else if (url.indexOf('/presentation/') !== -1) fileName = 'Google Slides';
-    else if (url.indexOf('/file/') !== -1) fileName = 'Drive file';
-    else if (url.indexOf('/folders/') !== -1) fileName = 'Drive folder';
+  // If no token yet (page was refreshed), re-auth to get one
+  if (!state.googleAccessToken) {
+    showToast('Getting Drive access...', 'info');
+    signInWithPopup(auth, googleProvider).then(function(result) {
+      var credential = GAP.credentialFromResult(result);
+      if (credential && credential.accessToken) {
+        state.googleAccessToken = credential.accessToken;
+        loadAndShowPicker();
+      } else {
+        showToast('Could not access Drive. Sign out and back in.', 'error');
+      }
+    }).catch(function(err) {
+      console.error('Drive re-auth failed:', err);
+      showToast('Drive access failed: ' + (err.message || err.code || ''), 'error');
+    });
+    return;
   }
 
-  driveAttachment.fileUrl = url;
-  driveAttachment.fileName = fileName;
-  driveAttachment.iconUrl = '';
-
-  closeDriveLinkInput();
-  renderDrivePreview();
+  loadAndShowPicker();
 };
 
-var closeDriveLinkInput = function() {
-  var linkRow = document.getElementById('driveLinkInput');
-  var urlInput = document.getElementById('driveLinkUrl');
-  if (linkRow) linkRow.hidden = true;
-  if (urlInput) urlInput.value = '';
+var loadAndShowPicker = function() {
+  if (!window.gapi) {
+    showToast('Google API still loading. Try again in a moment.', 'error');
+    return;
+  }
+
+  if (pickerApiLoaded) {
+    createPicker();
+    return;
+  }
+
+  window.gapi.load('picker', function() {
+    pickerApiLoaded = true;
+    createPicker();
+  });
+};
+
+var createPicker = function() {
+  try {
+    var docsView = new google.picker.DocsView()
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(false);
+
+    var picker = new google.picker.PickerBuilder()
+      .addView(docsView)
+      .setOAuthToken(state.googleAccessToken)
+      .setDeveloperKey(PICKER_API_KEY)
+      .setAppId(PICKER_APP_ID)
+      .setCallback(handlePickerResult)
+      .setTitle('Attach a file from Google Drive')
+      .setOrigin(window.location.protocol + '//' + window.location.host)
+      .build();
+
+    picker.setVisible(true);
+  } catch (err) {
+    console.error('Picker build error:', err);
+    showToast('Failed to open Drive picker: ' + err.message, 'error');
+  }
+};
+
+var handlePickerResult = function(data) {
+  if (data.action === google.picker.Action.PICKED && data.docs && data.docs.length > 0) {
+    var file = data.docs[0];
+    driveAttachment.fileUrl  = file.url || '';
+    driveAttachment.fileName = file.name || 'Attached file';
+    driveAttachment.iconUrl  = file.iconUrl || '';
+    renderDrivePreview();
+  }
 };
 
 var renderDrivePreview = function() {
