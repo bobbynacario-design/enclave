@@ -354,7 +354,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v92';
+var ASSET_VERSION = 'v93';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3862,6 +3862,9 @@ var sortProjectsByUpdatedAt = function(items) {
 };
 
 var refreshProjectDetailView = function() {
+  // Don't re-render if user is editing a task inline
+  var detailEl = document.getElementById('projectDetail');
+  if (detailEl && detailEl.querySelector('.task-edit-form')) return;
   if (projectsState.detailProject) {
     renderProjectDetail(projectsState.detailProject);
   }
@@ -4272,6 +4275,9 @@ var renderProjectDetail = function(p) {
           status: task.status
         }).then(function() {
           showToast('Task updated.', 'info');
+          if (projectsState.detailProject) {
+            renderProjectDetail(projectsState.detailProject);
+          }
         }).catch(function(err) {
           console.error('Task edit error:', err);
           showToast('Failed to update task.', 'error');
