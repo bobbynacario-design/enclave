@@ -332,7 +332,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v84';
+var ASSET_VERSION = 'v85';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3862,11 +3862,6 @@ var renderProjectDetail = function(p) {
     '</div>' +
 
     '<div class="project-detail-section">' +
-      '<h3>Members</h3>' +
-      '<div class="project-members-list">' + membersHtml + '</div>' +
-    '</div>' +
-
-    '<div class="project-detail-section">' +
       '<h3>Tasks <span class="task-count">' + openTasks.length + ' open</span></h3>' +
       '<div class="project-tasks-list">' + tasksHtml + '</div>' +
       '<form class="task-add-form" id="taskAddForm">' +
@@ -3880,6 +3875,11 @@ var renderProjectDetail = function(p) {
         '<input type="date" class="form-input task-add-date" id="taskDueDateInput" />' +
         '<button class="btn btn-primary" type="submit">Add</button>' +
       '</form>' +
+    '</div>' +
+
+    '<div class="project-detail-section">' +
+      '<h3>Members</h3>' +
+      '<div class="project-members-list">' + membersHtml + '</div>' +
     '</div>' +
 
     '<div class="project-detail-section">' +
