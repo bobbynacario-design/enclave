@@ -316,7 +316,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v73';
+var ASSET_VERSION = 'v74';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3474,9 +3474,7 @@ var loadSidebarProjects = function() {
 
   var q = query(
     collection(db, 'projects'),
-    where('memberIds', 'array-contains', state.user.uid),
-    orderBy('updatedAt', 'desc'),
-    limit(10)
+    where('memberIds', 'array-contains', state.user.uid)
   );
 
   projectsState.sidebarUnsubscribe = onSnapshot(q, function(snap) {
@@ -3488,10 +3486,18 @@ var loadSidebarProjects = function() {
       return;
     }
 
-    var html = '';
+    var items = [];
     snap.forEach(function(d) {
       var p = d.data();
-      html += '<a class="sidebar-link sidebar-sublink" data-project="' + d.id + '" href="?page=projects&projectId=' + d.id + '">' +
+      p.id = d.id;
+      items.push(p);
+    });
+
+    sortProjectsByUpdatedAt(items);
+
+    var html = '';
+    items.slice(0, 10).forEach(function(p) {
+      html += '<a class="sidebar-link sidebar-sublink" data-project="' + p.id + '" href="?page=projects&projectId=' + p.id + '">' +
         escapeHTML(p.name || 'Untitled') + '</a>';
     });
     container.innerHTML = html;
@@ -3543,8 +3549,7 @@ var subscribeProjectsList = function() {
 
   var q = query(
     collection(db, 'projects'),
-    where('memberIds', 'array-contains', state.user.uid),
-    orderBy('updatedAt', 'desc')
+    where('memberIds', 'array-contains', state.user.uid)
   );
 
   projectsState.unsubscribe = onSnapshot(q, function(snap) {
@@ -3554,6 +3559,7 @@ var subscribeProjectsList = function() {
       data.id = d.id;
       projectsState.projects.push(data);
     });
+    sortProjectsByUpdatedAt(projectsState.projects);
     renderProjectsList();
   }, function(err) {
     console.error('Projects list error:', err);
@@ -3626,6 +3632,12 @@ var getProjectFilesForRender = function(p) {
 
   return legacy.concat(live).sort(function(a, b) {
     return getFirestoreTimeMs(b.addedAt || b.createdAt) - getFirestoreTimeMs(a.addedAt || a.createdAt);
+  });
+};
+
+var sortProjectsByUpdatedAt = function(items) {
+  return items.sort(function(a, b) {
+    return getFirestoreTimeMs(b.updatedAt || b.createdAt) - getFirestoreTimeMs(a.updatedAt || a.createdAt);
   });
 };
 
