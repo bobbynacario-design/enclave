@@ -296,7 +296,15 @@ var renderLogin = function() {
   app.innerHTML =
     '<div class="login-wrap">' +
       '<div class="login-card">' +
-        '<div class="login-logo">ENCLAVE</div>' +
+        '<div class="login-logo">' +
+          '<svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+            '<polygon points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5" fill="#1A362B" stroke="#F4F1EA" stroke-width="3"/>' +
+            '<path d="M50,5 L50,50 L90,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
+            '<path d="M50,50 L10,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
+            '<path d="M42,38 L60,38 M42,50 L56,50 M42,62 L60,62 M42,38 L42,62" fill="none" stroke="#F4F1EA" stroke-width="4" stroke-linecap="round"/>' +
+          '</svg>' +
+          '<div class="login-logo-text">ENCLAVE</div>' +
+        '</div>' +
         '<div class="login-tagline">private &middot; invite-only</div>' +
         deniedHTML +
         '<button id="googleSignInBtn" class="btn-google">' +
@@ -316,7 +324,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v76';
+var ASSET_VERSION = 'v77';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
