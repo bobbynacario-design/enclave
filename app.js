@@ -79,6 +79,7 @@ var messagesState = {
   activePeerId:            null,
   activeConversationId:    null,
   thread:                  [],
+  totalUnread:             0,
   unsubscribeConversations: null,
   unsubscribeThread:        null
 };
@@ -96,22 +97,26 @@ var shellState = {
   presenceTimer:     null
 };
 
-var resetMessagesState = function() {
-  if (messagesState.unsubscribeConversations) {
-    messagesState.unsubscribeConversations();
-    messagesState.unsubscribeConversations = null;
-  }
-
+var resetMessagesState = function(fullReset) {
   if (messagesState.unsubscribeThread) {
     messagesState.unsubscribeThread();
     messagesState.unsubscribeThread = null;
   }
 
-  messagesState.members = [];
-  messagesState.conversations = [];
   messagesState.activePeerId = null;
   messagesState.activeConversationId = null;
   messagesState.thread = [];
+
+  if (fullReset !== false) {
+    if (messagesState.unsubscribeConversations) {
+      messagesState.unsubscribeConversations();
+      messagesState.unsubscribeConversations = null;
+    }
+
+    messagesState.members = [];
+    messagesState.conversations = [];
+    messagesState.totalUnread = 0;
+  }
 };
 
 var resetShellRealtime = function() {
@@ -200,7 +205,7 @@ var handleSignOut = function() {
   state.circles = [];
   adminState.allowlist = [];
   resetProjectDetailState();
-  resetMessagesState();
+  resetMessagesState(false);
   resetShellRealtime();
   signOut(auth);
 };
@@ -332,7 +337,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v85';
+var ASSET_VERSION = 'v86';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -410,6 +415,7 @@ var renderShell = function() {
     }
 
     syncSidebarSelection();
+    subscribeConversations();
     loadOnlineUsers();
     startPresenceHeartbeat();
     loadPanelEvents();
@@ -1740,6 +1746,74 @@ var findConversationForPeer = function(peerId) {
   }) || null;
 };
 
+var getConversationUnreadCount = function(conversation) {
+  if (!conversation || !state.user) return 0;
+
+  var unreadCount = conversation.unreadCount || {};
+  var value = unreadCount[state.user.uid];
+  return typeof value === 'number' && value > 0 ? value : 0;
+};
+
+var syncMessagesUnreadState = function() {
+  var total = 0;
+
+  messagesState.conversations.forEach(function(conversation) {
+    total += getConversationUnreadCount(conversation);
+  });
+
+  messagesState.totalUnread = total;
+
+  document.querySelectorAll('[data-page="messages"]').forEach(function(link) {
+    var badge = link.querySelector('.messages-nav-badge');
+    if (total > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'messages-nav-badge';
+        link.appendChild(badge);
+      }
+      badge.textContent = total > 99 ? '99+' : String(total);
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+
+  var sidebarHeader = document.getElementById('messagesSidebarHeader');
+  if (sidebarHeader) {
+    sidebarHeader.innerHTML = 'People' + (
+      total > 0
+        ? '<span class="messages-sidebar-count">' + escapeHTML(total > 99 ? '99+' : String(total)) + ' unread</span>'
+        : ''
+    );
+  }
+};
+
+var markConversationRead = function(conversationId) {
+  if (!state.user || !conversationId) return Promise.resolve();
+
+  var conversation = messagesState.conversations.find(function(item) {
+    return item.id === conversationId;
+  });
+  if (!conversation) return Promise.resolve();
+
+  var unread = getConversationUnreadCount(conversation);
+  if (unread <= 0) return Promise.resolve();
+
+  if (!conversation.unreadCount) conversation.unreadCount = {};
+  conversation.unreadCount[state.user.uid] = 0;
+  if (!conversation.readBy) conversation.readBy = {};
+  conversation.readBy[state.user.uid] = Timestamp.now();
+  syncMessagesUnreadState();
+  renderMessagesPeopleList();
+
+  var payload = {};
+  payload['unreadCount.' + state.user.uid] = 0;
+  payload['readBy.' + state.user.uid] = serverTimestamp();
+
+  return updateDoc(doc(db, 'conversations', conversationId), payload).catch(function(err) {
+    console.error('Failed to mark conversation read:', err);
+  });
+};
+
 var renderMessagesPeopleList = function() {
   var list = document.getElementById('messagesPeopleList');
   if (!list) return;
@@ -1767,18 +1841,29 @@ var renderMessagesPeopleList = function() {
     return (a.name || a.email || '').localeCompare(b.name || b.email || '');
   });
 
+  syncMessagesUnreadState();
+
   list.innerHTML = members.map(function(member) {
     var active = member.uid === messagesState.activePeerId ? ' active' : '';
     var initials = escapeHTML(getInitials(member.name || member.email || '?'));
     var name = escapeHTML(member.name || member.email || 'Member');
     var meta = escapeHTML(member.role || member.email || '');
+    var conversation = convByPeer[member.uid] || null;
+    var unread = getConversationUnreadCount(conversation);
+    var preview = conversation && conversation.lastMessage
+      ? escapeHTML(conversation.lastMessage)
+      : 'No messages yet.';
 
     return '' +
-      '<button class="messages-person' + active + '" type="button" data-open-message="' + escapeAttr(member.uid) + '">' +
+      '<button class="messages-person' + active + (unread > 0 ? ' unread' : '') + '" type="button" data-open-message="' + escapeAttr(member.uid) + '">' +
         '<div class="messages-person-avatar">' + initials + '</div>' +
         '<div class="messages-person-meta">' +
-          '<div class="messages-person-name">' + name + '</div>' +
+          '<div class="messages-person-name-row">' +
+            '<div class="messages-person-name">' + name + '</div>' +
+            (unread > 0 ? '<span class="messages-unread-badge">' + escapeHTML(unread > 99 ? '99+' : String(unread)) + '</span>' : '') +
+          '</div>' +
           '<div class="messages-person-subtitle">' + meta + '</div>' +
+          '<div class="messages-person-preview">' + preview + '</div>' +
         '</div>' +
       '</button>';
   }).join('');
@@ -1867,6 +1952,7 @@ var subscribeMessageThread = function(conversationId) {
     thread.reverse();
     messagesState.thread = thread;
     renderMessagesThread();
+    markConversationRead(conversationId);
   }, function(err) {
     console.error('Failed to load thread:', err);
     var listEl = document.getElementById('messagesThreadList');
@@ -1894,6 +1980,7 @@ var openMessageThread = function(peerId) {
   }
 
   subscribeMessageThread(conversation.id);
+  markConversationRead(conversation.id);
   renderMessagesThread();
 };
 
@@ -1963,24 +2050,28 @@ var subscribeConversations = function() {
     });
 
     messagesState.conversations = conversations;
+    syncMessagesUnreadState();
 
-    if (messagesState.activePeerId) {
+    if (state.currentPage === 'messages' && messagesState.activePeerId) {
       var activeConversation = findConversationForPeer(messagesState.activePeerId);
       if (activeConversation) {
         if (messagesState.activeConversationId !== activeConversation.id) {
           subscribeMessageThread(activeConversation.id);
         }
+        markConversationRead(activeConversation.id);
       } else {
         messagesState.activeConversationId = null;
         messagesState.thread = [];
       }
-    } else if (conversations.length > 0) {
+    } else if (state.currentPage === 'messages' && conversations.length > 0) {
       messagesState.activePeerId = getConversationPeerId(conversations[0]);
       subscribeMessageThread(conversations[0].id);
     }
 
     renderMessagesPeopleList();
-    renderMessagesThread();
+    if (state.currentPage === 'messages') {
+      renderMessagesThread();
+    }
   }, function(err) {
     console.error('Failed to load conversations:', err);
     var list = document.getElementById('messagesPeopleList');
@@ -2011,12 +2102,31 @@ var handleSendMessage = function() {
   input.disabled = true;
   sendBtn.disabled = true;
 
-  setDoc(conversationRef, {
-    members: members,
-    updatedAt: serverTimestamp(),
-    lastMessage: preview,
-    lastSenderId: state.user.uid
-  }, { merge: true }).then(function() {
+  runTransaction(db, function(tx) {
+    return tx.get(conversationRef).then(function(snap) {
+      var unreadCount = {};
+      var readBy = {};
+
+      if (snap.exists()) {
+        var data = snap.data() || {};
+        unreadCount = Object.assign({}, data.unreadCount || {});
+        readBy = Object.assign({}, data.readBy || {});
+      }
+
+      unreadCount[state.user.uid] = 0;
+      unreadCount[peer.uid] = (typeof unreadCount[peer.uid] === 'number' ? unreadCount[peer.uid] : 0) + 1;
+      readBy[state.user.uid] = Timestamp.now();
+
+      tx.set(conversationRef, {
+        members: members,
+        updatedAt: serverTimestamp(),
+        lastMessage: preview,
+        lastSenderId: state.user.uid,
+        unreadCount: unreadCount,
+        readBy: readBy
+      }, { merge: true });
+    });
+  }).then(function() {
     return addDoc(collection(db, 'conversations', conversationId, 'messages'), {
       authorId: state.user.uid,
       authorName: state.user.displayName || state.user.email || 'Member',
@@ -2028,6 +2138,7 @@ var handleSendMessage = function() {
     if (messagesState.activeConversationId !== conversationId) {
       subscribeMessageThread(conversationId);
     }
+    markConversationRead(conversationId);
     input.value = '';
   }).catch(function(err) {
     console.error('Failed to send message:', err);

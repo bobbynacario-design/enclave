@@ -1836,6 +1836,9 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   text-transform: uppercase;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .messages-people-list {
@@ -1881,12 +1884,26 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  flex: 1;
+}
+
+.messages-person-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .messages-person-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
+}
+
+.messages-person.unread .messages-person-name,
+.messages-person.unread .messages-person-preview {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .messages-person-subtitle,
@@ -1902,6 +1919,40 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.messages-unread-badge,
+.messages-nav-badge,
+.messages-sidebar-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.messages-unread-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.messages-sidebar-count {
+  padding: 5px 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.messages-nav-badge {
+  margin-left: 8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
 }
 
 .messages-thread {
