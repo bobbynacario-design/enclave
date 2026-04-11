@@ -289,7 +289,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v70';
+var ASSET_VERSION = 'v71';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3756,12 +3756,12 @@ var openProjectModal = function(existingProject) {
   var backdrop = modal.querySelector('.project-modal-backdrop');
   if (backdrop) backdrop.onclick = closeProjectModal;
 
-  modal.hidden = false;
+  modal.classList.add('visible');
 };
 
 var closeProjectModal = function() {
   var modal = document.getElementById('projectModal');
-  if (modal) modal.hidden = true;
+  if (modal) modal.classList.remove('visible');
 };
 
 var loadProjectMemberChecks = function(existingProject) {
