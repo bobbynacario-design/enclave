@@ -131,8 +131,21 @@ var VALID_PAGES = {
   events:   true,
   members:  true,
   admin:    true,
-  messages: true
+  messages: true,
+  projects: true
 };
+
+var projectsState = {
+  projects:           [],
+  unsubscribe:        null,
+  activeProjectId:    null,
+  detailUnsubscribe:  null,
+  sidebarUnsubscribe: null,
+  editingProjectId:   null
+};
+
+var pickerContext = 'feed';
+var pickerProjectId = null;
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var handleSignIn = function() {
@@ -276,7 +289,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v66';
+var ASSET_VERSION = 'v67';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -324,11 +337,27 @@ var renderShell = function() {
       }
     }
 
+    // Sidebar "new project" link
+    var newProjLink = document.querySelector('[data-action="new-project"]');
+    if (newProjLink) {
+      newProjLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        projectsState.activeProjectId = null;
+        projectsState.editingProjectId = null;
+        loadPage('projects');
+        setTimeout(function() {
+          var modal = document.getElementById('projectModal');
+          if (modal) modal.hidden = false;
+        }, 200);
+      });
+    }
+
     syncSidebarSelection();
     loadOnlineUsers();
     startPresenceHeartbeat();
     loadPanelEvents();
     loadPanelCircles();
+    loadSidebarProjects();
     syncResponsivePanels();
     loadPage(state.currentPage);
   }).catch(function(err) {
@@ -412,6 +441,13 @@ var applyURLState = function() {
     state.currentPage = page;
   }
 
+  if (state.currentPage === 'projects') {
+    var projectId = params.get('projectId');
+    if (projectId) {
+      projectsState.activeProjectId = projectId;
+    }
+  }
+
   if (state.currentPage === 'feed') {
     feedState.targetPostId = postId || '';
     feedState.pendingTargetScroll = !!feedState.targetPostId;
@@ -444,6 +480,12 @@ var syncURLState = function() {
     params.set('postId', feedState.targetPostId);
   } else {
     params.delete('postId');
+  }
+
+  if (state.currentPage === 'projects' && projectsState.activeProjectId) {
+    params.set('projectId', projectsState.activeProjectId);
+  } else {
+    params.delete('projectId');
   }
 
   var nextURL = window.location.pathname + '?' + params.toString();
@@ -885,6 +927,17 @@ var loadPage = function(page) {
     feedState.unsubscribe();
     feedState.unsubscribe = null;
   }
+  if (projectsState.unsubscribe) {
+    projectsState.unsubscribe();
+    projectsState.unsubscribe = null;
+  }
+  if (projectsState.detailUnsubscribe) {
+    projectsState.detailUnsubscribe();
+    projectsState.detailUnsubscribe = null;
+  }
+  if (page !== 'projects') {
+    projectsState.activeProjectId = null;
+  }
 
   resetMessagesState();
 
@@ -906,6 +959,7 @@ var loadPage = function(page) {
     if (page === 'events')  initEventsPage();
     if (page === 'admin')   initAdminPage();
     if (page === 'messages') initMessagesPage();
+    if (page === 'projects') initProjectsPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -3153,10 +3207,33 @@ var createPicker = function() {
 var handlePickerResult = function(data) {
   if (data.action === google.picker.Action.PICKED && data.docs && data.docs.length > 0) {
     var file = data.docs[0];
+
+    // Project context: attach file to project
+    if (pickerContext === 'project' && pickerProjectId) {
+      handleProjectFileAttach(pickerProjectId, {
+        fileUrl:     file.url || '',
+        fileName:    file.name || 'Attached file',
+        iconUrl:     file.iconUrl || '',
+        addedBy:     state.user.uid,
+        addedByName: state.user.displayName || state.user.email || 'Member',
+        addedAt:     Timestamp.now()
+      });
+      pickerContext = 'feed';
+      pickerProjectId = null;
+      return;
+    }
+
+    // Default: feed compose attachment
     driveAttachment.fileUrl  = file.url || '';
     driveAttachment.fileName = file.name || 'Attached file';
     driveAttachment.iconUrl  = file.iconUrl || '';
     renderDrivePreview();
+  }
+
+  // Reset picker context on cancel
+  if (data.action === google.picker.Action.CANCEL) {
+    pickerContext = 'feed';
+    pickerProjectId = null;
   }
 };
 
@@ -3330,6 +3407,14 @@ var syncSidebarSelection = function() {
 
     btn.classList.toggle('active', isActive);
   });
+
+  document.querySelectorAll('.sidebar-link[data-project]').forEach(function(btn) {
+    btn.classList.toggle('active',
+      state.currentPage === 'projects' &&
+      projectsState.activeProjectId &&
+      btn.dataset.project === projectsState.activeProjectId
+    );
+  });
 };
 
 var rsvpButtonLabel = function(count, isRsvped) {
@@ -3345,6 +3430,481 @@ var setLocalEventRsvpCount = function(eventId, count) {
       eventItem.rsvpCount = count;
       return eventItem;
     });
+  });
+};
+
+// ─── Projects: sidebar loader ───────────────────────────────────────────────
+var loadSidebarProjects = function() {
+  if (projectsState.sidebarUnsubscribe) {
+    projectsState.sidebarUnsubscribe();
+  }
+  if (!state.user) return;
+
+  var q = query(
+    collection(db, 'projects'),
+    where('memberIds', 'array-contains', state.user.uid),
+    orderBy('updatedAt', 'desc'),
+    limit(10)
+  );
+
+  projectsState.sidebarUnsubscribe = onSnapshot(q, function(snap) {
+    var container = document.getElementById('sidebarProjectsList');
+    if (!container) return;
+
+    if (snap.empty) {
+      container.innerHTML = '<span class="text-muted" style="padding:0 12px;font-size:13px;">No projects yet</span>';
+      return;
+    }
+
+    var html = '';
+    snap.forEach(function(d) {
+      var p = d.data();
+      html += '<a class="sidebar-link sidebar-sublink" data-project="' + d.id + '" href="?page=projects&projectId=' + d.id + '">' +
+        escapeHTML(p.name || 'Untitled') + '</a>';
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('[data-project]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        projectsState.activeProjectId = btn.dataset.project;
+        loadPage('projects');
+      });
+    });
+
+    syncSidebarSelection();
+  }, function(err) {
+    console.error('Sidebar projects error:', err);
+  });
+};
+
+// ─── Projects: page init ────────────────────────────────────────────────────
+var initProjectsPage = function() {
+  var createBtn = document.getElementById('createProjectBtn');
+  if (createBtn) {
+    createBtn.onclick = function() {
+      projectsState.editingProjectId = null;
+      openProjectModal();
+    };
+  }
+
+  document.querySelectorAll('[data-action="close-project-modal"]').forEach(function(el) {
+    el.addEventListener('click', closeProjectModal);
+  });
+
+  var saveBtn = document.getElementById('projectModalSave');
+  if (saveBtn) saveBtn.onclick = handleSaveProject;
+
+  if (projectsState.activeProjectId) {
+    loadProjectDetail(projectsState.activeProjectId);
+    return;
+  }
+
+  subscribeProjectsList();
+};
+
+// ─── Projects: list subscription ────────────────────────────────────────────
+var subscribeProjectsList = function() {
+  if (!state.user) return;
+
+  var q = query(
+    collection(db, 'projects'),
+    where('memberIds', 'array-contains', state.user.uid),
+    orderBy('updatedAt', 'desc')
+  );
+
+  projectsState.unsubscribe = onSnapshot(q, function(snap) {
+    projectsState.projects = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      projectsState.projects.push(data);
+    });
+    renderProjectsList();
+  }, function(err) {
+    console.error('Projects list error:', err);
+  });
+};
+
+// ─── Projects: render list ──────────────────────────────────────────────────
+var renderProjectsList = function() {
+  var list = document.getElementById('projectsList');
+  if (!list) return;
+
+  if (projectsState.projects.length === 0) {
+    list.innerHTML = '<div class="card"><p class="text-muted">No projects yet. Create one to get started.</p></div>';
+    return;
+  }
+
+  list.innerHTML = projectsState.projects.map(function(p) {
+    var statusClass = 'project-status project-status-' + (p.status || 'active').replace(/\s/g, '-');
+    var memberCount = Array.isArray(p.memberIds) ? p.memberIds.length : 0;
+    var desc = escapeHTML((p.description || '').substring(0, 120));
+    return '' +
+      '<div class="project-card" data-project-card="' + escapeAttr(p.id) + '">' +
+        '<div class="project-card-name">' + escapeHTML(p.name || 'Untitled') + '</div>' +
+        (desc ? '<div class="project-card-desc">' + desc + '</div>' : '') +
+        '<div class="project-card-footer">' +
+          '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
+          '<span>' + memberCount + ' member' + (memberCount !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-project-card]').forEach(function(card) {
+    card.addEventListener('click', function() {
+      projectsState.activeProjectId = card.dataset.projectCard;
+      syncURLState();
+      loadProjectDetail(card.dataset.projectCard);
+    });
+  });
+};
+
+// ─── Projects: detail view ──────────────────────────────────────────────────
+var loadProjectDetail = function(projectId) {
+  var listEl = document.getElementById('projectsList');
+  var headerEl = document.querySelector('.page-header-row');
+  var detailEl = document.getElementById('projectDetail');
+  if (listEl) listEl.hidden = true;
+  if (headerEl) headerEl.hidden = true;
+  if (detailEl) {
+    detailEl.hidden = false;
+    detailEl.innerHTML = '<div class="feed-loading text-muted">Loading project...</div>';
+  }
+
+  if (projectsState.detailUnsubscribe) {
+    projectsState.detailUnsubscribe();
+  }
+
+  projectsState.detailUnsubscribe = onSnapshot(doc(db, 'projects', projectId), function(snap) {
+    if (!snap.exists()) {
+      if (detailEl) detailEl.innerHTML = '<div class="card"><p class="text-muted">Project not found.</p></div>';
+      return;
+    }
+    var p = snap.data();
+    p.id = snap.id;
+    renderProjectDetail(p);
+  }, function(err) {
+    console.error('Project detail error:', err);
+    if (detailEl) detailEl.innerHTML = '<div class="card"><p class="text-muted">Failed to load project.</p></div>';
+  });
+};
+
+var renderProjectDetail = function(p) {
+  var detailEl = document.getElementById('projectDetail');
+  if (!detailEl) return;
+
+  var statusClass = 'project-status project-status-' + (p.status || 'active').replace(/\s/g, '-');
+  var canEdit = state.user && (state.isAdmin || p.createdBy === state.user.uid);
+  var canDelete = canEdit;
+
+  // Members
+  var memberNames = p.memberNames || {};
+  var memberIds = Array.isArray(p.memberIds) ? p.memberIds : [];
+  var membersHtml = memberIds.map(function(uid) {
+    var name = memberNames[uid] || 'Member';
+    var initials = getInitials(name);
+    return '<div class="project-member-chip">' +
+      '<div class="project-member-avatar">' + escapeHTML(initials) + '</div>' +
+      '<span>' + escapeHTML(name) + '</span>' +
+    '</div>';
+  }).join('');
+
+  // Files
+  var files = Array.isArray(p.files) ? p.files : [];
+  var filesHtml = files.length === 0
+    ? '<p class="text-muted" style="font-size:13px;">No files attached yet.</p>'
+    : files.map(function(f, idx) {
+        return '<div class="project-file-row">' +
+          (f.iconUrl ? '<img src="' + escapeAttr(f.iconUrl) + '" width="18" height="18" alt="" />' : '&#128196;') +
+          '<a href="' + escapeAttr(f.fileUrl) + '" target="_blank" rel="noopener">' + escapeHTML(f.fileName || 'File') + '</a>' +
+          '<span class="project-file-meta">by ' + escapeHTML(f.addedByName || 'Member') + '</span>' +
+        '</div>';
+      }).join('');
+
+  // Comments / discussion
+  var comments = Array.isArray(p.comments) ? p.comments : [];
+  var commentsHtml = comments.map(function(c) {
+    var cTime = (c.createdAt && typeof c.createdAt.toDate === 'function')
+      ? relativeTime(c.createdAt.toDate())
+      : 'just now';
+    return '<div class="project-comment">' +
+      '<div class="project-comment-avatar">' + escapeHTML(getInitials(c.authorName || '?')) + '</div>' +
+      '<div class="project-comment-body">' +
+        '<span class="project-comment-author">' + escapeHTML(c.authorName || 'Member') + '</span>' +
+        '<span class="project-comment-time">' + cTime + '</span>' +
+        '<div class="project-comment-text">' + linkifyText(escapeHTML(c.body || '')) + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  detailEl.innerHTML = '' +
+    '<div class="project-detail-header">' +
+      '<button class="project-detail-back" id="projectBackBtn">&larr; Back to Projects</button>' +
+      '<div class="project-detail-title">' + escapeHTML(p.name || 'Untitled') + '</div>' +
+      '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
+      (p.description ? '<div class="project-detail-desc">' + escapeHTML(p.description) + '</div>' : '') +
+      (canEdit ? '<div class="project-detail-actions">' +
+        '<button class="btn btn-ghost" id="projectEditBtn">Edit</button>' +
+        (canDelete ? '<button class="btn btn-ghost post-action-danger" id="projectDeleteBtn">Delete</button>' : '') +
+      '</div>' : '') +
+    '</div>' +
+
+    '<div class="project-detail-section">' +
+      '<h3>Members</h3>' +
+      '<div class="project-members-list">' + membersHtml + '</div>' +
+    '</div>' +
+
+    '<div class="project-detail-section">' +
+      '<h3>Files</h3>' +
+      '<div class="project-files-list">' + filesHtml + '</div>' +
+      '<button class="btn btn-ghost" id="projectAttachFileBtn" style="margin-top:8px;">&#128193; Attach from Drive</button>' +
+    '</div>' +
+
+    '<div class="project-detail-section">' +
+      '<h3>Discussion</h3>' +
+      '<div class="project-discussion">' + commentsHtml + '</div>' +
+      '<form class="project-comment-compose" id="projectCommentForm">' +
+        '<input type="text" maxlength="500" placeholder="Write a comment..." id="projectCommentInput" />' +
+        '<button class="btn btn-primary" type="submit">Send</button>' +
+      '</form>' +
+    '</div>';
+
+  // Wire back button
+  var backBtn = document.getElementById('projectBackBtn');
+  if (backBtn) backBtn.onclick = function() {
+    projectsState.activeProjectId = null;
+    if (projectsState.detailUnsubscribe) {
+      projectsState.detailUnsubscribe();
+      projectsState.detailUnsubscribe = null;
+    }
+    var listEl = document.getElementById('projectsList');
+    var headerEl = document.querySelector('.page-header-row');
+    var detailEl2 = document.getElementById('projectDetail');
+    if (listEl) listEl.hidden = false;
+    if (headerEl) headerEl.hidden = false;
+    if (detailEl2) { detailEl2.hidden = true; detailEl2.innerHTML = ''; }
+    syncURLState();
+    subscribeProjectsList();
+  };
+
+  // Wire edit
+  var editBtn = document.getElementById('projectEditBtn');
+  if (editBtn) editBtn.onclick = function() {
+    projectsState.editingProjectId = p.id;
+    openProjectModal(p);
+  };
+
+  // Wire delete
+  var deleteBtn = document.getElementById('projectDeleteBtn');
+  if (deleteBtn) deleteBtn.onclick = function() {
+    if (!confirm('Delete this project? This cannot be undone.')) return;
+    deleteDoc(doc(db, 'projects', p.id)).then(function() {
+      showToast('Project deleted.', 'info');
+      projectsState.activeProjectId = null;
+      loadPage('projects');
+    }).catch(function(err) {
+      console.error('Delete project error:', err);
+      showToast('Failed to delete project.', 'error');
+    });
+  };
+
+  // Wire file attach
+  var attachBtn = document.getElementById('projectAttachFileBtn');
+  if (attachBtn) attachBtn.onclick = function() {
+    pickerContext = 'project';
+    pickerProjectId = p.id;
+    openDrivePicker();
+  };
+
+  // Wire comment form
+  var commentForm = document.getElementById('projectCommentForm');
+  if (commentForm) commentForm.onsubmit = function(e) {
+    e.preventDefault();
+    var input = document.getElementById('projectCommentInput');
+    var body = (input ? input.value : '').trim();
+    if (!body) return;
+    handleProjectComment(p.id, body);
+    if (input) input.value = '';
+  };
+
+  syncSidebarSelection();
+};
+
+// ─── Projects: modal ────────────────────────────────────────────────────────
+var openProjectModal = function(existingProject) {
+  var modal = document.getElementById('projectModal');
+  if (!modal) return;
+
+  var titleEl = document.getElementById('projectModalTitle');
+  var nameInput = document.getElementById('projectNameInput');
+  var descInput = document.getElementById('projectDescInput');
+  var statusInput = document.getElementById('projectStatusInput');
+
+  if (titleEl) titleEl.textContent = existingProject ? 'Edit Project' : 'New Project';
+  if (nameInput) nameInput.value = existingProject ? (existingProject.name || '') : '';
+  if (descInput) descInput.value = existingProject ? (existingProject.description || '') : '';
+  if (statusInput) statusInput.value = existingProject ? (existingProject.status || 'active') : 'active';
+
+  // Load member checkboxes
+  loadProjectMemberChecks(existingProject);
+
+  modal.hidden = false;
+};
+
+var closeProjectModal = function() {
+  var modal = document.getElementById('projectModal');
+  if (modal) modal.hidden = true;
+};
+
+var loadProjectMemberChecks = function(existingProject) {
+  var container = document.getElementById('projectMemberChecks');
+  if (!container) return;
+  container.innerHTML = '<span class="text-muted">Loading...</span>';
+
+  getDocs(collection(db, 'users')).then(function(snap) {
+    if (snap.empty) {
+      container.innerHTML = '<span class="text-muted">No members found.</span>';
+      return;
+    }
+
+    var existingMembers = existingProject && Array.isArray(existingProject.memberIds)
+      ? existingProject.memberIds
+      : (state.user ? [state.user.uid] : []);
+
+    var html = '';
+    snap.forEach(function(d) {
+      var u = d.data();
+      var checked = existingMembers.indexOf(d.id) !== -1 ? ' checked' : '';
+      var disabled = d.id === (state.user ? state.user.uid : '') ? ' disabled' : '';
+      html += '<label><input type="checkbox" value="' + escapeAttr(d.id) + '" data-name="' + escapeAttr(u.displayName || u.email || 'Member') + '"' + checked + disabled + ' /> ' + escapeHTML(u.displayName || u.email || 'Member') + '</label>';
+    });
+    container.innerHTML = html;
+  }).catch(function(err) {
+    console.error('Load members error:', err);
+    container.innerHTML = '<span class="text-muted">Failed to load members.</span>';
+  });
+};
+
+// ─── Projects: save (create or update) ──────────────────────────────────────
+var handleSaveProject = function() {
+  var nameInput = document.getElementById('projectNameInput');
+  var descInput = document.getElementById('projectDescInput');
+  var statusInput = document.getElementById('projectStatusInput');
+  var container = document.getElementById('projectMemberChecks');
+
+  var name = (nameInput ? nameInput.value : '').trim();
+  if (!name) {
+    showToast('Project name is required.', 'error');
+    return;
+  }
+
+  var description = (descInput ? descInput.value : '').trim();
+  var status = statusInput ? statusInput.value : 'active';
+
+  // Gather selected members
+  var memberIds = [];
+  var memberNames = {};
+  if (container) {
+    container.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+      memberIds.push(cb.value);
+      memberNames[cb.value] = cb.dataset.name || 'Member';
+    });
+  }
+  // Ensure creator is always included
+  if (state.user && memberIds.indexOf(state.user.uid) === -1) {
+    memberIds.push(state.user.uid);
+    memberNames[state.user.uid] = state.user.displayName || state.user.email || 'Member';
+  }
+
+  var saveBtn = document.getElementById('projectModalSave');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  if (projectsState.editingProjectId) {
+    // Update existing
+    updateDoc(doc(db, 'projects', projectsState.editingProjectId), {
+      name: name,
+      description: description,
+      status: status,
+      memberIds: memberIds,
+      memberNames: memberNames,
+      updatedAt: serverTimestamp()
+    }).then(function() {
+      closeProjectModal();
+      showToast('Project updated.', 'info');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    }).catch(function(err) {
+      console.error('Update project error:', err);
+      showToast('Failed to update: ' + (err.message || ''), 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    });
+  } else {
+    // Create new
+    addDoc(collection(db, 'projects'), {
+      name: name,
+      description: description,
+      status: status,
+      createdBy: state.user.uid,
+      createdByName: state.user.displayName || state.user.email || 'Member',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      memberIds: memberIds,
+      memberNames: memberNames,
+      files: [],
+      comments: []
+    }).then(function(docRef) {
+      closeProjectModal();
+      showToast('Project created!', 'info');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+      projectsState.activeProjectId = docRef.id;
+      syncURLState();
+      loadProjectDetail(docRef.id);
+    }).catch(function(err) {
+      console.error('Create project error:', err);
+      showToast('Failed to create: ' + (err.message || ''), 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    });
+  }
+};
+
+// ─── Projects: add comment ──────────────────────────────────────────────────
+var handleProjectComment = function(projectId, body) {
+  var ref = doc(db, 'projects', projectId);
+  runTransaction(db, function(tx) {
+    return tx.get(ref).then(function(snap) {
+      if (!snap.exists()) throw new Error('Project not found');
+      var data = snap.data();
+      var comments = Array.isArray(data.comments) ? data.comments.slice() : [];
+      comments.push({
+        uid: state.user.uid,
+        authorName: state.user.displayName || state.user.email || 'Member',
+        body: body,
+        createdAt: Timestamp.now()
+      });
+      tx.update(ref, { comments: comments, updatedAt: serverTimestamp() });
+    });
+  }).catch(function(err) {
+    console.error('Project comment error:', err);
+    showToast('Failed to post comment.', 'error');
+  });
+};
+
+// ─── Projects: attach file ──────────────────────────────────────────────────
+var handleProjectFileAttach = function(projectId, fileData) {
+  var ref = doc(db, 'projects', projectId);
+  runTransaction(db, function(tx) {
+    return tx.get(ref).then(function(snap) {
+      if (!snap.exists()) throw new Error('Project not found');
+      var data = snap.data();
+      var files = Array.isArray(data.files) ? data.files.slice() : [];
+      files.push(fileData);
+      tx.update(ref, { files: files, updatedAt: serverTimestamp() });
+    });
+  }).then(function() {
+    showToast('File attached!', 'info');
+  }).catch(function(err) {
+    console.error('Project file attach error:', err);
+    showToast('Failed to attach file.', 'error');
   });
 };
 

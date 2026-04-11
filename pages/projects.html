@@ -1,0 +1,39 @@
+<div class="page-header page-header-row">
+  <div>
+    <h1>Projects</h1>
+    <p class="text-muted">Collaborative workspaces.</p>
+  </div>
+  <button class="btn btn-primary" id="createProjectBtn">+ New Project</button>
+</div>
+
+<!-- Create/Edit modal -->
+<div class="project-modal" id="projectModal" hidden>
+  <div class="project-modal-backdrop" data-action="close-project-modal"></div>
+  <div class="project-modal-content card">
+    <h2 id="projectModalTitle">New Project</h2>
+    <label class="form-label">Name</label>
+    <input type="text" class="form-input" id="projectNameInput" maxlength="100" />
+    <label class="form-label mt-8">Description</label>
+    <textarea class="form-input" id="projectDescInput" rows="3" maxlength="500"></textarea>
+    <label class="form-label mt-8">Status</label>
+    <select class="form-input" id="projectStatusInput">
+      <option value="active">Active</option>
+      <option value="on-hold">On Hold</option>
+      <option value="completed">Completed</option>
+    </select>
+    <label class="form-label mt-8">Members</label>
+    <div id="projectMemberChecks">Loading members...</div>
+    <div class="mt-16 flex gap-8">
+      <button class="btn btn-primary" id="projectModalSave">Save</button>
+      <button class="btn btn-ghost" data-action="close-project-modal">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project list -->
+<div class="projects-grid" id="projectsList">
+  <div class="feed-loading text-muted">Loading projects...</div>
+</div>
+
+<!-- Project detail (swapped in when selected) -->
+<div id="projectDetail" hidden></div>
