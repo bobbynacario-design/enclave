@@ -289,7 +289,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v68';
+var ASSET_VERSION = 'v69';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -344,11 +344,8 @@ var renderShell = function() {
         e.preventDefault();
         projectsState.activeProjectId = null;
         projectsState.editingProjectId = null;
+        projectsState.openModalOnLoad = true;
         loadPage('projects');
-        setTimeout(function() {
-          var modal = document.getElementById('projectModal');
-          if (modal) modal.hidden = false;
-        }, 200);
       });
     }
 
@@ -3494,6 +3491,12 @@ var initProjectsPage = function() {
 
   var saveBtn = document.getElementById('projectModalSave');
   if (saveBtn) saveBtn.onclick = handleSaveProject;
+
+  // Open modal if triggered from sidebar "new project" link
+  if (projectsState.openModalOnLoad) {
+    projectsState.openModalOnLoad = false;
+    openProjectModal();
+  }
 
   if (projectsState.activeProjectId) {
     loadProjectDetail(projectsState.activeProjectId);
