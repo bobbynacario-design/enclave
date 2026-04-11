@@ -142,9 +142,15 @@ var resetProjectDetailState = function() {
     projectsState.filesUnsubscribe = null;
   }
 
+  if (projectsState.tasksUnsubscribe) {
+    projectsState.tasksUnsubscribe();
+    projectsState.tasksUnsubscribe = null;
+  }
+
   projectsState.detailProject = null;
   projectsState.detailComments = [];
   projectsState.detailFiles = [];
+  projectsState.detailTasks = [];
 };
 
 var VALID_PAGES = {
@@ -167,7 +173,9 @@ var projectsState = {
   editingProjectId:   null,
   detailProject:      null,
   detailComments:     [],
-  detailFiles:        []
+  detailFiles:        [],
+  detailTasks:        [],
+  tasksUnsubscribe:   null
 };
 
 var pickerContext = 'feed';
@@ -3633,25 +3641,21 @@ var getFirestoreTimeMs = function(value) {
 };
 
 var getProjectCommentsForRender = function(p) {
-  var legacy = Array.isArray(p.comments) ? p.comments.slice() : [];
-  var live = projectsState.activeProjectId === p.id
+  return projectsState.activeProjectId === p.id
     ? projectsState.detailComments.slice()
     : [];
-
-  return legacy.concat(live).sort(function(a, b) {
-    return getFirestoreTimeMs(a.createdAt) - getFirestoreTimeMs(b.createdAt);
-  });
 };
 
 var getProjectFilesForRender = function(p) {
-  var legacy = Array.isArray(p.files) ? p.files.slice() : [];
-  var live = projectsState.activeProjectId === p.id
+  return projectsState.activeProjectId === p.id
     ? projectsState.detailFiles.slice()
     : [];
+};
 
-  return legacy.concat(live).sort(function(a, b) {
-    return getFirestoreTimeMs(b.addedAt || b.createdAt) - getFirestoreTimeMs(a.addedAt || a.createdAt);
-  });
+var getProjectTasksForRender = function(p) {
+  return projectsState.activeProjectId === p.id
+    ? projectsState.detailTasks.slice()
+    : [];
 };
 
 var sortProjectsByUpdatedAt = function(items) {
@@ -3677,8 +3681,14 @@ var subscribeProjectCollections = function(projectId) {
     projectsState.filesUnsubscribe = null;
   }
 
+  if (projectsState.tasksUnsubscribe) {
+    projectsState.tasksUnsubscribe();
+    projectsState.tasksUnsubscribe = null;
+  }
+
   projectsState.detailComments = [];
   projectsState.detailFiles = [];
+  projectsState.detailTasks = [];
 
   projectsState.commentsUnsubscribe = onSnapshot(
     query(collection(db, 'projects', projectId, 'comments'), orderBy('createdAt', 'asc')),
@@ -3709,6 +3719,22 @@ var subscribeProjectCollections = function(projectId) {
     },
     function(err) {
       console.error('Project files error:', err);
+    }
+  );
+
+  projectsState.tasksUnsubscribe = onSnapshot(
+    query(collection(db, 'projects', projectId, 'tasks'), orderBy('createdAt', 'asc')),
+    function(snap) {
+      projectsState.detailTasks = [];
+      snap.forEach(function(d) {
+        var data = d.data();
+        data.id = d.id;
+        projectsState.detailTasks.push(data);
+      });
+      refreshProjectDetailView();
+    },
+    function(err) {
+      console.error('Project tasks error:', err);
     }
   );
 };
@@ -3763,6 +3789,38 @@ var renderProjectDetail = function(p) {
     '</div>';
   }).join('');
 
+  // Tasks
+  var tasks = getProjectTasksForRender(p);
+  var openTasks = tasks.filter(function(t) { return t.status !== 'done'; });
+  var doneTasks = tasks.filter(function(t) { return t.status === 'done'; });
+  var sortedTasks = openTasks.concat(doneTasks);
+
+  var tasksHtml = sortedTasks.length === 0
+    ? '<p class="text-muted" style="font-size:13px;">No tasks yet. Add one to get started.</p>'
+    : sortedTasks.map(function(t) {
+        var assigneeName = t.assigneeName || 'Unassigned';
+        var statusCls = 'task-status task-status-' + (t.status || 'todo');
+        var statusLabel = t.status === 'doing' ? 'Doing' : t.status === 'done' ? 'Done' : 'To Do';
+        var dueDateHtml = '';
+        if (t.dueDate) {
+          var now = new Date();
+          var due = new Date(t.dueDate);
+          var overdue = t.status !== 'done' && due < now;
+          dueDateHtml = '<span class="task-due' + (overdue ? ' task-overdue' : '') + '">' + escapeHTML(t.dueDate) + '</span>';
+        }
+        var isDone = t.status === 'done';
+        var canDeleteTask = state.isAdmin || (state.user && t.createdBy === state.user.uid);
+        return '<div class="task-row' + (isDone ? ' task-done' : '') + '" data-task-id="' + escapeAttr(t.id) + '">' +
+          '<button class="task-status-btn ' + statusCls + '" data-task-cycle="' + escapeAttr(t.id) + '" title="Cycle status">' + statusLabel + '</button>' +
+          '<div class="task-info">' +
+            '<span class="task-title">' + escapeHTML(t.title || 'Untitled') + '</span>' +
+            '<span class="task-assignee">' + escapeHTML(assigneeName) + '</span>' +
+          '</div>' +
+          dueDateHtml +
+          (canDeleteTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task">&times;</button>' : '') +
+        '</div>';
+      }).join('');
+
   // Files
   var files = getProjectFilesForRender(p);
   var filesHtml = files.length === 0
@@ -3806,6 +3864,22 @@ var renderProjectDetail = function(p) {
     '<div class="project-detail-section">' +
       '<h3>Members</h3>' +
       '<div class="project-members-list">' + membersHtml + '</div>' +
+    '</div>' +
+
+    '<div class="project-detail-section">' +
+      '<h3>Tasks <span class="task-count">' + openTasks.length + ' open</span></h3>' +
+      '<div class="project-tasks-list">' + tasksHtml + '</div>' +
+      '<form class="task-add-form" id="taskAddForm">' +
+        '<input type="text" class="form-input" id="taskTitleInput" placeholder="Task title..." maxlength="200" />' +
+        '<select class="form-input task-add-assignee" id="taskAssigneeInput">' +
+          '<option value="">Unassigned</option>' +
+          memberIds.map(function(uid) {
+            return '<option value="' + escapeAttr(uid) + '">' + escapeHTML(memberNames[uid] || 'Member') + '</option>';
+          }).join('') +
+        '</select>' +
+        '<input type="date" class="form-input task-add-date" id="taskDueDateInput" />' +
+        '<button class="btn btn-primary" type="submit">Add</button>' +
+      '</form>' +
     '</div>' +
 
     '<div class="project-detail-section">' +
@@ -3855,7 +3929,8 @@ var renderProjectDetail = function(p) {
     var projectRef = doc(db, 'projects', p.id);
     var commentsCol = collection(db, 'projects', p.id, 'comments');
     var filesCol = collection(db, 'projects', p.id, 'files');
-    Promise.all([getDocs(commentsCol), getDocs(filesCol)]).then(function(results) {
+    var tasksCol = collection(db, 'projects', p.id, 'tasks');
+    Promise.all([getDocs(commentsCol), getDocs(filesCol), getDocs(tasksCol)]).then(function(results) {
       var deletes = [];
       results.forEach(function(snap) {
         snap.forEach(function(d) { deletes.push(deleteDoc(d.ref)); });
@@ -3891,6 +3966,60 @@ var renderProjectDetail = function(p) {
     handleProjectComment(p.id, body);
     if (input) input.value = '';
   };
+
+  // Wire task add form
+  var taskForm = document.getElementById('taskAddForm');
+  if (taskForm) taskForm.onsubmit = function(e) {
+    e.preventDefault();
+    var titleInput = document.getElementById('taskTitleInput');
+    var assigneeInput = document.getElementById('taskAssigneeInput');
+    var dueDateInput = document.getElementById('taskDueDateInput');
+    var title = (titleInput ? titleInput.value : '').trim();
+    if (!title) return;
+    var assigneeId = assigneeInput ? assigneeInput.value : '';
+    var assigneeName = '';
+    if (assigneeId && assigneeInput) {
+      var sel = assigneeInput.options[assigneeInput.selectedIndex];
+      assigneeName = sel ? sel.textContent : '';
+    }
+    handleAddTask(p.id, {
+      title: title,
+      assigneeId: assigneeId,
+      assigneeName: assigneeName,
+      dueDate: dueDateInput ? dueDateInput.value : ''
+    });
+    if (titleInput) titleInput.value = '';
+    if (assigneeInput) assigneeInput.value = '';
+    if (dueDateInput) dueDateInput.value = '';
+  };
+
+  // Wire task status cycling
+  document.querySelectorAll('[data-task-cycle]').forEach(function(btn) {
+    btn.onclick = function() {
+      var taskId = btn.dataset.taskCycle;
+      var task = projectsState.detailTasks.find(function(t) { return t.id === taskId; });
+      if (!task) return;
+      var nextStatus = task.status === 'todo' ? 'doing' : task.status === 'doing' ? 'done' : 'todo';
+      updateDoc(doc(db, 'projects', p.id, 'tasks', taskId), {
+        status: nextStatus
+      }).catch(function(err) {
+        console.error('Task status update error:', err);
+        showToast('Failed to update task.', 'error');
+      });
+    };
+  });
+
+  // Wire task delete
+  document.querySelectorAll('[data-task-delete]').forEach(function(btn) {
+    btn.onclick = function() {
+      var taskId = btn.dataset.taskDelete;
+      if (!confirm('Delete this task?')) return;
+      deleteDoc(doc(db, 'projects', p.id, 'tasks', taskId)).catch(function(err) {
+        console.error('Delete task error:', err);
+        showToast('Failed to delete task.', 'error');
+      });
+    };
+  });
 
   syncSidebarSelection();
 };
@@ -4065,6 +4194,25 @@ var handleProjectFileAttach = function(projectId, fileData) {
   }).catch(function(err) {
     console.error('Project file attach error:', err);
     showToast('Failed to attach file.', 'error');
+  });
+};
+
+// ─── Projects: add task ────────────────────────────────────────────────────
+var handleAddTask = function(projectId, taskData) {
+  return addDoc(collection(db, 'projects', projectId, 'tasks'), {
+    title: taskData.title,
+    assigneeId: taskData.assigneeId || '',
+    assigneeName: taskData.assigneeName || '',
+    dueDate: taskData.dueDate || '',
+    status: 'todo',
+    createdBy: state.user.uid,
+    createdByName: state.user.displayName || state.user.email || 'Member',
+    createdAt: serverTimestamp()
+  }).then(function() {
+    showToast('Task added.', 'info');
+  }).catch(function(err) {
+    console.error('Add task error:', err);
+    showToast('Failed to add task.', 'error');
   });
 };
 
