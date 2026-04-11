@@ -262,6 +262,19 @@ service cloud.firestore {
           resource.data.createdBy == request.auth.uid
         );
       }
+
+      match /activity/{activityId} {
+        allow get, list: if canAccessProject(projectId);
+
+        allow create: if canAccessProject(projectId) &&
+          request.resource.data.keys().hasOnly(['action', 'detail', 'authorId', 'authorName', 'createdAt']) &&
+          request.resource.data.action is string &&
+          request.resource.data.detail is string &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.authorName is string;
+
+        allow update, delete: if false;
+      }
     }
 
     match /events/{eventId} {

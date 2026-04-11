@@ -156,10 +156,16 @@ var resetProjectDetailState = function() {
     projectsState.tasksUnsubscribe = null;
   }
 
+  if (projectsState.activityUnsubscribe) {
+    projectsState.activityUnsubscribe();
+    projectsState.activityUnsubscribe = null;
+  }
+
   projectsState.detailProject = null;
   projectsState.detailComments = [];
   projectsState.detailFiles = [];
   projectsState.detailTasks = [];
+  projectsState.detailActivity = [];
 };
 
 var VALID_PAGES = {
@@ -184,7 +190,10 @@ var projectsState = {
   detailComments:     [],
   detailFiles:        [],
   detailTasks:        [],
-  tasksUnsubscribe:   null
+  tasksUnsubscribe:   null,
+  taskFilter:         'all',
+  detailActivity:     [],
+  activityUnsubscribe: null
 };
 
 var pickerContext = 'feed';
@@ -354,7 +363,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v93';
+var ASSET_VERSION = 'v94';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3802,7 +3811,7 @@ var renderProjectsList = function() {
       '</div>';
   }).join('');
 
-  // Fetch task counts per project
+  // Fetch task counts per project and render mini progress
   projectsState.projects.forEach(function(p) {
     getDocs(collection(db, 'projects', p.id, 'tasks')).then(function(snap) {
       var total = snap.size;
@@ -3810,7 +3819,9 @@ var renderProjectsList = function() {
       snap.forEach(function(d) { if (d.data().status === 'done') done++; });
       var el = document.querySelector('[data-task-count-for="' + p.id + '"]');
       if (el && total > 0) {
-        el.textContent = done + '/' + total + ' tasks';
+        var pct = Math.round((done / total) * 100);
+        el.innerHTML = '<span class="project-card-tasks-label">' + done + '/' + total + ' tasks</span>' +
+          '<div class="project-card-progress"><div class="project-card-progress-fill" style="width:' + pct + '%"></div></div>';
       }
     }).catch(function() {});
   });
@@ -3937,6 +3948,28 @@ var subscribeProjectCollections = function(projectId) {
       console.error('Project tasks error:', err);
     }
   );
+
+  if (projectsState.activityUnsubscribe) {
+    projectsState.activityUnsubscribe();
+    projectsState.activityUnsubscribe = null;
+  }
+  projectsState.detailActivity = [];
+
+  projectsState.activityUnsubscribe = onSnapshot(
+    query(collection(db, 'projects', projectId, 'activity'), orderBy('createdAt', 'desc'), limit(30)),
+    function(snap) {
+      projectsState.detailActivity = [];
+      snap.forEach(function(d) {
+        var data = d.data();
+        data.id = d.id;
+        projectsState.detailActivity.push(data);
+      });
+      refreshProjectDetailView();
+    },
+    function(err) {
+      console.error('Project activity error:', err);
+    }
+  );
 };
 
 // ─── Projects: detail view ──────────────────────────────────────────────────
@@ -3990,13 +4023,56 @@ var renderProjectDetail = function(p) {
   }).join('');
 
   // Tasks
-  var tasks = getProjectTasksForRender(p);
-  var openTasks = tasks.filter(function(t) { return t.status !== 'done'; });
-  var doneTasks = tasks.filter(function(t) { return t.status === 'done'; });
-  var sortedTasks = openTasks.concat(doneTasks);
+  var allTasks = getProjectTasksForRender(p);
+  var openTasks = allTasks.filter(function(t) { return t.status !== 'done'; });
+  var doneTasks = allTasks.filter(function(t) { return t.status === 'done'; });
+  var totalTasks = allTasks.length;
+  var doneCount = doneTasks.length;
+  var progressPct = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
+
+  // Apply task filter
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+  var filteredTasks = allTasks;
+  var tf = projectsState.taskFilter || 'all';
+  if (tf === 'mine') {
+    filteredTasks = allTasks.filter(function(t) { return state.user && t.assigneeId === state.user.uid; });
+  } else if (tf === 'overdue') {
+    filteredTasks = allTasks.filter(function(t) {
+      if (t.status === 'done' || !t.dueDate) return false;
+      return new Date(t.dueDate + 'T00:00:00') < now;
+    });
+  }
+  var filteredOpen = filteredTasks.filter(function(t) { return t.status !== 'done'; });
+  var filteredDone = filteredTasks.filter(function(t) { return t.status === 'done'; });
+  var sortedTasks = filteredOpen.concat(filteredDone);
+
+  // Overdue count for filter badge
+  var overdueCount = allTasks.filter(function(t) {
+    if (t.status === 'done' || !t.dueDate) return false;
+    return new Date(t.dueDate + 'T00:00:00') < now;
+  }).length;
+  var myTaskCount = allTasks.filter(function(t) { return state.user && t.assigneeId === state.user.uid; }).length;
+
+  // Progress bar
+  var progressHtml = totalTasks > 0
+    ? '<div class="task-progress">' +
+        '<div class="task-progress-bar"><div class="task-progress-fill" style="width:' + progressPct + '%"></div></div>' +
+        '<span class="task-progress-label">' + doneCount + '/' + totalTasks + ' done (' + progressPct + '%)</span>' +
+      '</div>'
+    : '';
+
+  // Filter pills
+  var filterHtml = totalTasks > 0
+    ? '<div class="task-filters">' +
+        '<button class="task-filter-pill' + (tf === 'all' ? ' active' : '') + '" data-task-filter="all">All (' + totalTasks + ')</button>' +
+        '<button class="task-filter-pill' + (tf === 'mine' ? ' active' : '') + '" data-task-filter="mine">My Tasks (' + myTaskCount + ')</button>' +
+        '<button class="task-filter-pill' + (tf === 'overdue' ? ' active' : '') + '" data-task-filter="overdue">Overdue' + (overdueCount > 0 ? ' (' + overdueCount + ')' : '') + '</button>' +
+      '</div>'
+    : '';
 
   var tasksHtml = sortedTasks.length === 0
-    ? '<p class="text-muted" style="font-size:13px;">No tasks yet. Add one to get started.</p>'
+    ? '<p class="text-muted" style="font-size:13px;">' + (totalTasks === 0 ? 'No tasks yet. Add one to get started.' : 'No tasks match this filter.') + '</p>'
     : sortedTasks.map(function(t) {
         var assigneeName = t.assigneeName || 'Unassigned';
         var statusCls = 'task-status task-status-' + (t.status || 'todo');
@@ -4051,7 +4127,7 @@ var renderProjectDetail = function(p) {
       '<div class="project-comment-body">' +
         '<span class="project-comment-author">' + escapeHTML(c.authorName || 'Member') + '</span>' +
         '<span class="project-comment-time">' + cTime + '</span>' +
-        '<div class="project-comment-text">' + linkifyText(escapeHTML(c.body || '')) + '</div>' +
+        '<div class="project-comment-text">' + highlightMentions(linkifyText(escapeHTML(c.body || ''))) + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -4070,6 +4146,8 @@ var renderProjectDetail = function(p) {
 
     '<div class="project-detail-section">' +
       '<h3>Tasks <span class="task-count">' + openTasks.length + ' open</span></h3>' +
+      progressHtml +
+      filterHtml +
       '<div class="project-tasks-list">' + tasksHtml + '</div>' +
       '<form class="task-add-form" id="taskAddForm">' +
         '<input type="text" class="form-input" id="taskTitleInput" placeholder="Task title..." maxlength="200" />' +
@@ -4093,6 +4171,25 @@ var renderProjectDetail = function(p) {
       '<h3>Files</h3>' +
       '<div class="project-files-list">' + filesHtml + '</div>' +
       '<button class="btn btn-ghost" id="projectAttachFileBtn" style="margin-top:8px;">&#128193; Attach from Drive</button>' +
+    '</div>' +
+
+    '<div class="project-detail-section project-activity-section">' +
+      '<h3>Activity</h3>' +
+      '<div class="project-activity-log">' +
+        (projectsState.detailActivity.length === 0
+          ? '<p class="text-muted" style="font-size:13px;">No activity yet.</p>'
+          : projectsState.detailActivity.map(function(a) {
+              var aTime = (a.createdAt && typeof a.createdAt.toDate === 'function')
+                ? relativeTime(a.createdAt.toDate())
+                : 'just now';
+              var icon = a.action === 'status' ? '&#9654;' : a.action === 'created' ? '&#43;' : '&#9998;';
+              return '<div class="activity-entry">' +
+                '<span class="activity-icon">' + icon + '</span>' +
+                '<span class="activity-text"><strong>' + escapeHTML(a.authorName || 'Member') + '</strong> ' + escapeHTML(a.detail || a.action || '') + '</span>' +
+                '<span class="activity-time">' + escapeHTML(aTime) + '</span>' +
+              '</div>';
+            }).join('')) +
+      '</div>' +
     '</div>' +
 
     '<div class="project-detail-section">' +
@@ -4137,7 +4234,8 @@ var renderProjectDetail = function(p) {
     var commentsCol = collection(db, 'projects', p.id, 'comments');
     var filesCol = collection(db, 'projects', p.id, 'files');
     var tasksCol = collection(db, 'projects', p.id, 'tasks');
-    Promise.all([getDocs(commentsCol), getDocs(filesCol), getDocs(tasksCol)]).then(function(results) {
+    var activityCol = collection(db, 'projects', p.id, 'activity');
+    Promise.all([getDocs(commentsCol), getDocs(filesCol), getDocs(tasksCol), getDocs(activityCol)]).then(function(results) {
       var deletes = [];
       results.forEach(function(snap) {
         snap.forEach(function(d) { deletes.push(deleteDoc(d.ref)); });
@@ -4174,6 +4272,55 @@ var renderProjectDetail = function(p) {
     if (input) input.value = '';
   };
 
+  // Wire @mention autocomplete on comment input
+  var commentInput = document.getElementById('projectCommentInput');
+  if (commentInput) {
+    var mentionDropdown = null;
+    commentInput.addEventListener('input', function() {
+      var val = commentInput.value;
+      var cursorPos = commentInput.selectionStart;
+      var textBeforeCursor = val.substring(0, cursorPos);
+      var atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+      if (mentionDropdown) { mentionDropdown.remove(); mentionDropdown = null; }
+
+      if (!atMatch) return;
+      var search = atMatch[1].toLowerCase();
+      var matches = memberIds.filter(function(uid) {
+        var name = (memberNames[uid] || '').toLowerCase();
+        return name.indexOf(search) !== -1;
+      });
+      if (matches.length === 0) return;
+
+      mentionDropdown = document.createElement('div');
+      mentionDropdown.className = 'mention-dropdown';
+      matches.forEach(function(uid) {
+        var option = document.createElement('div');
+        option.className = 'mention-option';
+        option.textContent = memberNames[uid] || 'Member';
+        option.onclick = function() {
+          var before = val.substring(0, cursorPos - atMatch[0].length);
+          var after = val.substring(cursorPos);
+          var name = memberNames[uid] || 'Member';
+          commentInput.value = before + '@' + name + ' ' + after;
+          commentInput.focus();
+          var newPos = before.length + name.length + 2;
+          commentInput.setSelectionRange(newPos, newPos);
+          if (mentionDropdown) { mentionDropdown.remove(); mentionDropdown = null; }
+        };
+        mentionDropdown.appendChild(option);
+      });
+      commentForm.style.position = 'relative';
+      commentForm.appendChild(mentionDropdown);
+    });
+
+    commentInput.addEventListener('blur', function() {
+      setTimeout(function() {
+        if (mentionDropdown) { mentionDropdown.remove(); mentionDropdown = null; }
+      }, 200);
+    });
+  }
+
   // Wire task add form
   var taskForm = document.getElementById('taskAddForm');
   if (taskForm) taskForm.onsubmit = function(e) {
@@ -4209,6 +4356,9 @@ var renderProjectDetail = function(p) {
       var nextStatus = task.status === 'todo' ? 'doing' : task.status === 'doing' ? 'done' : 'todo';
       updateDoc(doc(db, 'projects', p.id, 'tasks', taskId), {
         status: nextStatus
+      }).then(function() {
+        var statusLabels = { todo: 'To Do', doing: 'Doing', done: 'Done' };
+        logProjectActivity(p.id, 'status', 'moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus]);
       }).catch(function(err) {
         console.error('Task status update error:', err);
         showToast('Failed to update task.', 'error');
@@ -4275,6 +4425,13 @@ var renderProjectDetail = function(p) {
           status: task.status
         }).then(function() {
           showToast('Task updated.', 'info');
+          var changes = [];
+          if (newTitle !== task.title) changes.push('renamed to "' + newTitle + '"');
+          if (newAssigneeId !== task.assigneeId) changes.push('reassigned to ' + (newAssigneeName || 'Unassigned'));
+          if (newDueDate !== (task.dueDate || '')) changes.push('due date set to ' + (newDueDate || 'none'));
+          if (changes.length > 0) {
+            logProjectActivity(p.id, 'edited', '"' + (task.title || 'Untitled') + '": ' + changes.join(', '));
+          }
           if (projectsState.detailProject) {
             renderProjectDetail(projectsState.detailProject);
           }
@@ -4287,6 +4444,16 @@ var renderProjectDetail = function(p) {
       form.querySelector('[data-edit-cancel]').onclick = function() {
         refreshProjectDetailView();
       };
+    };
+  });
+
+  // Wire task filter pills
+  document.querySelectorAll('[data-task-filter]').forEach(function(pill) {
+    pill.onclick = function() {
+      projectsState.taskFilter = pill.dataset.taskFilter;
+      if (projectsState.detailProject) {
+        renderProjectDetail(projectsState.detailProject);
+      }
     };
   });
 
@@ -4467,6 +4634,18 @@ var handleProjectFileAttach = function(projectId, fileData) {
 };
 
 // ─── Projects: add task ────────────────────────────────────────────────────
+var logProjectActivity = function(projectId, action, detail) {
+  return addDoc(collection(db, 'projects', projectId, 'activity'), {
+    action: action,
+    detail: detail || '',
+    authorId: state.user.uid,
+    authorName: state.user.displayName || state.user.email || 'Member',
+    createdAt: serverTimestamp()
+  }).catch(function(err) {
+    console.error('Activity log error:', err);
+  });
+};
+
 var handleAddTask = function(projectId, taskData) {
   return addDoc(collection(db, 'projects', projectId, 'tasks'), {
     title: taskData.title,
@@ -4479,6 +4658,7 @@ var handleAddTask = function(projectId, taskData) {
     createdAt: serverTimestamp()
   }).then(function() {
     showToast('Task added.', 'info');
+    logProjectActivity(projectId, 'created', 'added task "' + taskData.title + '"');
   }).catch(function(err) {
     console.error('Add task error:', err);
     showToast('Failed to add task.', 'error');
@@ -4494,6 +4674,10 @@ var linkifyText = function(escapedHtml) {
     var safeUrl = escapeAttr(clean);
     return '<a href="' + safeUrl + '" class="post-link" target="_blank" rel="noopener">' + clean + '</a>';
   });
+};
+
+var highlightMentions = function(html) {
+  return html.replace(/@(\w[\w\s]{0,30}\w)/g, '<span class="mention">@$1</span>');
 };
 
 var extractFirstUrl = function(text) {
