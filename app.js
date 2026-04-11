@@ -324,7 +324,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v82';
+var ASSET_VERSION = 'v83';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1845,7 +1845,7 @@ var subscribeMessageThread = function(conversationId) {
 
   var q = query(
     collection(db, 'conversations', conversationId, 'messages'),
-    orderBy('createdAt', 'asc'),
+    orderBy('createdAt', 'desc'),
     limit(100)
   );
 
@@ -1856,6 +1856,7 @@ var subscribeMessageThread = function(conversationId) {
       data.id = d.id;
       thread.push(data);
     });
+    thread.reverse();
     messagesState.thread = thread;
     renderMessagesThread();
   }, function(err) {
@@ -3850,7 +3851,19 @@ var renderProjectDetail = function(p) {
   var deleteBtn = document.getElementById('projectDeleteBtn');
   if (deleteBtn) deleteBtn.onclick = function() {
     if (!confirm('Delete this project? This cannot be undone.')) return;
-    deleteDoc(doc(db, 'projects', p.id)).then(function() {
+    // Clean up subcollections before deleting project doc
+    var projectRef = doc(db, 'projects', p.id);
+    var commentsCol = collection(db, 'projects', p.id, 'comments');
+    var filesCol = collection(db, 'projects', p.id, 'files');
+    Promise.all([getDocs(commentsCol), getDocs(filesCol)]).then(function(results) {
+      var deletes = [];
+      results.forEach(function(snap) {
+        snap.forEach(function(d) { deletes.push(deleteDoc(d.ref)); });
+      });
+      return Promise.all(deletes);
+    }).then(function() {
+      return deleteDoc(projectRef);
+    }).then(function() {
       showToast('Project deleted.', 'info');
       projectsState.activeProjectId = null;
       loadPage('projects');
