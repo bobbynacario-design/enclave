@@ -55,6 +55,14 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members;
     }
 
+    function canAccessProjectData(data) {
+      return isAdmin() || (
+        signedIn() &&
+        data.memberIds is list &&
+        request.auth.uid in data.memberIds
+      );
+    }
+
     match /allowlist/{email} {
       allow get: if signedIn();
       allow list: if isAdmin();
@@ -162,8 +170,7 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow get: if signedIn();
-      allow list: if signedIn();
+      allow get, list: if canAccessProjectData(resource.data);
 
       allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
