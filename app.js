@@ -324,7 +324,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v78';
+var ASSET_VERSION = 'v79';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1839,7 +1839,8 @@ var subscribeMessageThread = function(conversationId) {
 
   var q = query(
     collection(db, 'conversations', conversationId, 'messages'),
-    orderBy('createdAt', 'asc')
+    orderBy('createdAt', 'asc'),
+    limit(100)
   );
 
   messagesState.unsubscribeThread = onSnapshot(q, function(snap) {
@@ -3475,7 +3476,8 @@ var loadSidebarProjects = function() {
 
   var q = query(
     collection(db, 'projects'),
-    where('memberIds', 'array-contains', state.user.uid)
+    where('memberIds', 'array-contains', state.user.uid),
+    limit(50)
   );
 
   projectsState.sidebarUnsubscribe = onSnapshot(q, function(snap) {
@@ -3554,7 +3556,8 @@ var subscribeProjectsList = function() {
 
   var q = query(
     collection(db, 'projects'),
-    where('memberIds', 'array-contains', state.user.uid)
+    where('memberIds', 'array-contains', state.user.uid),
+    limit(50)
   );
 
   projectsState.unsubscribe = onSnapshot(q, function(snap) {
