@@ -316,7 +316,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v74';
+var ASSET_VERSION = 'v75';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3513,6 +3513,10 @@ var loadSidebarProjects = function() {
     syncSidebarSelection();
   }, function(err) {
     console.error('Sidebar projects error:', err);
+    var container = document.getElementById('sidebarProjectsList');
+    if (container) {
+      container.innerHTML = '<span class="text-muted" style="padding:0 12px;font-size:13px;">Projects unavailable</span>';
+    }
   });
 };
 
@@ -3563,6 +3567,10 @@ var subscribeProjectsList = function() {
     renderProjectsList();
   }, function(err) {
     console.error('Projects list error:', err);
+    var list = document.getElementById('projectsList');
+    if (list) {
+      list.innerHTML = '<div class="card"><p class="text-muted">Failed to load projects.</p></div>';
+    }
   });
 };
 

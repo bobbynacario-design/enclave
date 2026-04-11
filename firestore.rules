@@ -55,11 +55,15 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members;
     }
 
+    function isProjectMember(data) {
+      return signedIn() &&
+        request.auth.uid in data.memberIds;
+    }
+
     function canAccessProjectData(data) {
       return isAdmin() || (
-        signedIn() &&
         data.memberIds is list &&
-        request.auth.uid in data.memberIds
+        isProjectMember(data)
       );
     }
 
@@ -177,7 +181,7 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow get, list: if canAccessProjectData(resource.data);
+      allow get, list: if isAdmin() || isProjectMember(resource.data);
 
       allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
