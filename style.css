@@ -115,6 +115,8 @@ body {
   margin: -20px -12px 0;
   padding-left: 12px;
   padding-right: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 .sidebar-logo {
   display: flex;
@@ -149,6 +151,7 @@ body {
   flex-direction: column;
   gap: 2px;
   margin-bottom: 24px;
+  padding-top: 12px;
 }
 
 .sidebar-link {
