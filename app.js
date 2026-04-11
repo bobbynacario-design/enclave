@@ -289,7 +289,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v67';
+var ASSET_VERSION = 'v68';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3749,6 +3749,11 @@ var openProjectModal = function(existingProject) {
   // Load member checkboxes
   loadProjectMemberChecks(existingProject);
 
+  // Wire close/cancel buttons
+  modal.querySelectorAll('[data-action="close-project-modal"]').forEach(function(el) {
+    el.onclick = closeProjectModal;
+  });
+
   modal.hidden = false;
 };
 
@@ -3775,9 +3780,10 @@ var loadProjectMemberChecks = function(existingProject) {
     var html = '';
     snap.forEach(function(d) {
       var u = d.data();
+      var memberName = u.name || u.displayName || u.email || 'Member';
       var checked = existingMembers.indexOf(d.id) !== -1 ? ' checked' : '';
       var disabled = d.id === (state.user ? state.user.uid : '') ? ' disabled' : '';
-      html += '<label><input type="checkbox" value="' + escapeAttr(d.id) + '" data-name="' + escapeAttr(u.displayName || u.email || 'Member') + '"' + checked + disabled + ' /> ' + escapeHTML(u.displayName || u.email || 'Member') + '</label>';
+      html += '<label><input type="checkbox" value="' + escapeAttr(d.id) + '" data-name="' + escapeAttr(memberName) + '"' + checked + disabled + ' /> ' + escapeHTML(memberName) + '</label>';
     });
     container.innerHTML = html;
   }).catch(function(err) {
