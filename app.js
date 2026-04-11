@@ -30,7 +30,7 @@ import {
 import { auth, db, googleProvider } from './firebase.js';
 
 var ALL_CIRCLES = [
-  'poker-crew',
+  'hustle-hub',
   'work-network',
   'family'
 ];
@@ -324,7 +324,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v77';
+var ASSET_VERSION = 'v78';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1418,7 +1418,7 @@ var renderPostComments = function(postId, comments, authorId) {
 var renderPostCard = function(p) {
   var circleLabels = {
     'all':          'All',
-    'poker-crew':   'Poker Crew',
+    'hustle-hub':   'Hustle Hub',
     'work-network': 'Work Network',
     'family':       'Family'
   };
@@ -2906,7 +2906,7 @@ var openCreateEventModal = function() {
       '<label class="profile-section-title" for="evCircle">Circle</label>' +
       '<select id="evCircle" class="edit-input">' +
         '<option value="all">All</option>' +
-        '<option value="poker-crew">Poker Crew</option>' +
+        '<option value="hustle-hub">Hustle Hub</option>' +
         '<option value="work-network">Work Network</option>' +
         '<option value="family">Family</option>' +
       '</select>' +
@@ -3323,7 +3323,7 @@ var isOwnerAdminEmail = function(email) {
 
 var getCircleDefinitions = function() {
   return [
-    { id: 'poker-crew',   label: 'Poker Crew' },
+    { id: 'hustle-hub',   label: 'Hustle Hub' },
     { id: 'work-network', label: 'Work Network' },
     { id: 'family',       label: 'Family' }
   ];
