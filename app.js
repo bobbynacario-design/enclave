@@ -47,6 +47,10 @@ var state = {
   circles:      []
 };
 
+var authFlowState = {
+  busy: false
+};
+
 var eventsState = {
   upcoming: [],
   past: []
@@ -187,8 +191,31 @@ var pickerContext = 'feed';
 var pickerProjectId = null;
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
+var runSignOut = function(accessDenied) {
+  authFlowState.busy = true;
+  state.accessDenied = !!accessDenied;
+  state.user = null;
+  state.isAdmin = false;
+  state.circles = [];
+  adminState.allowlist = [];
+  resetProjectDetailState();
+  resetMessagesState();
+  resetShellRealtime();
+
+  return signOut(auth).catch(function(err) {
+    console.error('Sign-out error:', err);
+  }).finally(function() {
+    authFlowState.busy = false;
+  });
+};
+
 var handleSignIn = function() {
+  if (authFlowState.busy) return;
   state.accessDenied = false;
+  authFlowState.busy = true;
+  googleProvider.setCustomParameters({
+    prompt: 'select_account'
+  });
   signInWithPopup(auth, googleProvider).then(function(result) {
     var credential = GAP.credentialFromResult(result);
     if (credential && credential.accessToken) {
@@ -196,25 +223,20 @@ var handleSignIn = function() {
     }
   }).catch(function(err) {
     console.error('Sign-in error:', err);
+  }).finally(function() {
+    authFlowState.busy = false;
   });
 };
 
 var handleSignOut = function() {
-  state.accessDenied = false;
-  state.isAdmin = false;
-  state.circles = [];
-  adminState.allowlist = [];
-  resetProjectDetailState();
-  resetMessagesState(false);
-  resetShellRealtime();
-  signOut(auth);
+  if (authFlowState.busy) return;
+  runSignOut(false);
 };
 
 // ─── Auth: allowlist check ───────────────────────────────────────────────────
 var checkAllowlist = function(user) {
   if (!user.email) {
-    state.accessDenied = true;
-    signOut(auth);
+    runSignOut(true);
     return;
   }
 
@@ -233,13 +255,11 @@ var checkAllowlist = function(user) {
         renderShell();
       });
     } else {
-      state.accessDenied = true;
-      signOut(auth);
+      runSignOut(true);
     }
   }).catch(function(err) {
     console.error('Allowlist check failed:', err);
-    state.accessDenied = true;
-    signOut(auth);
+    runSignOut(true);
   });
 };
 
@@ -337,7 +357,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v87';
+var ASSET_VERSION = 'v88';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
