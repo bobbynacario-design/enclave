@@ -363,7 +363,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v94';
+var ASSET_VERSION = 'v95';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -4216,6 +4216,7 @@ var renderProjectDetail = function(p) {
     if (!projectsState.unsubscribe) {
       subscribeProjectsList();
     }
+    renderProjectsList();
   };
 
   // Wire edit
