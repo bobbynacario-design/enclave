@@ -228,6 +228,38 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+
+      match /tasks/{taskId} {
+        allow get, list: if canAccessProject(projectId);
+
+        allow create: if canAccessProject(projectId) &&
+          request.resource.data.keys().hasOnly(['title', 'assigneeId', 'assigneeName', 'dueDate', 'status', 'createdBy', 'createdByName', 'createdAt']) &&
+          request.resource.data.title is string &&
+          request.resource.data.title.size() > 0 &&
+          request.resource.data.title.size() <= 200 &&
+          request.resource.data.assigneeId is string &&
+          request.resource.data.assigneeName is string &&
+          request.resource.data.dueDate is string &&
+          request.resource.data.status == 'todo' &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdByName is string;
+
+        allow update: if canAccessProject(projectId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+          request.resource.data.status in ['todo', 'doing', 'done'] &&
+          request.resource.data.title == resource.data.title &&
+          request.resource.data.assigneeId == resource.data.assigneeId &&
+          request.resource.data.assigneeName == resource.data.assigneeName &&
+          request.resource.data.dueDate == resource.data.dueDate &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          request.resource.data.createdByName == resource.data.createdByName &&
+          request.resource.data.createdAt == resource.data.createdAt;
+
+        allow delete: if isAdmin() || (
+          canAccessProject(projectId) &&
+          resource.data.createdBy == request.auth.uid
+        );
+      }
     }
 
     match /events/{eventId} {
