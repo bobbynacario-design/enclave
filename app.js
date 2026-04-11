@@ -354,7 +354,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v89';
+var ASSET_VERSION = 'v90';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1210,6 +1210,11 @@ var getRenderedFeedPosts = function() {
     });
   }
 
+  // Pinned posts float to top
+  var pinned = combined.filter(function(post) { return post.isPinned; });
+  var unpinned = combined.filter(function(post) { return !post.isPinned; });
+  combined = pinned.concat(unpinned);
+
   if (feedState.targetPostId) {
     var targetIndex = combined.findIndex(function(post) {
       return post.id === feedState.targetPostId;
@@ -1403,6 +1408,12 @@ var renderFeedList = function() {
     });
   });
 
+  list.querySelectorAll('[data-pin-post]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handlePinPost(btn.dataset.pinPost);
+    });
+  });
+
   var loadMoreBtn = list.querySelector('.load-more-btn');
   if (loadMoreBtn) {
     loadMoreBtn.disabled = feedState.loadingMore;
@@ -1482,9 +1493,15 @@ var renderPostCard = function(p) {
   var deleteBtn = canDelete
     ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">Delete</button>'
     : '';
+  var pinBtn = state.isAdmin
+    ? '<button class="post-action" data-pin-post="' + escapeAttr(p.id) + '">' + (p.isPinned ? 'Unpin' : 'Pin') + '</button>'
+    : '';
+  var pinnedClass = p.isPinned ? ' post-pinned' : '';
+  var pinnedBadge = p.isPinned ? '<span class="post-pinned-badge">Pinned</span>' : '';
 
   return '' +
-    '<div class="post-card' + (feedState.targetPostId === p.id ? ' post-card-target' : '') + '" data-post-id="' + escapeAttr(p.id) + '">' +
+    '<div class="post-card' + pinnedClass + (feedState.targetPostId === p.id ? ' post-card-target' : '') + '" data-post-id="' + escapeAttr(p.id) + '">' +
+      pinnedBadge +
       '<div class="post-header">' +
         '<div class="post-avatar">' + initialsEsc + '</div>' +
         '<div class="post-meta">' +
@@ -1511,6 +1528,7 @@ var renderPostCard = function(p) {
         '<button class="' + reactBtnClass + '" data-react-post="' + escapeAttr(p.id) + '">&#128077; ' + reacts.length + '</button>' +
         '<button class="' + commentBtnClass + '" data-toggle-comments-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">&#128172; ' + comments.length + '</button>' +
         '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '">&#8599; Share</button>' +
+        pinBtn +
         deleteBtn +
       '</div>' +
       (commentsOpen ? renderPostComments(p.id, comments, p.authorId) : '') +
@@ -1692,6 +1710,21 @@ var handleDeletePost = function(postId, authorId) {
       console.error('Failed to delete post:', err);
       showToast('Failed to delete post. Check console for details.', 'error');
     });
+  });
+};
+
+var handlePinPost = function(postId) {
+  if (!postId || !state.isAdmin) return;
+  var post = getAllKnownFeedPosts().find(function(p) { return p.id === postId; });
+  if (!post) return;
+  var newPinned = !post.isPinned;
+  updateDoc(doc(db, 'posts', postId), { isPinned: newPinned }).then(function() {
+    post.isPinned = newPinned;
+    renderFeedList();
+    showToast(newPinned ? 'Post pinned.' : 'Post unpinned.', 'info');
+  }).catch(function(err) {
+    console.error('Pin post error:', err);
+    showToast('Failed to pin post.', 'error');
   });
 };
 

@@ -890,6 +890,21 @@ label {
   box-shadow: 0 0 0 1px rgba(124, 92, 191, 0.35), 0 14px 28px rgba(0, 0, 0, 0.18);
 }
 
+.post-pinned {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.post-pinned-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
 .post-header {
   display: flex;
   align-items: flex-start;
