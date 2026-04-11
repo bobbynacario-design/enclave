@@ -363,7 +363,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v95';
+var ASSET_VERSION = 'v96';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3813,7 +3813,7 @@ var renderProjectsList = function() {
 
   // Fetch task counts per project and render mini progress
   projectsState.projects.forEach(function(p) {
-    getDocs(collection(db, 'projects', p.id, 'tasks')).then(function(snap) {
+    getDocs(query(collection(db, 'projects', p.id, 'tasks'))).then(function(snap) {
       var total = snap.size;
       var done = 0;
       snap.forEach(function(d) { if (d.data().status === 'done') done++; });
@@ -4213,10 +4213,11 @@ var renderProjectDetail = function(p) {
     if (headerEl) headerEl.hidden = false;
     if (detailEl2) { detailEl2.hidden = true; detailEl2.innerHTML = ''; }
     syncURLState();
-    if (!projectsState.unsubscribe) {
-      subscribeProjectsList();
+    if (projectsState.unsubscribe) {
+      projectsState.unsubscribe();
+      projectsState.unsubscribe = null;
     }
-    renderProjectsList();
+    subscribeProjectsList();
   };
 
   // Wire edit
