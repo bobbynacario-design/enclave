@@ -2140,6 +2140,11 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+.project-card-tasks {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+}
 .project-card-footer {
   display: flex;
   align-items: center;
@@ -2444,7 +2449,44 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   color: var(--text-muted);
   font-family: var(--mono);
 }
-.task-overdue { color: var(--red); }
+.task-overdue { color: var(--red); font-weight: 600; }
+.task-due-today { color: #E67E22; font-weight: 600; }
+
+.task-edit-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.task-row:hover .task-edit-btn { opacity: 1; }
+.task-edit-btn:hover { color: var(--accent); }
+
+.task-edit-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+}
+.task-edit-form .form-input {
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+}
+.task-edit-form .form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.task-edit-form [data-edit-title] { flex: 1; min-width: 140px; }
 
 .task-delete-btn {
   flex-shrink: 0;

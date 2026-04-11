@@ -354,7 +354,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v91';
+var ASSET_VERSION = 'v92';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3797,9 +3797,23 @@ var renderProjectsList = function() {
         '<div class="project-card-footer">' +
           '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
           '<span>' + memberCount + ' member' + (memberCount !== 1 ? 's' : '') + '</span>' +
+          '<span class="project-card-tasks" data-task-count-for="' + escapeAttr(p.id) + '"></span>' +
         '</div>' +
       '</div>';
   }).join('');
+
+  // Fetch task counts per project
+  projectsState.projects.forEach(function(p) {
+    getDocs(collection(db, 'projects', p.id, 'tasks')).then(function(snap) {
+      var total = snap.size;
+      var done = 0;
+      snap.forEach(function(d) { if (d.data().status === 'done') done++; });
+      var el = document.querySelector('[data-task-count-for="' + p.id + '"]');
+      if (el && total > 0) {
+        el.textContent = done + '/' + total + ' tasks';
+      }
+    }).catch(function() {});
+  });
 
   list.querySelectorAll('[data-project-card]').forEach(function(card) {
     card.addEventListener('click', function() {
@@ -3987,12 +4001,18 @@ var renderProjectDetail = function(p) {
         var dueDateHtml = '';
         if (t.dueDate) {
           var now = new Date();
-          var due = new Date(t.dueDate);
-          var overdue = t.status !== 'done' && due < now;
-          dueDateHtml = '<span class="task-due' + (overdue ? ' task-overdue' : '') + '">' + escapeHTML(t.dueDate) + '</span>';
+          now.setHours(0, 0, 0, 0);
+          var due = new Date(t.dueDate + 'T00:00:00');
+          var diffDays = Math.round((due - now) / 86400000);
+          var dueCls = 'task-due';
+          if (t.status !== 'done') {
+            if (diffDays < 0) dueCls += ' task-overdue';
+            else if (diffDays === 0) dueCls += ' task-due-today';
+          }
+          dueDateHtml = '<span class="' + dueCls + '">' + escapeHTML(t.dueDate) + '</span>';
         }
         var isDone = t.status === 'done';
-        var canDeleteTask = state.isAdmin || (state.user && t.createdBy === state.user.uid);
+        var canEditTask = state.isAdmin || (state.user && t.createdBy === state.user.uid);
         return '<div class="task-row' + (isDone ? ' task-done' : '') + '" data-task-id="' + escapeAttr(t.id) + '">' +
           '<button class="task-status-btn ' + statusCls + '" data-task-cycle="' + escapeAttr(t.id) + '" title="Cycle status">' + statusLabel + '</button>' +
           '<div class="task-info">' +
@@ -4000,7 +4020,8 @@ var renderProjectDetail = function(p) {
             '<span class="task-assignee">' + escapeHTML(assigneeName) + '</span>' +
           '</div>' +
           dueDateHtml +
-          (canDeleteTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task">&times;</button>' : '') +
+          (canEditTask ? '<button class="task-edit-btn" data-task-edit="' + escapeAttr(t.id) + '" title="Edit task">&#9998;</button>' : '') +
+          (canEditTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task">&times;</button>' : '') +
         '</div>';
       }).join('');
 
@@ -4201,6 +4222,65 @@ var renderProjectDetail = function(p) {
         console.error('Delete task error:', err);
         showToast('Failed to delete task.', 'error');
       });
+    };
+  });
+
+  // Wire task inline edit
+  document.querySelectorAll('[data-task-edit]').forEach(function(btn) {
+    btn.onclick = function() {
+      var taskId = btn.dataset.taskEdit;
+      var task = projectsState.detailTasks.find(function(t) { return t.id === taskId; });
+      if (!task) return;
+      var row = document.querySelector('[data-task-id="' + taskId + '"]');
+      if (!row || row.querySelector('.task-edit-form')) return;
+
+      var assigneeOptions = '<option value="">Unassigned</option>' +
+        memberIds.map(function(uid) {
+          var sel = uid === task.assigneeId ? ' selected' : '';
+          return '<option value="' + escapeAttr(uid) + '"' + sel + '>' + escapeHTML(memberNames[uid] || 'Member') + '</option>';
+        }).join('');
+
+      row.innerHTML = '' +
+        '<form class="task-edit-form" data-task-save="' + escapeAttr(taskId) + '">' +
+          '<input type="text" class="form-input" value="' + escapeAttr(task.title || '') + '" data-edit-title maxlength="200" />' +
+          '<select class="form-input task-add-assignee" data-edit-assignee>' + assigneeOptions + '</select>' +
+          '<input type="date" class="form-input task-add-date" value="' + escapeAttr(task.dueDate || '') + '" data-edit-due />' +
+          '<button class="btn btn-primary" type="submit">Save</button>' +
+          '<button class="btn btn-ghost" type="button" data-edit-cancel>Cancel</button>' +
+        '</form>';
+
+      var form = row.querySelector('form');
+      form.querySelector('[data-edit-title]').focus();
+
+      form.onsubmit = function(e) {
+        e.preventDefault();
+        var newTitle = form.querySelector('[data-edit-title]').value.trim();
+        if (!newTitle) return;
+        var assigneeSelect = form.querySelector('[data-edit-assignee]');
+        var newAssigneeId = assigneeSelect.value;
+        var newAssigneeName = '';
+        if (newAssigneeId) {
+          var opt = assigneeSelect.options[assigneeSelect.selectedIndex];
+          newAssigneeName = opt ? opt.textContent : '';
+        }
+        var newDueDate = form.querySelector('[data-edit-due]').value;
+        updateDoc(doc(db, 'projects', p.id, 'tasks', taskId), {
+          title: newTitle,
+          assigneeId: newAssigneeId,
+          assigneeName: newAssigneeName,
+          dueDate: newDueDate,
+          status: task.status
+        }).then(function() {
+          showToast('Task updated.', 'info');
+        }).catch(function(err) {
+          console.error('Task edit error:', err);
+          showToast('Failed to update task.', 'error');
+        });
+      };
+
+      form.querySelector('[data-edit-cancel]').onclick = function() {
+        refreshProjectDetailView();
+      };
     };
   });
 
