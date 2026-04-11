@@ -289,7 +289,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v71';
+var ASSET_VERSION = 'v72';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -320,6 +320,17 @@ var renderShell = function() {
         window.enclaveGoCircle(btn.dataset.circle);
       });
     });
+
+    // Theme toggle
+    var themeBtn = document.getElementById('themeToggle');
+    if (themeBtn) {
+      themeBtn.textContent = document.body.classList.contains('light') ? '☀️' : '🌙';
+      themeBtn.addEventListener('click', function() {
+        var isLight = document.body.classList.toggle('light');
+        themeBtn.textContent = isLight ? '☀️' : '🌙';
+        localStorage.setItem('enclave_theme', isLight ? 'light' : 'dark');
+      });
+    }
 
     // Sign out
     var signOutBtn = document.querySelector('[data-action="sign-out"]');

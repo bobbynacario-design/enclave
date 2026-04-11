@@ -5,26 +5,67 @@
 }
 
 :root {
-  --bg:           #0d0d0d;
-  --surface:      #1a1a1a;
-  --surface-2:    #151515;
-  --border:       #2a2a2a;
+  /* ── Dark mode (default) ─── */
+  --bg:           #080A0E;
+  --surface:      #0F1218;
+  --surface-2:    #161B24;
+  --surface-3:    #1E2430;
+  --border:       rgba(255,255,255,0.06);
+  --border-2:     rgba(255,255,255,0.12);
+  --border-3:     rgba(255,255,255,0.2);
   --accent:       #7c5cbf;
   --accent-hover: #9370db;
+  --accent-dim:   rgba(124,92,191,0.12);
+  --gold:         #D4AF37;
+  --gold-dim:     rgba(212,175,55,0.12);
+  --green:        #2ECC71;
+  --green-dim:    rgba(46,204,113,0.12);
+  --red:          #E74C3C;
+  --red-dim:      rgba(231,76,60,0.12);
+  --blue:         #3498DB;
+  --blue-dim:     rgba(52,152,219,0.12);
   --text:         #e8e8e8;
-  --text-muted:   #888;
-  --danger:       #c0392b;
+  --text-muted:   rgba(255,255,255,0.5);
+  --danger:       #E74C3C;
   --radius:       8px;
-  --font:         'Segoe UI', system-ui, sans-serif;
+  --sans:         'DM Sans', system-ui, sans-serif;
+  --serif:        'Bebas Neue', Georgia, serif;
+  --mono:         'DM Mono', 'Courier New', monospace;
+}
+
+/* ── Light mode ─── */
+body.light {
+  --bg:           #F0EDE6;
+  --surface:      #FFFFFF;
+  --surface-2:    #F5F2EC;
+  --surface-3:    #E8E4DB;
+  --border:       rgba(0,0,0,0.08);
+  --border-2:     rgba(0,0,0,0.14);
+  --border-3:     rgba(0,0,0,0.22);
+  --accent:       #6A3A9A;
+  --accent-hover: #7c5cbf;
+  --accent-dim:   rgba(106,58,154,0.1);
+  --gold:         #8B6914;
+  --gold-dim:     rgba(139,105,20,0.1);
+  --green:        #1A7A40;
+  --green-dim:    rgba(26,122,64,0.1);
+  --red:          #C0392B;
+  --red-dim:      rgba(192,57,43,0.1);
+  --blue:         #1A5FA0;
+  --blue-dim:     rgba(26,95,160,0.1);
+  --text:         #1a1a2e;
+  --text-muted:   rgba(0,0,0,0.5);
+  --danger:       #C0392B;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 15px;
   line-height: 1.5;
   min-height: 100vh;
+  transition: background 0.2s, color 0.2s;
 }
 
 #app {
@@ -61,12 +102,33 @@ body {
   overflow-y: auto;
 }
 
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 24px;
+}
 .sidebar-logo {
-  font-size: 18px;
+  font-family: var(--serif);
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.2em;
   color: var(--accent);
-  padding: 0 12px 24px;
+}
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+  line-height: 1;
+  color: var(--text-muted);
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
 }
 
 .sidebar-nav {
@@ -83,7 +145,7 @@ body {
   border: none;
   color: var(--text-muted);
   text-decoration: none;
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 14px;
   padding: 8px 12px;
   border-radius: var(--radius);
@@ -108,8 +170,9 @@ body {
 }
 
 .sidebar-heading {
+  font-family: var(--mono);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-muted);
@@ -187,9 +250,10 @@ body {
 }
 
 .page-header h1 {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
   margin-bottom: 4px;
 }
 
@@ -209,8 +273,9 @@ body {
 }
 
 .panel-heading {
+  font-family: var(--mono);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-muted);
@@ -386,9 +451,10 @@ body {
     margin-bottom: 14px;
   }
   .mobile-topbar-brand {
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.15em;
     color: var(--accent);
     line-height: 1;
   }
@@ -474,7 +540,7 @@ body {
   border: none;
   cursor: pointer;
   font-size: 14px;
-  font-family: var(--font);
+  font-family: var(--sans);
   transition: background 0.2s, opacity 0.2s;
 }
 
@@ -502,7 +568,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 6px 10px;
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 13px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
@@ -602,7 +668,7 @@ input, textarea, select {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 14px;
   padding: 8px 12px;
   width: 100%;
@@ -645,16 +711,18 @@ label {
 }
 
 .login-logo {
-  font-size: 32px;
-  font-weight: 700;
+  font-family: var(--serif);
+  font-size: 40px;
+  font-weight: 400;
   letter-spacing: 0.2em;
   color: var(--accent);
   margin-bottom: 8px;
 }
 
 .login-tagline {
+  font-family: var(--mono);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   margin-bottom: 32px;
 }
@@ -682,7 +750,7 @@ label {
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 500;
-  font-family: var(--font);
+  font-family: var(--sans);
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -732,7 +800,7 @@ label {
   width: 100%;
   resize: vertical;
   min-height: 80px;
-  font-family: var(--font);
+  font-family: var(--sans);
 }
 
 .compose-actions {
@@ -753,7 +821,7 @@ label {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 13px;
   padding: 6px 14px;
   border-radius: 999px;
@@ -839,8 +907,10 @@ label {
 }
 
 .post-circle {
+  font-family: var(--mono);
   color: var(--accent);
   font-weight: 500;
+  font-size: 11px;
 }
 
 .post-dot {
@@ -1049,7 +1119,7 @@ label {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 13px;
   padding: 6px 12px;
   border-radius: var(--radius);
@@ -1128,7 +1198,7 @@ label {
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 13px;
   padding: 10px 12px;
 }
@@ -1400,7 +1470,7 @@ label {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 14px;
   padding: 8px 10px;
   border-radius: var(--radius);
@@ -1506,7 +1576,7 @@ label {
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 14px;
 }
 
@@ -1884,7 +1954,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-family: var(--font);
+  font-family: var(--sans);
   font-size: 14px;
   padding: 11px 14px;
 }
