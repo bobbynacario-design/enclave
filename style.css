@@ -2016,6 +2016,18 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   word-wrap: break-word;
 }
 
+.message-bubble-status {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.message-bubble-status.seen {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .messages-compose {
   display: flex;
   gap: 10px;

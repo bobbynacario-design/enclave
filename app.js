@@ -337,7 +337,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v86';
+var ASSET_VERSION = 'v87';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1900,6 +1900,22 @@ var renderMessagesThread = function() {
   inputEl.disabled = false;
   sendBtn.disabled = false;
 
+  var activeConversation = messagesState.conversations.find(function(conversation) {
+    return conversation.id === messagesState.activeConversationId;
+  }) || null;
+  var peerReadAt = activeConversation && activeConversation.readBy
+    ? activeConversation.readBy[peer.uid]
+    : null;
+  var peerReadAtMs = getFirestoreTimeMs(peerReadAt);
+  var lastOwnMessageId = null;
+
+  for (var i = messagesState.thread.length - 1; i >= 0; i -= 1) {
+    if (messagesState.thread[i].authorId === (state.user && state.user.uid)) {
+      lastOwnMessageId = messagesState.thread[i].id;
+      break;
+    }
+  }
+
   if (messagesState.thread.length === 0) {
     listEl.innerHTML = '<div class="messages-empty-state text-muted">No messages yet. Send the first one.</div>';
     return;
@@ -1910,6 +1926,11 @@ var renderMessagesThread = function() {
     var author = escapeHTML(message.authorName || 'Member');
     var body = escapeHTML(message.body || '');
     var time = 'just now';
+    var isLatestOwn = mine && message.id === lastOwnMessageId;
+    var seen = isLatestOwn && peerReadAtMs > 0 && getFirestoreTimeMs(message.createdAt) <= peerReadAtMs;
+    var statusHtml = isLatestOwn
+      ? '<div class="message-bubble-status' + (seen ? ' seen' : '') + '">' + (seen ? 'Seen' : 'Sent') + '</div>'
+      : '';
 
     if (message.createdAt && typeof message.createdAt.toDate === 'function') {
       time = relativeTime(message.createdAt.toDate());
@@ -1920,6 +1941,7 @@ var renderMessagesThread = function() {
         '<div class="message-bubble">' +
           '<div class="message-bubble-meta">' + author + ' · ' + escapeHTML(time) + '</div>' +
           '<div class="message-bubble-body">' + body + '</div>' +
+          statusHtml +
         '</div>' +
       '</div>';
   }).join('');
