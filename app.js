@@ -289,7 +289,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v69';
+var ASSET_VERSION = 'v70';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3485,10 +3485,6 @@ var initProjectsPage = function() {
     };
   }
 
-  document.querySelectorAll('[data-action="close-project-modal"]').forEach(function(el) {
-    el.addEventListener('click', closeProjectModal);
-  });
-
   var saveBtn = document.getElementById('projectModalSave');
   if (saveBtn) saveBtn.onclick = handleSaveProject;
 
@@ -3752,10 +3748,13 @@ var openProjectModal = function(existingProject) {
   // Load member checkboxes
   loadProjectMemberChecks(existingProject);
 
-  // Wire close/cancel buttons
-  modal.querySelectorAll('[data-action="close-project-modal"]').forEach(function(el) {
-    el.onclick = closeProjectModal;
-  });
+  // Wire cancel button
+  var cancelBtn = document.getElementById('projectModalCancel');
+  if (cancelBtn) cancelBtn.onclick = closeProjectModal;
+
+  // Wire backdrop click
+  var backdrop = modal.querySelector('.project-modal-backdrop');
+  if (backdrop) backdrop.onclick = closeProjectModal;
 
   modal.hidden = false;
 };
