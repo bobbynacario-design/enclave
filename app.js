@@ -316,7 +316,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v75';
+var ASSET_VERSION = 'v76';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1292,23 +1292,16 @@ var handleComposeSubmit = function() {
     });
   };
 
-  // Fetch link preview if body contains a URL
+  // Preserve the first URL for a local-only fallback preview card.
   var firstUrl = extractFirstUrl(body);
   if (firstUrl) {
     post.ogUrl = firstUrl;
-    fetchLinkPreview(firstUrl).then(function(og) {
-      if (og) {
-        post.ogTitle       = og.ogTitle;
-        post.ogDescription = og.ogDescription;
-        post.ogImage       = og.ogImage;
-        post.ogUrl         = og.ogUrl;
-        post.ogSite        = og.ogSite;
-      }
-      savePost(post);
-    });
-  } else {
-    savePost(post);
+    try {
+      post.ogSite = new URL(firstUrl).hostname.replace(/^www\./, '');
+    } catch (e) {}
   }
+
+  savePost(post);
 };
 
 // ─── Feed: render list ───────────────────────────────────────────────────────
@@ -4060,24 +4053,6 @@ var extractFirstUrl = function(text) {
   var match = (text || '').match(URL_REGEX);
   if (!match) return '';
   return match[0].replace(/[.,;:!?)]+$/, '');
-};
-
-var fetchLinkPreview = function(url) {
-  return fetch('https://api.microlink.io/?url=' + encodeURIComponent(url))
-    .then(function(res) { return res.json(); })
-    .then(function(json) {
-      if (json.status === 'success' && json.data) {
-        return {
-          ogTitle:       json.data.title || '',
-          ogDescription: json.data.description || '',
-          ogImage:       (json.data.image && json.data.image.url) || '',
-          ogUrl:         json.data.url || url,
-          ogSite:        json.data.publisher || ''
-        };
-      }
-      return null;
-    })
-    .catch(function() { return null; });
 };
 
 var renderLinkPreview = function(og) {
