@@ -74,6 +74,12 @@ service cloud.firestore {
         );
     }
 
+    function isProjectOwner(projectId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.createdBy == request.auth.uid;
+    }
+
     match /allowlist/{email} {
       allow get: if signedIn();
       allow list: if isAdmin();
@@ -119,14 +125,26 @@ service cloud.firestore {
       allow get, list: if signedIn() &&
         canAccessCircle(resource.data.circle);
 
-      allow create: if signedIn() &&
+      allow create: if (
+        isAdmin() &&
+        signedIn() &&
         request.resource.data.authorId == request.auth.uid &&
-        canAccessCircle(request.resource.data.circle);
+        canAccessCircle(request.resource.data.circle)
+      ) || (
+        signedIn() &&
+        request.resource.data.authorId == request.auth.uid &&
+        canAccessCircle(request.resource.data.circle) &&
+        (
+          !request.resource.data.keys().hasAny(['isPinned']) ||
+          request.resource.data.isPinned == false
+        )
+      );
 
       allow update: if isAdmin() || (
         signedIn() &&
         resource.data.authorId == request.auth.uid &&
         request.resource.data.authorId == resource.data.authorId &&
+        request.resource.data.isPinned == resource.data.isPinned &&
         canAccessCircle(resource.data.circle) &&
         canAccessCircle(request.resource.data.circle)
       ) || (
@@ -212,7 +230,8 @@ service cloud.firestore {
           request.resource.data.body.size() > 0 &&
           request.resource.data.body.size() <= 500;
 
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isAdmin() || isProjectOwner(projectId);
       }
 
       match /files/{fileId} {
@@ -226,7 +245,8 @@ service cloud.firestore {
           request.resource.data.addedBy == request.auth.uid &&
           request.resource.data.addedByName is string;
 
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isAdmin() || isProjectOwner(projectId);
       }
 
       match /tasks/{taskId} {
@@ -244,7 +264,22 @@ service cloud.firestore {
           request.resource.data.createdBy == request.auth.uid &&
           request.resource.data.createdByName is string;
 
-        allow update: if canAccessProject(projectId) &&
+        allow update: if (
+          canAccessProject(projectId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+          request.resource.data.status in ['todo', 'doing', 'done'] &&
+          request.resource.data.title == resource.data.title &&
+          request.resource.data.assigneeId == resource.data.assigneeId &&
+          request.resource.data.assigneeName == resource.data.assigneeName &&
+          request.resource.data.dueDate == resource.data.dueDate &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          request.resource.data.createdByName == resource.data.createdByName &&
+          request.resource.data.createdAt == resource.data.createdAt
+        ) || (
+          (isAdmin() || (
+            canAccessProject(projectId) &&
+            resource.data.createdBy == request.auth.uid
+          )) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'title', 'assigneeId', 'assigneeName', 'dueDate']) &&
           request.resource.data.status in ['todo', 'doing', 'done'] &&
           request.resource.data.title is string &&
@@ -255,9 +290,10 @@ service cloud.firestore {
           request.resource.data.dueDate is string &&
           request.resource.data.createdBy == resource.data.createdBy &&
           request.resource.data.createdByName == resource.data.createdByName &&
-          request.resource.data.createdAt == resource.data.createdAt;
+          request.resource.data.createdAt == resource.data.createdAt
+        );
 
-        allow delete: if isAdmin() || (
+        allow delete: if isAdmin() || isProjectOwner(projectId) || (
           canAccessProject(projectId) &&
           resource.data.createdBy == request.auth.uid
         );
@@ -273,7 +309,8 @@ service cloud.firestore {
           request.resource.data.authorId == request.auth.uid &&
           request.resource.data.authorName is string;
 
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isAdmin() || isProjectOwner(projectId);
       }
     }
 
