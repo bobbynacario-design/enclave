@@ -63,6 +63,13 @@ service cloud.firestore {
       );
     }
 
+    function canAccessProject(projectId) {
+      return exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        canAccessProjectData(
+          get(/databases/$(database)/documents/projects/$(projectId)).data
+        );
+    }
+
     match /allowlist/{email} {
       allow get: if signedIn();
       allow list: if isAdmin();
@@ -183,24 +190,40 @@ service cloud.firestore {
         signedIn() &&
         resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdBy == resource.data.createdBy
-      ) || (
-        signedIn() &&
-        request.auth.uid in resource.data.memberIds &&
-        request.resource.data.createdBy == resource.data.createdBy &&
-        request.resource.data.memberIds == resource.data.memberIds &&
-        request.resource.data.name == resource.data.name &&
-        request.resource.data.status == resource.data.status &&
-        request.resource.data.description == resource.data.description &&
-        (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'updatedAt']) ||
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['files', 'updatedAt'])
-        )
       );
 
       allow delete: if isAdmin() || (
         signedIn() &&
         resource.data.createdBy == request.auth.uid
       );
+
+      match /comments/{commentId} {
+        allow get, list: if canAccessProject(projectId);
+
+        allow create: if canAccessProject(projectId) &&
+          request.resource.data.keys().hasOnly(['authorId', 'authorName', 'body', 'createdAt']) &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.authorName is string &&
+          request.resource.data.body is string &&
+          request.resource.data.body.size() > 0 &&
+          request.resource.data.body.size() <= 500;
+
+        allow update, delete: if false;
+      }
+
+      match /files/{fileId} {
+        allow get, list: if canAccessProject(projectId);
+
+        allow create: if canAccessProject(projectId) &&
+          request.resource.data.keys().hasOnly(['fileUrl', 'fileName', 'iconUrl', 'addedBy', 'addedByName', 'addedAt']) &&
+          request.resource.data.fileUrl is string &&
+          request.resource.data.fileName is string &&
+          request.resource.data.iconUrl is string &&
+          request.resource.data.addedBy == request.auth.uid &&
+          request.resource.data.addedByName is string;
+
+        allow update, delete: if false;
+      }
     }
 
     match /events/{eventId} {

@@ -126,6 +126,27 @@ var resetShellRealtime = function() {
   }
 };
 
+var resetProjectDetailState = function() {
+  if (projectsState.detailUnsubscribe) {
+    projectsState.detailUnsubscribe();
+    projectsState.detailUnsubscribe = null;
+  }
+
+  if (projectsState.commentsUnsubscribe) {
+    projectsState.commentsUnsubscribe();
+    projectsState.commentsUnsubscribe = null;
+  }
+
+  if (projectsState.filesUnsubscribe) {
+    projectsState.filesUnsubscribe();
+    projectsState.filesUnsubscribe = null;
+  }
+
+  projectsState.detailProject = null;
+  projectsState.detailComments = [];
+  projectsState.detailFiles = [];
+};
+
 var VALID_PAGES = {
   feed:     true,
   events:   true,
@@ -140,8 +161,13 @@ var projectsState = {
   unsubscribe:        null,
   activeProjectId:    null,
   detailUnsubscribe:  null,
+  commentsUnsubscribe: null,
+  filesUnsubscribe:   null,
   sidebarUnsubscribe: null,
-  editingProjectId:   null
+  editingProjectId:   null,
+  detailProject:      null,
+  detailComments:     [],
+  detailFiles:        []
 };
 
 var pickerContext = 'feed';
@@ -165,6 +191,7 @@ var handleSignOut = function() {
   state.isAdmin = false;
   state.circles = [];
   adminState.allowlist = [];
+  resetProjectDetailState();
   resetMessagesState();
   resetShellRealtime();
   signOut(auth);
@@ -289,7 +316,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v72';
+var ASSET_VERSION = 'v73';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -939,10 +966,7 @@ var loadPage = function(page) {
     projectsState.unsubscribe();
     projectsState.unsubscribe = null;
   }
-  if (projectsState.detailUnsubscribe) {
-    projectsState.detailUnsubscribe();
-    projectsState.detailUnsubscribe = null;
-  }
+  resetProjectDetailState();
   if (page !== 'projects') {
     projectsState.activeProjectId = null;
   }
@@ -3570,6 +3594,94 @@ var renderProjectsList = function() {
   });
 };
 
+var getFirestoreTimeMs = function(value) {
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate().getTime();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  var parsed = new Date(value || 0).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+var getProjectCommentsForRender = function(p) {
+  var legacy = Array.isArray(p.comments) ? p.comments.slice() : [];
+  var live = projectsState.activeProjectId === p.id
+    ? projectsState.detailComments.slice()
+    : [];
+
+  return legacy.concat(live).sort(function(a, b) {
+    return getFirestoreTimeMs(a.createdAt) - getFirestoreTimeMs(b.createdAt);
+  });
+};
+
+var getProjectFilesForRender = function(p) {
+  var legacy = Array.isArray(p.files) ? p.files.slice() : [];
+  var live = projectsState.activeProjectId === p.id
+    ? projectsState.detailFiles.slice()
+    : [];
+
+  return legacy.concat(live).sort(function(a, b) {
+    return getFirestoreTimeMs(b.addedAt || b.createdAt) - getFirestoreTimeMs(a.addedAt || a.createdAt);
+  });
+};
+
+var refreshProjectDetailView = function() {
+  if (projectsState.detailProject) {
+    renderProjectDetail(projectsState.detailProject);
+  }
+};
+
+var subscribeProjectCollections = function(projectId) {
+  if (projectsState.commentsUnsubscribe) {
+    projectsState.commentsUnsubscribe();
+    projectsState.commentsUnsubscribe = null;
+  }
+
+  if (projectsState.filesUnsubscribe) {
+    projectsState.filesUnsubscribe();
+    projectsState.filesUnsubscribe = null;
+  }
+
+  projectsState.detailComments = [];
+  projectsState.detailFiles = [];
+
+  projectsState.commentsUnsubscribe = onSnapshot(
+    query(collection(db, 'projects', projectId, 'comments'), orderBy('createdAt', 'asc')),
+    function(snap) {
+      projectsState.detailComments = [];
+      snap.forEach(function(d) {
+        var data = d.data();
+        data.id = d.id;
+        projectsState.detailComments.push(data);
+      });
+      refreshProjectDetailView();
+    },
+    function(err) {
+      console.error('Project comments error:', err);
+    }
+  );
+
+  projectsState.filesUnsubscribe = onSnapshot(
+    query(collection(db, 'projects', projectId, 'files'), orderBy('addedAt', 'desc')),
+    function(snap) {
+      projectsState.detailFiles = [];
+      snap.forEach(function(d) {
+        var data = d.data();
+        data.id = d.id;
+        projectsState.detailFiles.push(data);
+      });
+      refreshProjectDetailView();
+    },
+    function(err) {
+      console.error('Project files error:', err);
+    }
+  );
+};
+
 // ─── Projects: detail view ──────────────────────────────────────────────────
 var loadProjectDetail = function(projectId) {
   var listEl = document.getElementById('projectsList');
@@ -3582,9 +3694,8 @@ var loadProjectDetail = function(projectId) {
     detailEl.innerHTML = '<div class="feed-loading text-muted">Loading project...</div>';
   }
 
-  if (projectsState.detailUnsubscribe) {
-    projectsState.detailUnsubscribe();
-  }
+  resetProjectDetailState();
+  subscribeProjectCollections(projectId);
 
   projectsState.detailUnsubscribe = onSnapshot(doc(db, 'projects', projectId), function(snap) {
     if (!snap.exists()) {
@@ -3593,6 +3704,7 @@ var loadProjectDetail = function(projectId) {
     }
     var p = snap.data();
     p.id = snap.id;
+    projectsState.detailProject = p;
     renderProjectDetail(p);
   }, function(err) {
     console.error('Project detail error:', err);
@@ -3621,7 +3733,7 @@ var renderProjectDetail = function(p) {
   }).join('');
 
   // Files
-  var files = Array.isArray(p.files) ? p.files : [];
+  var files = getProjectFilesForRender(p);
   var filesHtml = files.length === 0
     ? '<p class="text-muted" style="font-size:13px;">No files attached yet.</p>'
     : files.map(function(f, idx) {
@@ -3633,7 +3745,7 @@ var renderProjectDetail = function(p) {
       }).join('');
 
   // Comments / discussion
-  var comments = Array.isArray(p.comments) ? p.comments : [];
+  var comments = getProjectCommentsForRender(p);
   var commentsHtml = comments.map(function(c) {
     var cTime = (c.createdAt && typeof c.createdAt.toDate === 'function')
       ? relativeTime(c.createdAt.toDate())
@@ -3684,10 +3796,7 @@ var renderProjectDetail = function(p) {
   var backBtn = document.getElementById('projectBackBtn');
   if (backBtn) backBtn.onclick = function() {
     projectsState.activeProjectId = null;
-    if (projectsState.detailUnsubscribe) {
-      projectsState.detailUnsubscribe();
-      projectsState.detailUnsubscribe = null;
-    }
+    resetProjectDetailState();
     var listEl = document.getElementById('projectsList');
     var headerEl = document.querySelector('.page-header-row');
     var detailEl2 = document.getElementById('projectDetail');
@@ -3695,7 +3804,9 @@ var renderProjectDetail = function(p) {
     if (headerEl) headerEl.hidden = false;
     if (detailEl2) { detailEl2.hidden = true; detailEl2.innerHTML = ''; }
     syncURLState();
-    subscribeProjectsList();
+    if (!projectsState.unsubscribe) {
+      subscribeProjectsList();
+    }
   };
 
   // Wire edit
@@ -3868,9 +3979,7 @@ var handleSaveProject = function() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       memberIds: memberIds,
-      memberNames: memberNames,
-      files: [],
-      comments: []
+      memberNames: memberNames
     }).then(function(docRef) {
       closeProjectModal();
       showToast('Project created!', 'info');
@@ -3888,20 +3997,11 @@ var handleSaveProject = function() {
 
 // ─── Projects: add comment ──────────────────────────────────────────────────
 var handleProjectComment = function(projectId, body) {
-  var ref = doc(db, 'projects', projectId);
-  runTransaction(db, function(tx) {
-    return tx.get(ref).then(function(snap) {
-      if (!snap.exists()) throw new Error('Project not found');
-      var data = snap.data();
-      var comments = Array.isArray(data.comments) ? data.comments.slice() : [];
-      comments.push({
-        uid: state.user.uid,
-        authorName: state.user.displayName || state.user.email || 'Member',
-        body: body,
-        createdAt: Timestamp.now()
-      });
-      tx.update(ref, { comments: comments, updatedAt: serverTimestamp() });
-    });
+  return addDoc(collection(db, 'projects', projectId, 'comments'), {
+    authorId: state.user.uid,
+    authorName: state.user.displayName || state.user.email || 'Member',
+    body: body,
+    createdAt: serverTimestamp()
   }).catch(function(err) {
     console.error('Project comment error:', err);
     showToast('Failed to post comment.', 'error');
@@ -3910,15 +4010,13 @@ var handleProjectComment = function(projectId, body) {
 
 // ─── Projects: attach file ──────────────────────────────────────────────────
 var handleProjectFileAttach = function(projectId, fileData) {
-  var ref = doc(db, 'projects', projectId);
-  runTransaction(db, function(tx) {
-    return tx.get(ref).then(function(snap) {
-      if (!snap.exists()) throw new Error('Project not found');
-      var data = snap.data();
-      var files = Array.isArray(data.files) ? data.files.slice() : [];
-      files.push(fileData);
-      tx.update(ref, { files: files, updatedAt: serverTimestamp() });
-    });
+  addDoc(collection(db, 'projects', projectId, 'files'), {
+    fileUrl: fileData.fileUrl || '',
+    fileName: fileData.fileName || 'File',
+    iconUrl: fileData.iconUrl || '',
+    addedBy: state.user.uid,
+    addedByName: state.user.displayName || state.user.email || 'Member',
+    addedAt: serverTimestamp()
   }).then(function() {
     showToast('File attached!', 'info');
   }).catch(function(err) {
