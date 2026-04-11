@@ -213,9 +213,6 @@ var handleSignIn = function() {
   if (authFlowState.busy) return;
   state.accessDenied = false;
   authFlowState.busy = true;
-  googleProvider.setCustomParameters({
-    prompt: 'select_account'
-  });
   signInWithPopup(auth, googleProvider).then(function(result) {
     var credential = GAP.credentialFromResult(result);
     if (credential && credential.accessToken) {
@@ -357,7 +354,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v88';
+var ASSET_VERSION = 'v89';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
