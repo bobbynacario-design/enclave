@@ -324,7 +324,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v79';
+var ASSET_VERSION = 'v80';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -356,16 +356,22 @@ var renderShell = function() {
       });
     });
 
-    // Theme toggle
-    var themeBtn = document.getElementById('themeToggle');
-    if (themeBtn) {
-      themeBtn.textContent = document.body.classList.contains('light') ? '☀️' : '🌙';
-      themeBtn.addEventListener('click', function() {
-        var isLight = document.body.classList.toggle('light');
-        themeBtn.textContent = isLight ? '☀️' : '🌙';
-        localStorage.setItem('enclave_theme', isLight ? 'light' : 'dark');
+    // Theme toggle (both sidebar and mobile)
+    var syncThemeBtns = function() {
+      var isLight = document.body.classList.contains('light');
+      var icon = isLight ? '☀️' : '🌙';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = icon;
       });
-    }
+    };
+    syncThemeBtns();
+    document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var isLight = document.body.classList.toggle('light');
+        localStorage.setItem('enclave_theme', isLight ? 'light' : 'dark');
+        syncThemeBtns();
+      });
+    });
 
     // Sign out
     var signOutBtn = document.querySelector('[data-action="sign-out"]');

@@ -451,11 +451,14 @@ body {
   }
   .mobile-topbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 14px;
   }
   .mobile-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-family: var(--serif);
     font-size: 22px;
     font-weight: 400;
@@ -490,7 +493,7 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     gap: 6px;
     padding: 8px;
-    background: rgba(17, 17, 17, 0.94);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 22px;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
