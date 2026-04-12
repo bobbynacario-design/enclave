@@ -173,13 +173,19 @@ var resetProjectDetailState = function() {
 };
 
 var VALID_PAGES = {
-  feed:     true,
-  events:   true,
-  members:  true,
-  admin:    true,
-  messages: true,
-  projects: true,
-  resources: true
+  feed:      true,
+  events:    true,
+  members:   true,
+  admin:     true,
+  messages:  true,
+  projects:  true,
+  resources: true,
+  briefings: true
+};
+
+var briefingsState = {
+  briefings:   [],
+  unsubscribe: null
 };
 
 var projectsState = {
@@ -381,7 +387,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v98';
+var ASSET_VERSION = 'v99';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1058,6 +1064,7 @@ var loadPage = function(page) {
 
   resetMessagesState(false);
   resetResourcesState();
+  resetBriefingsState();
 
   var slot = document.querySelector('[data-slot="page"]');
   if (!slot) return;
@@ -1079,6 +1086,7 @@ var loadPage = function(page) {
     if (page === 'messages') initMessagesPage();
     if (page === 'projects') initProjectsPage();
     if (page === 'resources') initResourcesPage();
+    if (page === 'briefings') initBriefingsPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -5109,6 +5117,250 @@ var initResourcesPage = function() {
   }, function(err) {
     console.error('Resources subscribe error:', err);
   });
+};
+
+// ─── Briefings ──────────────────────────────────────────────────────────────
+
+var resetBriefingsState = function() {
+  if (briefingsState.unsubscribe) {
+    briefingsState.unsubscribe();
+    briefingsState.unsubscribe = null;
+  }
+  briefingsState.briefings = [];
+};
+
+var BRIEFING_SECTION_META = {
+  global:  { label: 'Global',      color: '#378ADD' },
+  ph:      { label: 'Philippines',  color: '#BA7517' },
+  ai:      { label: 'AI',           color: '#7F77DD' },
+  markets: { label: 'Markets',      color: '#1D9E75' },
+  ev:      { label: 'EV',           color: '#639922' }
+};
+
+var renderBriefingCard = function(b) {
+  var m = b.markets || {};
+  var pseiMove = String(m.psei_move || '');
+  var asxMove = String(m.asx_move || '');
+  var spMove = String(m.sp500_move || '');
+
+  var tickerClass = function(move) {
+    if (move.indexOf('up') === 0) return 'up';
+    if (move.indexOf('down') === 0) return 'dn';
+    return '';
+  };
+
+  var tickers =
+    '<div class="briefing-tickers">' +
+      '<div class="briefing-ticker">' +
+        '<div class="briefing-ticker-label">PSEi</div>' +
+        '<div class="briefing-ticker-value">' + escapeHTML(m.psei || '—') + '</div>' +
+        '<div class="briefing-ticker-move ' + tickerClass(pseiMove) + '">' + escapeHTML(pseiMove || '—') + '</div>' +
+      '</div>' +
+      '<div class="briefing-ticker">' +
+        '<div class="briefing-ticker-label">ASX 200</div>' +
+        '<div class="briefing-ticker-value">' + escapeHTML(m.asx || '—') + '</div>' +
+        '<div class="briefing-ticker-move ' + tickerClass(asxMove) + '">' + escapeHTML(asxMove || '—') + '</div>' +
+      '</div>' +
+      '<div class="briefing-ticker">' +
+        '<div class="briefing-ticker-label">S&amp;P 500</div>' +
+        '<div class="briefing-ticker-value">' + escapeHTML(m.sp500 || '—') + '</div>' +
+        '<div class="briefing-ticker-move ' + tickerClass(spMove) + '">' + escapeHTML(spMove || '—') + '</div>' +
+      '</div>' +
+    '</div>';
+
+  var sections = '';
+  (b.sections || []).forEach(function(sec) {
+    var relevant = (sec.stories || []).filter(function(s) { return s.relevant === true; });
+    if (!relevant.length) return;
+    var meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id, color: '#888' };
+    var stories = relevant.map(function(s) {
+      return '<div class="briefing-story" style="border-left-color:' + meta.color + '">' +
+        '<div class="briefing-story-head">' + escapeHTML(s.headline) + '</div>' +
+        '<div class="briefing-story-body">' + escapeHTML(s.body) + '</div>' +
+      '</div>';
+    }).join('');
+    sections +=
+      '<div class="briefing-section">' +
+        '<div class="briefing-section-label">' +
+          '<span class="briefing-section-dot" style="background:' + meta.color + '"></span>' +
+          escapeHTML(meta.label) +
+        '</div>' +
+        stories +
+      '</div>';
+  });
+
+  var watchBox = '';
+  if (b.watch) {
+    watchBox =
+      '<div class="briefing-watch">' +
+        '<div class="briefing-watch-label">Watch</div>' +
+        '<div class="briefing-watch-body">' + escapeHTML(b.watch) + '</div>' +
+        (b.watch_source ? '<div class="briefing-watch-source">' + escapeHTML(b.watch_source) + '</div>' : '') +
+      '</div>';
+  }
+
+  var adminBtn = '';
+  if (state.isAdmin) {
+    adminBtn = '<button class="btn btn-ghost" style="margin-left:auto;font-size:11px;color:var(--red)" data-briefing-delete="' + escapeAttr(b.id) + '">Delete</button>';
+  }
+
+  return '<div class="briefing-card">' +
+    '<div class="briefing-card-head">' +
+      '<div class="briefing-card-title">' + escapeHTML(b.date || 'Untitled') + '</div>' +
+      '<div class="briefing-card-sub">Work Network · Daily Briefing</div>' +
+    '</div>' +
+    tickers +
+    (sections ? '<div class="briefing-sections">' + sections + '</div>' : '') +
+    watchBox +
+    '<div class="briefing-footer">' +
+      '<span class="briefing-footer-tag">' + escapeHTML(b.circle || 'work-network') + '</span>' +
+      '<span class="briefing-footer-tag">Daily Briefing</span>' +
+      '<span class="briefing-footer-tag">' + escapeHTML(b.date || '') + '</span>' +
+      adminBtn +
+    '</div>' +
+  '</div>';
+};
+
+var renderBriefingList = function() {
+  var listEl = document.getElementById('briefingList');
+  if (!listEl) return;
+
+  if (!briefingsState.briefings.length) {
+    listEl.innerHTML = '<p class="text-muted">No briefings yet.</p>';
+    return;
+  }
+
+  listEl.innerHTML = briefingsState.briefings.map(renderBriefingCard).join('');
+
+  listEl.querySelectorAll('[data-briefing-delete]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var bid = btn.getAttribute('data-briefing-delete');
+      showConfirmModal('Delete briefing', 'Delete this briefing?', 'Delete').then(function(confirmed) {
+        if (!confirmed) return;
+        deleteDoc(doc(db, 'briefings', bid)).then(function() {
+          showToast('Briefing deleted.', 'success');
+        }).catch(function(err) {
+          showToast('Delete failed: ' + err.message, 'error');
+        });
+      });
+    });
+  });
+};
+
+var subscribeBriefings = function() {
+  if (briefingsState.unsubscribe) briefingsState.unsubscribe();
+
+  var q = query(collection(db, 'briefings'), orderBy('publishedAt', 'desc'), limit(10));
+  briefingsState.unsubscribe = onSnapshot(q, function(snap) {
+    briefingsState.briefings = snap.docs.map(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      return data;
+    });
+    renderBriefingList();
+  }, function(err) {
+    console.error('Briefings subscribe error:', err);
+    var listEl = document.getElementById('briefingList');
+    if (listEl) listEl.innerHTML = '<p class="text-muted">Failed to load briefings.</p>';
+  });
+};
+
+var openBriefingImportModal = function() {
+  var existing = document.getElementById('dialogBackdrop');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+  var backdrop = document.createElement('div');
+  backdrop.id = 'dialogBackdrop';
+  backdrop.className = 'dialog-backdrop';
+
+  var card = document.createElement('div');
+  card.className = 'dialog-card';
+
+  var title = document.createElement('div');
+  title.className = 'dialog-title';
+  title.textContent = 'Import Briefing';
+
+  var label = document.createElement('label');
+  label.textContent = 'Paste Gemini JSON';
+  label.style.cssText = 'display:block;font-size:12px;font-weight:500;margin-bottom:6px;color:var(--text-muted)';
+
+  var textarea = document.createElement('textarea');
+  textarea.rows = 12;
+  textarea.style.cssText = 'width:100%;font-family:monospace;font-size:12px;background:var(--surface-2);color:var(--text);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px;resize:vertical';
+
+  var actions = document.createElement('div');
+  actions.className = 'dialog-actions';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.textContent = 'Cancel';
+
+  var publishBtn = document.createElement('button');
+  publishBtn.type = 'button';
+  publishBtn.className = 'btn btn-primary';
+  publishBtn.textContent = 'Publish';
+
+  var close = function() {
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+  };
+
+  cancelBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', function(e) {
+    if (e.target === backdrop) close();
+  });
+
+  publishBtn.addEventListener('click', function() {
+    var raw = textarea.value.trim();
+    var parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      showToast('Invalid JSON.', 'error');
+      return;
+    }
+
+    if (!parsed.date || !parsed.markets || !parsed.sections) {
+      showToast('Missing required fields: date, markets, sections.', 'error');
+      return;
+    }
+
+    publishBtn.disabled = true;
+    publishBtn.textContent = 'Publishing...';
+
+    parsed.publishedAt  = serverTimestamp();
+    parsed.publishedBy  = state.user.uid;
+    parsed.circle       = 'work-network';
+
+    addDoc(collection(db, 'briefings'), parsed).then(function() {
+      close();
+      showToast('Briefing published.', 'success');
+    }).catch(function(err) {
+      publishBtn.disabled = false;
+      publishBtn.textContent = 'Publish';
+      showToast('Publish failed: ' + err.message, 'error');
+    });
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(publishBtn);
+  card.appendChild(title);
+  card.appendChild(label);
+  card.appendChild(textarea);
+  card.appendChild(actions);
+  backdrop.appendChild(card);
+  document.body.appendChild(backdrop);
+  textarea.focus();
+};
+
+var initBriefingsPage = function() {
+  var adminBar = document.getElementById('briefingAdminBar');
+  if (adminBar && state.isAdmin) adminBar.hidden = false;
+
+  var importBtn = document.getElementById('briefingImportBtn');
+  if (importBtn) importBtn.addEventListener('click', openBriefingImportModal);
+
+  subscribeBriefings();
 };
 
 onAuthStateChanged(auth, function(user) {

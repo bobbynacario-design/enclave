@@ -318,6 +318,12 @@ service cloud.firestore {
       }
     }
 
+    match /briefings/{briefingId} {
+      allow read: if userDocExists();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /resources/{resourceId} {
       allow get, list: if signedIn();
 
