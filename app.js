@@ -425,6 +425,19 @@ var renderShell = function() {
     var signOutBtn = document.querySelector('[data-action="sign-out"]');
     if (signOutBtn) signOutBtn.addEventListener('click', handleSignOut);
 
+    // Mobile "More" menu toggle
+    var moreBtn = document.getElementById('mobileMoreBtn');
+    var moreMenu = document.getElementById('mobileMoreMenu');
+    if (moreBtn && moreMenu) {
+      moreBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        moreMenu.classList.toggle('open');
+      });
+      document.addEventListener('click', function() {
+        moreMenu.classList.remove('open');
+      });
+    }
+
     // User profile row
     if (state.user) {
       var nameEl  = document.querySelector('[data-slot="user-name"]');
@@ -3660,6 +3673,15 @@ var syncSidebarSelection = function() {
 
   document.querySelectorAll('.mobile-nav-link[data-page]').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.page === state.currentPage);
+  });
+
+  // Highlight More button when a "more" page is active
+  var morePages = { events: true, members: true, resources: true, admin: true };
+  var moreBtn = document.getElementById('mobileMoreBtn');
+  if (moreBtn) moreBtn.classList.toggle('active', !!morePages[state.currentPage]);
+
+  document.querySelectorAll('.mobile-more-item[data-page]').forEach(function(item) {
+    item.classList.toggle('active', item.dataset.page === state.currentPage);
   });
 
   document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
