@@ -109,7 +109,10 @@ service cloud.firestore {
         ) &&
         request.resource.data.circles is list;
 
-      allow update: if isAdmin() || (
+      allow update: if (isAdmin() &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email
+      ) || (
         signedIn() &&
         request.auth.uid == userId &&
         request.resource.data.uid == resource.data.uid &&
@@ -192,7 +195,8 @@ service cloud.firestore {
         allow create: if signedIn() &&
           canAccessConversation(conversationId) &&
           request.resource.data.authorId == request.auth.uid &&
-          request.resource.data.body is string;
+          request.resource.data.body is string &&
+          request.resource.data.body.size() <= 2000;
 
         allow update, delete: if false;
       }

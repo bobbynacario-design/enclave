@@ -214,6 +214,18 @@ var runSignOut = function(accessDenied) {
   state.isAdmin = false;
   state.circles = [];
   adminState.allowlist = [];
+  if (feedState.unsubscribe) {
+    feedState.unsubscribe();
+    feedState.unsubscribe = null;
+  }
+  if (projectsState.unsubscribe) {
+    projectsState.unsubscribe();
+    projectsState.unsubscribe = null;
+  }
+  if (projectsState.sidebarUnsubscribe) {
+    projectsState.sidebarUnsubscribe();
+    projectsState.sidebarUnsubscribe = null;
+  }
   resetProjectDetailState();
   resetMessagesState();
   resetResourcesState();
@@ -426,8 +438,8 @@ var renderShell = function() {
         e.stopPropagation();
         moreMenu.classList.toggle('open');
       });
-      document.addEventListener('click', function() {
-        moreMenu.classList.remove('open');
+      moreMenu.addEventListener('click', function(e) {
+        e.stopPropagation();
       });
     }
 
@@ -439,7 +451,7 @@ var renderShell = function() {
       if (nameEl)  nameEl.textContent  = state.user.displayName || 'Member';
       if (emailEl) emailEl.textContent = state.user.email || '';
       if (avEl && state.user.photoURL) {
-        avEl.style.backgroundImage = 'url(' + state.user.photoURL + ')';
+        avEl.style.backgroundImage = 'url(' + escapeAttr(state.user.photoURL) + ')';
       }
     }
 
@@ -1082,7 +1094,7 @@ var initFeedPage = function() {
   var composeAv = document.querySelector('[data-slot="compose-avatar"]');
   if (composeAv && state.user) {
     if (state.user.photoURL) {
-      composeAv.style.backgroundImage = 'url(' + state.user.photoURL + ')';
+      composeAv.style.backgroundImage = 'url(' + escapeAttr(state.user.photoURL) + ')';
       composeAv.textContent = '';
     } else {
       composeAv.textContent = getInitials(state.user.displayName || state.user.email);
@@ -4261,28 +4273,30 @@ var renderProjectDetail = function(p) {
   // Wire delete
   var deleteBtn = document.getElementById('projectDeleteBtn');
   if (deleteBtn) deleteBtn.onclick = function() {
-    if (!confirm('Delete this project? This cannot be undone.')) return;
-    // Clean up subcollections before deleting project doc
-    var projectRef = doc(db, 'projects', p.id);
-    var commentsCol = collection(db, 'projects', p.id, 'comments');
-    var filesCol = collection(db, 'projects', p.id, 'files');
-    var tasksCol = collection(db, 'projects', p.id, 'tasks');
-    var activityCol = collection(db, 'projects', p.id, 'activity');
-    Promise.all([getDocs(commentsCol), getDocs(filesCol), getDocs(tasksCol), getDocs(activityCol)]).then(function(results) {
-      var deletes = [];
-      results.forEach(function(snap) {
-        snap.forEach(function(d) { deletes.push(deleteDoc(d.ref)); });
+    showConfirmModal('Delete project', 'Delete this project? This cannot be undone.', 'Delete').then(function(ok) {
+      if (!ok) return;
+      // Clean up subcollections before deleting project doc
+      var projectRef = doc(db, 'projects', p.id);
+      var commentsCol = collection(db, 'projects', p.id, 'comments');
+      var filesCol = collection(db, 'projects', p.id, 'files');
+      var tasksCol = collection(db, 'projects', p.id, 'tasks');
+      var activityCol = collection(db, 'projects', p.id, 'activity');
+      Promise.all([getDocs(commentsCol), getDocs(filesCol), getDocs(tasksCol), getDocs(activityCol)]).then(function(results) {
+        var deletes = [];
+        results.forEach(function(snap) {
+          snap.forEach(function(d) { deletes.push(deleteDoc(d.ref)); });
+        });
+        return Promise.all(deletes);
+      }).then(function() {
+        return deleteDoc(projectRef);
+      }).then(function() {
+        showToast('Project deleted.', 'info');
+        projectsState.activeProjectId = null;
+        loadPage('projects');
+      }).catch(function(err) {
+        console.error('Delete project error:', err);
+        showToast('Failed to delete project.', 'error');
       });
-      return Promise.all(deletes);
-    }).then(function() {
-      return deleteDoc(projectRef);
-    }).then(function() {
-      showToast('Project deleted.', 'info');
-      projectsState.activeProjectId = null;
-      loadPage('projects');
-    }).catch(function(err) {
-      console.error('Delete project error:', err);
-      showToast('Failed to delete project.', 'error');
     });
   };
 
@@ -4989,6 +5003,10 @@ var initResourcesPage = function() {
       var cat   = document.getElementById('resourceCategory').value;
 
       if (!title || !url) return;
+      if (!/^https?:\/\//i.test(url)) {
+        showToast('URL must start with http:// or https://', 'error');
+        return;
+      }
 
       addBtn.disabled = true;
       addDoc(collection(db, 'resources'), {
@@ -5045,4 +5063,10 @@ onAuthStateChanged(auth, function(user) {
 
 window.addEventListener('resize', function() {
   syncResponsivePanels();
+});
+
+// Close mobile More menu on outside tap (registered once, not per renderShell)
+document.addEventListener('click', function() {
+  var m = document.getElementById('mobileMoreMenu');
+  if (m) m.classList.remove('open');
 });
