@@ -4944,7 +4944,7 @@ var renderResourceList = function() {
       '</div>' +
       '<a href="' + escapeHTML(r.url) + '" target="_blank" rel="noopener" class="resource-title">' + escapeHTML(r.title) + '</a>' +
       desc +
-      '<div class="resource-meta">Added by ' + escapeHTML(r.addedByName) + '</div>' +
+      '<div class="resource-meta">Added by ' + escapeHTML(r.addedByName) + (r.createdAt ? ' &middot; ' + (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)).toLocaleDateString() : '') + '</div>' +
     '</div>';
   }).join('');
 
