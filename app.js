@@ -387,7 +387,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v99';
+var ASSET_VERSION = 'v100';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -5168,9 +5168,22 @@ var renderBriefingCard = function(b) {
       '</div>' +
     '</div>';
 
+  // Normalize sections: accept array [{id, stories}] or object {global: [...]}
+  var sectionList = [];
+  if (Array.isArray(b.sections)) {
+    sectionList = b.sections;
+  } else if (b.sections && typeof b.sections === 'object') {
+    Object.keys(b.sections).forEach(function(key) {
+      sectionList.push({ id: key, stories: b.sections[key] });
+    });
+  }
+
   var sections = '';
-  (b.sections || []).forEach(function(sec) {
-    var relevant = (sec.stories || []).filter(function(s) { return s.relevant === true; });
+  sectionList.forEach(function(sec) {
+    var stories = sec.stories || [];
+    // If stories have a 'relevant' boolean field, filter by it; otherwise show all
+    var hasRelevantField = stories.length > 0 && typeof stories[0].relevant === 'boolean';
+    var relevant = hasRelevantField ? stories.filter(function(s) { return s.relevant === true; }) : stories;
     if (!relevant.length) return;
     var meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id, color: '#888' };
     var stories = relevant.map(function(s) {
