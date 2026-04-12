@@ -35,7 +35,6 @@ var ALL_CIRCLES = [
   'family'
 ];
 
-var OWNER_ADMIN_EMAIL = 'bobbynacario@gmail.com';
 var FEED_PAGE_SIZE = 20;
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -283,8 +282,6 @@ var upsertUserDoc = function(user, allowlistEntry) {
   var ref = doc(db, 'users', user.uid);
   var displayName = user.displayName || user.email;
   var allowedCircles = normalizeCircles(allowlistEntry && allowlistEntry.circles);
-  var ownerAdmin = isOwnerAdminEmail(user.email);
-
   return getDoc(ref).then(function(snap) {
     var base = {
       uid:      user.uid,
@@ -297,15 +294,12 @@ var upsertUserDoc = function(user, allowlistEntry) {
 
     if (snap.exists()) {
       var existing = snap.data() || {};
-      state.isAdmin = existing.role === 'admin' || ownerAdmin;
+      state.isAdmin = existing.role === 'admin';
       state.circles = state.isAdmin
         ? normalizeCircles(existing.circles)
         : allowedCircles.slice();
 
       var updatePayload = Object.assign({}, base);
-      if (ownerAdmin && existing.role !== 'admin') {
-        updatePayload.role = 'admin';
-      }
       if (!state.isAdmin) {
         updatePayload.circles = allowedCircles.slice();
       }
@@ -314,11 +308,10 @@ var upsertUserDoc = function(user, allowlistEntry) {
         console.error('User doc update failed:', err);
       });
     } else {
-      state.isAdmin = ownerAdmin;
       state.circles = allowedCircles.slice();
       base.joinedAt = serverTimestamp();
       base.bio      = '';
-      base.role     = ownerAdmin ? 'admin' : '';
+      base.role     = '';
       base.circles  = allowedCircles.slice();
       return setDoc(ref, base).catch(function(err) {
         console.error('User doc create failed:', err);
@@ -510,7 +503,7 @@ var refreshCurrentUserState = function() {
     if (!snap.exists()) return;
 
     var data = snap.data() || {};
-    state.isAdmin = data.role === 'admin' || isOwnerAdminEmail(state.user.email);
+    state.isAdmin = data.role === 'admin';
     state.circles = normalizeCircles(data.circles);
 
     document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
@@ -954,7 +947,7 @@ var loadPanelEvents = function() {
 
   var q = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
     where('date', '>=', getUpcomingEventsThreshold()),
     orderBy('date', 'asc'),
     limit(4)
@@ -1158,7 +1151,7 @@ var subscribeFeed = function() {
 
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
     orderBy('timestamp', 'desc'),
     limit(FEED_PAGE_SIZE)
   );
@@ -1286,7 +1279,7 @@ var loadMoreFeedPosts = function() {
 
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
     orderBy('timestamp', 'desc'),
     startAfter(feedState.lastDoc),
     limit(FEED_PAGE_SIZE)
@@ -2267,7 +2260,6 @@ var initMessagesPage = function() {
   renderMessagesPeopleList();
   renderMessagesThread();
   loadMessageMembers();
-  subscribeConversations();
 };
 
 var initAdminPage = function() {
@@ -2774,7 +2766,7 @@ var loadRecentPosts = function(uid) {
   var q = query(
     collection(db, 'posts'),
     where('authorId', '==', uid),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
     orderBy('timestamp', 'desc'),
     limit(5)
   );
@@ -2889,13 +2881,13 @@ var loadEvents = function() {
   var threshold = getUpcomingEventsThreshold();
   var upcomingQuery = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
     where('date', '>=', threshold),
     orderBy('date', 'asc')
   );
   var pastQuery = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
     where('date', '<', threshold),
     orderBy('date', 'asc')
   );
@@ -3559,10 +3551,6 @@ var clearDriveAttachment = function() {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-var isOwnerAdminEmail = function(email) {
-  return String(email || '').toLowerCase() === OWNER_ADMIN_EMAIL;
-};
-
 var getCircleDefinitions = function() {
   return [
     { id: 'hustle-hub',   label: 'Hustle Hub' },
@@ -4415,10 +4403,12 @@ var renderProjectDetail = function(p) {
   document.querySelectorAll('[data-task-delete]').forEach(function(btn) {
     btn.onclick = function() {
       var taskId = btn.dataset.taskDelete;
-      if (!confirm('Delete this task?')) return;
-      deleteDoc(doc(db, 'projects', p.id, 'tasks', taskId)).catch(function(err) {
-        console.error('Delete task error:', err);
-        showToast('Failed to delete task.', 'error');
+      showConfirmModal('Delete task', 'Delete this task?', 'Delete').then(function(ok) {
+        if (!ok) return;
+        deleteDoc(doc(db, 'projects', p.id, 'tasks', taskId)).catch(function(err) {
+          console.error('Delete task error:', err);
+          showToast('Failed to delete task.', 'error');
+        });
       });
     };
   });
@@ -4942,7 +4932,7 @@ var renderResourceList = function() {
         '<span class="resource-cat-badge" style="background:' + cat.color + ';">' + cat.label + '</span>' +
         deleteBtn +
       '</div>' +
-      '<a href="' + escapeHTML(r.url) + '" target="_blank" rel="noopener" class="resource-title">' + escapeHTML(r.title) + '</a>' +
+      '<a href="' + escapeAttr(r.url) + '" target="_blank" rel="noopener" class="resource-title">' + escapeHTML(r.title) + '</a>' +
       desc +
       '<div class="resource-meta">Added by ' + escapeHTML(r.addedByName) + (r.createdAt ? ' &middot; ' + (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)).toLocaleDateString() : '') + '</div>' +
     '</div>';
