@@ -185,7 +185,9 @@ var VALID_PAGES = {
 
 var briefingsState = {
   briefings:   [],
-  unsubscribe: null
+  unsubscribe: null,
+  unsubscribeNotifier: null,
+  hasUnread: false
 };
 
 var projectsState = {
@@ -387,7 +389,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v101';
+var ASSET_VERSION = 'v102';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -479,6 +481,7 @@ var renderShell = function() {
 
     syncSidebarSelection();
     subscribeConversations();
+    subscribeBriefingNotifier();
     loadOnlineUsers();
     startPresenceHeartbeat();
     loadPanelEvents();
@@ -5129,6 +5132,57 @@ var resetBriefingsState = function() {
   briefingsState.briefings = [];
 };
 
+var BRIEFING_READ_KEY = 'enclave_last_briefing_ts';
+
+var getBriefingPublishedMs = function(b) {
+  if (b.publishedAt && typeof b.publishedAt.toMillis === 'function') return b.publishedAt.toMillis();
+  if (b.publishedAt && b.publishedAt.seconds) return b.publishedAt.seconds * 1000;
+  return 0;
+};
+
+var syncBriefingBadge = function() {
+  var dot = document.getElementById('briefingUnreadDot');
+  if (dot) dot.style.display = briefingsState.hasUnread ? 'inline-block' : 'none';
+  var headerBadge = document.getElementById('briefingNewBadge');
+  if (headerBadge) headerBadge.style.display = briefingsState.hasUnread ? 'inline-block' : 'none';
+};
+
+var subscribeBriefingNotifier = function() {
+  if (briefingsState.unsubscribeNotifier) briefingsState.unsubscribeNotifier();
+
+  var q = query(collection(db, 'briefings'), orderBy('publishedAt', 'desc'), limit(1));
+  briefingsState.unsubscribeNotifier = onSnapshot(q, function(snap) {
+    if (snap.empty) {
+      briefingsState.hasUnread = false;
+      syncBriefingBadge();
+      return;
+    }
+    var latest = snap.docs[0].data();
+    var latestMs = getBriefingPublishedMs(latest);
+    var lastRead = parseInt(localStorage.getItem(BRIEFING_READ_KEY) || '0', 10);
+    briefingsState.hasUnread = latestMs > lastRead;
+    syncBriefingBadge();
+  }, function(err) {
+    console.error('Briefing notifier error:', err);
+  });
+};
+
+var markBriefingsRead = function() {
+  var latest = briefingsState.briefings[0];
+  if (!latest) return;
+  // Find the newest publishedAt among all loaded briefings
+  var maxMs = 0;
+  briefingsState.briefings.forEach(function(b) {
+    var ms = getBriefingPublishedMs(b);
+    if (ms > maxMs) maxMs = ms;
+  });
+  if (maxMs > 0) {
+    localStorage.setItem(BRIEFING_READ_KEY, String(maxMs));
+    briefingsState.hasUnread = false;
+    syncBriefingBadge();
+  }
+};
+
 var BRIEFING_SECTION_META = {
   global:  { label: 'Global',      color: '#378ADD' },
   ph:      { label: 'Philippines',  color: '#BA7517' },
@@ -5277,6 +5331,7 @@ var subscribeBriefings = function() {
       return data;
     });
     renderBriefingList();
+    markBriefingsRead();
   }, function(err) {
     console.error('Briefings subscribe error:', err);
     var listEl = document.getElementById('briefingList');
