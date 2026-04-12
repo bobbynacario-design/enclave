@@ -83,6 +83,10 @@ var messagesState = {
   activePeerId:            null,
   activeConversationId:    null,
   thread:                  [],
+  olderMessages:           [],
+  hasMoreMessages:         false,
+  loadingOlder:            false,
+  oldestDoc:               null,
   totalUnread:             0,
   unsubscribeConversations: null,
   unsubscribeThread:        null
@@ -1997,19 +2001,27 @@ var renderMessagesThread = function() {
   var peerReadAtMs = getFirestoreTimeMs(peerReadAt);
   var lastOwnMessageId = null;
 
-  for (var i = messagesState.thread.length - 1; i >= 0; i -= 1) {
-    if (messagesState.thread[i].authorId === (state.user && state.user.uid)) {
-      lastOwnMessageId = messagesState.thread[i].id;
+  var allMsgs = messagesState.olderMessages.concat(messagesState.thread);
+  for (var i = allMsgs.length - 1; i >= 0; i -= 1) {
+    if (allMsgs[i].authorId === (state.user && state.user.uid)) {
+      lastOwnMessageId = allMsgs[i].id;
       break;
     }
   }
 
-  if (messagesState.thread.length === 0) {
+  var allMessages = messagesState.olderMessages.concat(messagesState.thread);
+
+  if (allMessages.length === 0) {
     listEl.innerHTML = '<div class="messages-empty-state text-muted">No messages yet. Send the first one.</div>';
     return;
   }
 
-  listEl.innerHTML = messagesState.thread.map(function(message) {
+  var loadMoreHtml = messagesState.hasMoreMessages
+    ? '<div style="text-align:center;padding:8px 0;"><button class="btn btn-ghost" id="loadOlderMessagesBtn">' +
+      (messagesState.loadingOlder ? 'Loading...' : 'Load older messages') + '</button></div>'
+    : '';
+
+  listEl.innerHTML = loadMoreHtml + allMessages.map(function(message) {
     var mine = message.authorId === (state.user && state.user.uid);
     var author = escapeHTML(message.authorName || 'Member');
     var body = escapeHTML(message.body || '');
@@ -2034,7 +2046,16 @@ var renderMessagesThread = function() {
       '</div>';
   }).join('');
 
-  listEl.scrollTop = listEl.scrollHeight;
+  // Wire load older button
+  var olderBtn = document.getElementById('loadOlderMessagesBtn');
+  if (olderBtn) {
+    olderBtn.addEventListener('click', loadOlderMessages);
+  }
+
+  // Only auto-scroll to bottom if not loading older messages
+  if (!messagesState.loadingOlder) {
+    listEl.scrollTop = listEl.scrollHeight;
+  }
 };
 
 var subscribeMessageThread = function(conversationId) {
@@ -2045,11 +2066,17 @@ var subscribeMessageThread = function(conversationId) {
 
   messagesState.activeConversationId = conversationId;
   messagesState.thread = [];
+  messagesState.olderMessages = [];
+  messagesState.hasMoreMessages = false;
+  messagesState.loadingOlder = false;
+  messagesState.oldestDoc = null;
+
+  var MESSAGE_PAGE = 100;
 
   var q = query(
     collection(db, 'conversations', conversationId, 'messages'),
     orderBy('createdAt', 'desc'),
-    limit(100)
+    limit(MESSAGE_PAGE)
   );
 
   messagesState.unsubscribeThread = onSnapshot(q, function(snap) {
@@ -2059,6 +2086,8 @@ var subscribeMessageThread = function(conversationId) {
       data.id = d.id;
       thread.push(data);
     });
+    messagesState.hasMoreMessages = thread.length >= MESSAGE_PAGE;
+    messagesState.oldestDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
     thread.reverse();
     messagesState.thread = thread;
     renderMessagesThread();
@@ -2069,6 +2098,42 @@ var subscribeMessageThread = function(conversationId) {
     if (listEl) {
       listEl.innerHTML = '<div class="messages-empty-state text-muted">Failed to load messages.</div>';
     }
+  });
+};
+
+var loadOlderMessages = function() {
+  if (messagesState.loadingOlder || !messagesState.hasMoreMessages || !messagesState.oldestDoc) return;
+  messagesState.loadingOlder = true;
+
+  var convId = messagesState.activeConversationId;
+  var q = query(
+    collection(db, 'conversations', convId, 'messages'),
+    orderBy('createdAt', 'desc'),
+    startAfter(messagesState.oldestDoc),
+    limit(100)
+  );
+
+  getDocs(q).then(function(snap) {
+    var older = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      older.push(data);
+    });
+
+    messagesState.hasMoreMessages = older.length >= 100;
+    if (snap.docs.length > 0) {
+      messagesState.oldestDoc = snap.docs[snap.docs.length - 1];
+    }
+
+    older.reverse();
+    messagesState.olderMessages = older.concat(messagesState.olderMessages);
+    renderMessagesThread();
+  }).catch(function(err) {
+    console.error('Load older messages error:', err);
+    showToast('Failed to load older messages.', 'error');
+  }).finally(function() {
+    messagesState.loadingOlder = false;
   });
 };
 
