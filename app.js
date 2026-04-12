@@ -4940,9 +4940,9 @@ var renderResourceList = function() {
 };
 
 var initResourcesPage = function() {
-  // Show add form for admins
+  // Show add form for all signed-in members
   var addForm = document.getElementById('resourceAddForm');
-  if (addForm && state.isAdmin) addForm.style.display = 'block';
+  if (addForm && state.user) addForm.style.display = 'block';
 
   // Filter pills
   var filtersEl = document.getElementById('resourceFilters');

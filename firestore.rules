@@ -317,7 +317,7 @@ service cloud.firestore {
     match /resources/{resourceId} {
       allow get, list: if signedIn();
 
-      allow create: if isAdmin() &&
+      allow create: if signedIn() &&
         request.resource.data.title is string &&
         request.resource.data.url is string &&
         request.resource.data.category in ['podcast', 'video', 'legal', 'tool', 'general'] &&
