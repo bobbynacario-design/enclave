@@ -44,7 +44,8 @@ var state = {
   user:         null,
   accessDenied: false,
   isAdmin:      false,
-  circles:      []
+  circles:      [],
+  googleAccessToken: ''
 };
 
 var authFlowState = {
@@ -363,7 +364,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v96';
+var ASSET_VERSION = 'v97';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1025,7 +1026,7 @@ var loadPage = function(page) {
     projectsState.activeProjectId = null;
   }
 
-  resetMessagesState();
+  resetMessagesState(false);
 
   var slot = document.querySelector('[data-slot="page"]');
   if (!slot) return;
