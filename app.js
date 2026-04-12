@@ -389,7 +389,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v102';
+var ASSET_VERSION = 'v103';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
