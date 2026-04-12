@@ -963,7 +963,7 @@ var loadPanelEvents = function() {
 
   var q = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
+    where('circle', 'in', getVisibleCircles()),
     where('date', '>=', getUpcomingEventsThreshold()),
     orderBy('date', 'asc'),
     limit(4)
@@ -1167,7 +1167,7 @@ var subscribeFeed = function() {
 
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
+    where('circle', 'in', getVisibleCircles()),
     orderBy('timestamp', 'desc'),
     limit(FEED_PAGE_SIZE)
   );
@@ -1295,7 +1295,7 @@ var loadMoreFeedPosts = function() {
 
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
+    where('circle', 'in', getVisibleCircles()),
     orderBy('timestamp', 'desc'),
     startAfter(feedState.lastDoc),
     limit(FEED_PAGE_SIZE)
@@ -2843,7 +2843,7 @@ var loadRecentPosts = function(uid) {
   var q = query(
     collection(db, 'posts'),
     where('authorId', '==', uid),
-    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
+    where('circle', 'in', getVisibleCircles()),
     orderBy('timestamp', 'desc'),
     limit(5)
   );
@@ -2958,13 +2958,13 @@ var loadEvents = function() {
   var threshold = getUpcomingEventsThreshold();
   var upcomingQuery = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
+    where('circle', 'in', getVisibleCircles()),
     where('date', '>=', threshold),
     orderBy('date', 'asc')
   );
   var pastQuery = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles().filter(function(c) { return c !== 'all'; })),
+    where('circle', 'in', getVisibleCircles()),
     where('date', '<', threshold),
     orderBy('date', 'asc')
   );
