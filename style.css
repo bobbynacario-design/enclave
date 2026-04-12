@@ -2679,3 +2679,98 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   background: var(--accent-dim);
   color: var(--accent);
 }
+
+/* ── Resources ────────────────────────────────────────────── */
+.resource-add-card {
+  margin-bottom: 16px;
+}
+.resource-add-card .form-row {
+  margin-bottom: 10px;
+}
+.resource-add-card .form-row:last-of-type {
+  margin-bottom: 14px;
+}
+.resource-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.resource-filter-pill {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.resource-filter-pill:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.resource-filter-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.resource-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
+}
+.resource-card:hover {
+  border-color: var(--accent);
+}
+.resource-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.resource-cat-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.resource-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.resource-title:hover {
+  text-decoration: underline;
+}
+.resource-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+.resource-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.resource-delete {
+  font-size: 14px;
+  padding: 2px 6px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.resource-delete:hover {
+  opacity: 1;
+}

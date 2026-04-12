@@ -1,0 +1,42 @@
+<div class="page-header">
+  <h1>Resources</h1>
+</div>
+
+<!-- Admin add form -->
+<div id="resourceAddForm" class="card resource-add-card" style="display:none;">
+  <h3 style="margin:0 0 12px;">Add Resource</h3>
+  <div class="form-row">
+    <input type="text" id="resourceTitle" class="input" placeholder="Title" />
+  </div>
+  <div class="form-row">
+    <input type="url" id="resourceUrl" class="input" placeholder="https://..." />
+  </div>
+  <div class="form-row">
+    <input type="text" id="resourceDesc" class="input" placeholder="Short description (optional)" />
+  </div>
+  <div class="form-row">
+    <select id="resourceCategory" class="input">
+      <option value="general">General Reference</option>
+      <option value="podcast">Podcast</option>
+      <option value="video">Video</option>
+      <option value="legal">Legal Material</option>
+      <option value="tool">Tool</option>
+    </select>
+  </div>
+  <button class="btn btn-primary" id="resourceAddBtn">Add Resource</button>
+</div>
+
+<!-- Category filter pills -->
+<div class="resource-filters" id="resourceFilters">
+  <button class="resource-filter-pill active" data-cat="all">All</button>
+  <button class="resource-filter-pill" data-cat="podcast">Podcast</button>
+  <button class="resource-filter-pill" data-cat="video">Video</button>
+  <button class="resource-filter-pill" data-cat="legal">Legal</button>
+  <button class="resource-filter-pill" data-cat="tool">Tool</button>
+  <button class="resource-filter-pill" data-cat="general">General</button>
+</div>
+
+<!-- Resource list -->
+<div id="resourceList">
+  <p class="text-muted">Loading resources...</p>
+</div>

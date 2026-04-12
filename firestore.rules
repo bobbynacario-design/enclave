@@ -314,6 +314,20 @@ service cloud.firestore {
       }
     }
 
+    match /resources/{resourceId} {
+      allow get, list: if signedIn();
+
+      allow create: if isAdmin() &&
+        request.resource.data.title is string &&
+        request.resource.data.url is string &&
+        request.resource.data.category in ['podcast', 'video', 'legal', 'tool', 'general'] &&
+        request.resource.data.addedBy == request.auth.uid;
+
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
     match /events/{eventId} {
       allow get, list: if signedIn() &&
         canAccessCircle(resource.data.circle);

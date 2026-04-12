@@ -175,7 +175,8 @@ var VALID_PAGES = {
   members:  true,
   admin:    true,
   messages: true,
-  projects: true
+  projects: true,
+  resources: true
 };
 
 var projectsState = {
@@ -197,6 +198,12 @@ var projectsState = {
   activityUnsubscribe: null
 };
 
+var resourcesState = {
+  resources:   [],
+  unsubscribe: null,
+  filter:      'all'
+};
+
 var pickerContext = 'feed';
 var pickerProjectId = null;
 
@@ -210,6 +217,7 @@ var runSignOut = function(accessDenied) {
   adminState.allowlist = [];
   resetProjectDetailState();
   resetMessagesState();
+  resetResourcesState();
   resetShellRealtime();
 
   return signOut(auth).catch(function(err) {
@@ -364,7 +372,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v97';
+var ASSET_VERSION = 'v98';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -1027,6 +1035,7 @@ var loadPage = function(page) {
   }
 
   resetMessagesState(false);
+  resetResourcesState();
 
   var slot = document.querySelector('[data-slot="page"]');
   if (!slot) return;
@@ -1047,6 +1056,7 @@ var loadPage = function(page) {
     if (page === 'admin')   initAdminPage();
     if (page === 'messages') initMessagesPage();
     if (page === 'projects') initProjectsPage();
+    if (page === 'resources') initResourcesPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -4854,6 +4864,136 @@ var showConfirmModal = function(title, message, confirmLabel) {
     confirmLabel: confirmLabel || 'Confirm',
     cancelLabel: 'Cancel',
     tone: 'danger'
+  });
+};
+
+// ─── Resources ──────────────────────────────────────────────────────────────
+
+var RESOURCE_CATEGORIES = {
+  podcast: { label: 'Podcast', color: '#E87040' },
+  video:   { label: 'Video',   color: '#6366F1' },
+  legal:   { label: 'Legal',   color: '#F59E0B' },
+  tool:    { label: 'Tool',    color: '#10B981' },
+  general: { label: 'General', color: '#8B5CF6' }
+};
+
+var resetResourcesState = function() {
+  if (resourcesState.unsubscribe) {
+    resourcesState.unsubscribe();
+    resourcesState.unsubscribe = null;
+  }
+  resourcesState.resources = [];
+  resourcesState.filter = 'all';
+};
+
+var renderResourceList = function() {
+  var listEl = document.getElementById('resourceList');
+  if (!listEl) return;
+
+  var filtered = resourcesState.filter === 'all'
+    ? resourcesState.resources
+    : resourcesState.resources.filter(function(r) { return r.category === resourcesState.filter; });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<p class="text-muted">No resources yet.</p>';
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(function(r) {
+    var cat = RESOURCE_CATEGORIES[r.category] || RESOURCE_CATEGORIES.general;
+    var desc = r.description ? '<p class="resource-desc">' + escapeHTML(r.description) + '</p>' : '';
+    var deleteBtn = state.isAdmin
+      ? '<button class="btn-ghost resource-delete" data-id="' + r.id + '" title="Delete">&#128465;</button>'
+      : '';
+    return '<div class="resource-card">' +
+      '<div class="resource-card-top">' +
+        '<span class="resource-cat-badge" style="background:' + cat.color + ';">' + cat.label + '</span>' +
+        deleteBtn +
+      '</div>' +
+      '<a href="' + escapeHTML(r.url) + '" target="_blank" rel="noopener" class="resource-title">' + escapeHTML(r.title) + '</a>' +
+      desc +
+      '<div class="resource-meta">Added by ' + escapeHTML(r.addedByName) + '</div>' +
+    '</div>';
+  }).join('');
+
+  listEl.querySelectorAll('.resource-delete').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var rid = btn.getAttribute('data-id');
+      showConfirmModal('Delete Resource', 'Remove this resource from the library?', 'Delete').then(function(ok) {
+        if (!ok) return;
+        deleteDoc(doc(db, 'resources', rid)).catch(function(err) {
+          console.error('Delete resource error:', err);
+        });
+      });
+    });
+  });
+};
+
+var initResourcesPage = function() {
+  // Show add form for admins
+  var addForm = document.getElementById('resourceAddForm');
+  if (addForm && state.isAdmin) addForm.style.display = 'block';
+
+  // Filter pills
+  var filtersEl = document.getElementById('resourceFilters');
+  if (filtersEl) {
+    filtersEl.addEventListener('click', function(e) {
+      var pill = e.target.closest('.resource-filter-pill');
+      if (!pill) return;
+      resourcesState.filter = pill.getAttribute('data-cat');
+      filtersEl.querySelectorAll('.resource-filter-pill').forEach(function(p) {
+        p.classList.toggle('active', p.getAttribute('data-cat') === resourcesState.filter);
+      });
+      renderResourceList();
+    });
+  }
+
+  // Add button
+  var addBtn = document.getElementById('resourceAddBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', function() {
+      var title = document.getElementById('resourceTitle').value.trim();
+      var url   = document.getElementById('resourceUrl').value.trim();
+      var desc  = document.getElementById('resourceDesc').value.trim();
+      var cat   = document.getElementById('resourceCategory').value;
+
+      if (!title || !url) return;
+
+      addBtn.disabled = true;
+      addDoc(collection(db, 'resources'), {
+        title:       title,
+        url:         url,
+        description: desc,
+        category:    cat,
+        addedBy:     state.user.uid,
+        addedByName: state.user.displayName || state.user.email || 'Member',
+        createdAt:   serverTimestamp()
+      }).then(function() {
+        document.getElementById('resourceTitle').value = '';
+        document.getElementById('resourceUrl').value = '';
+        document.getElementById('resourceDesc').value = '';
+        document.getElementById('resourceCategory').value = 'general';
+      }).catch(function(err) {
+        console.error('Add resource error:', err);
+      }).finally(function() {
+        addBtn.disabled = false;
+      });
+    });
+  }
+
+  // Subscribe to resources collection
+  if (resourcesState.unsubscribe) resourcesState.unsubscribe();
+
+  var q = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
+  resourcesState.unsubscribe = onSnapshot(q, function(snap) {
+    resourcesState.resources = snap.docs.map(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      return data;
+    });
+    renderResourceList();
+  }, function(err) {
+    console.error('Resources subscribe error:', err);
   });
 };
 
