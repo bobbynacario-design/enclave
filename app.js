@@ -3460,6 +3460,16 @@ var handlePickerResult = function(data) {
   if (data.action === google.picker.Action.PICKED && data.docs && data.docs.length > 0) {
     var file = data.docs[0];
 
+    // Resource context: fill resource form fields
+    if (pickerContext === 'resource') {
+      var rUrlInput = document.getElementById('resourceUrl');
+      var rTitleInput = document.getElementById('resourceTitle');
+      if (rUrlInput) rUrlInput.value = file.url || '';
+      if (rTitleInput && !rTitleInput.value.trim()) rTitleInput.value = file.name || '';
+      pickerContext = 'feed';
+      return;
+    }
+
     // Project context: attach file to project
     if (pickerContext === 'project' && pickerProjectId) {
       handleProjectFileAttach(pickerProjectId, {
@@ -4945,6 +4955,15 @@ var initResourcesPage = function() {
         p.classList.toggle('active', p.getAttribute('data-cat') === resourcesState.filter);
       });
       renderResourceList();
+    });
+  }
+
+  // Drive picker button
+  var driveBtn = document.getElementById('resourceDriveBtn');
+  if (driveBtn) {
+    driveBtn.addEventListener('click', function() {
+      pickerContext = 'resource';
+      openDrivePicker();
     });
   }
 
