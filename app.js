@@ -387,7 +387,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v100';
+var ASSET_VERSION = 'v101';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -5243,7 +5243,13 @@ var renderBriefingList = function() {
     return;
   }
 
-  listEl.innerHTML = briefingsState.briefings.map(renderBriefingCard).join('');
+  var sorted = briefingsState.briefings.slice().sort(function(a, b) {
+    // Parse "Friday, April 10, 2026" → Date by stripping the day-name prefix
+    var da = new Date((a.date || '').replace(/^\w+,\s*/, ''));
+    var db2 = new Date((b.date || '').replace(/^\w+,\s*/, ''));
+    return (db2.getTime() || 0) - (da.getTime() || 0);
+  });
+  listEl.innerHTML = sorted.map(renderBriefingCard).join('');
 
   listEl.querySelectorAll('[data-briefing-delete]').forEach(function(btn) {
     btn.addEventListener('click', function() {
