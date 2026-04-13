@@ -5186,6 +5186,28 @@ var renderNotificationsList = function() {
 var initNotificationsPage = function() {
   renderNotificationsList();
 
+  // Test button — sends a notification to yourself for testing
+  var testBtn = document.getElementById('testNotifBtn');
+  if (testBtn && state.user) {
+    testBtn.addEventListener('click', function() {
+      addDoc(collection(db, 'notifications'), {
+        recipientId: state.user.uid,
+        type: 'mention',
+        message: 'This is a test notification!',
+        link: { page: 'feed', params: {} },
+        read: false,
+        createdAt: serverTimestamp(),
+        actorId: state.user.uid,
+        actorName: state.user.displayName || state.user.email || 'Test'
+      }).then(function() {
+        showToast('Test notification sent.', 'info');
+      }).catch(function(err) {
+        console.error('Test notification error:', err);
+        showToast('Failed: ' + err.message, 'error');
+      });
+    });
+  }
+
   var markAllBtn = document.getElementById('markAllReadBtn');
   if (markAllBtn) {
     markAllBtn.addEventListener('click', function() {
