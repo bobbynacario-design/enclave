@@ -338,6 +338,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /notifications/{notificationId} {
+      allow get, list: if signedIn() &&
+        resource.data.recipientId == request.auth.uid;
+
+      allow create: if signedIn() &&
+        request.resource.data.recipientId is string &&
+        request.resource.data.type is string &&
+        request.resource.data.message is string &&
+        request.resource.data.link is map &&
+        request.resource.data.read == false &&
+        request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.actorName is string;
+
+      allow update: if signedIn() &&
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) &&
+        request.resource.data.read is bool;
+
+      allow delete: if signedIn() &&
+        (resource.data.recipientId == request.auth.uid || isAdmin());
+    }
+
     match /events/{eventId} {
       allow get, list: if signedIn() &&
         canAccessCircle(resource.data.circle);

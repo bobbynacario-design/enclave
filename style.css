@@ -2964,3 +2964,61 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   vertical-align: middle;
   margin-left: 6px;
 }
+
+/* ── Notifications ────────────────────────────────────────── */
+.notif-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.notif-item:hover {
+  border-color: var(--accent);
+}
+.notif-item.notif-unread {
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+}
+.notif-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.notif-content {
+  flex: 1;
+  min-width: 0;
+}
+.notif-message {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+.notif-unread .notif-message {
+  font-weight: 500;
+}
+.notif-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}

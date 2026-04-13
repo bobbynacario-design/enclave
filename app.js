@@ -137,6 +137,11 @@ var resetShellRealtime = function() {
     window.clearInterval(shellState.presenceTimer);
     shellState.presenceTimer = null;
   }
+
+  if (notificationsState.unsubscribe) {
+    notificationsState.unsubscribe();
+    notificationsState.unsubscribe = null;
+  }
 };
 
 var resetProjectDetailState = function() {
@@ -180,7 +185,8 @@ var VALID_PAGES = {
   messages:  true,
   projects:  true,
   resources: true,
-  briefings: true
+  briefings: true,
+  notifications: true
 };
 
 var briefingsState = {
@@ -213,6 +219,12 @@ var resourcesState = {
   resources:   [],
   unsubscribe: null,
   filter:      'all'
+};
+
+var notificationsState = {
+  notifications: [],
+  unsubscribe:   null,
+  unreadCount:   0
 };
 
 var pickerContext = 'feed';
@@ -389,7 +401,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v103';
+var ASSET_VERSION = 'v104';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -482,6 +494,7 @@ var renderShell = function() {
     syncSidebarSelection();
     subscribeConversations();
     subscribeBriefingNotifier();
+    subscribeNotifications();
     loadOnlineUsers();
     startPresenceHeartbeat();
     loadPanelEvents();
@@ -1090,6 +1103,7 @@ var loadPage = function(page) {
     if (page === 'projects') initProjectsPage();
     if (page === 'resources') initResourcesPage();
     if (page === 'briefings') initBriefingsPage();
+    if (page === 'notifications') initNotificationsPage();
   }).catch(function(err) {
     console.error('Failed to load page ' + page + ':', err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -1736,6 +1750,12 @@ var handleCommentSubmit = function(postId, authorId, formEl) {
     updateKnownPostComments(postId, nextComments);
     feedState.openComments[postId] = true;
     renderFeedList();
+
+    // Notify post author about the comment
+    if (authorId && authorId !== state.user.uid) {
+      var actor = state.user.displayName || state.user.email || 'Member';
+      writeNotification(authorId, 'post-comment', actor + ' commented on your post', { page: 'feed', params: { postId: postId } });
+    }
 
     if (authorId && document.getElementById('profilePosts')) {
       loadRecentPosts(authorId);
@@ -3169,6 +3189,16 @@ var handleRsvp = function(eventId, btn) {
     btn.classList.toggle('rsvped', result.isRsvped);
     btn.textContent = rsvpButtonLabel(result.count, result.isRsvped);
     btn.disabled = false;
+
+    // Notify event creator on RSVP (not un-RSVP)
+    if (result.isRsvped) {
+      var allEvents = (eventsState.upcoming || []).concat(eventsState.past || []);
+      var evt = allEvents.find(function(e) { return e.id === eventId; });
+      if (evt && evt.createdBy && evt.createdBy !== state.user.uid) {
+        var actor = state.user.displayName || state.user.email || 'Member';
+        writeNotification(evt.createdBy, 'event-rsvp', actor + ' RSVPed to "' + (evt.title || 'your event') + '"', { page: 'events', params: {} });
+      }
+    }
   }).catch(function(err) {
     console.error('Failed to update RSVP:', err);
     showToast('Failed to update RSVP. Check console for details.', 'error');
@@ -3752,7 +3782,7 @@ var syncSidebarSelection = function() {
   });
 
   // Highlight More button when a "more" page is active
-  var morePages = { events: true, members: true, resources: true, admin: true };
+  var morePages = { events: true, members: true, resources: true, admin: true, notifications: true };
   var moreBtn = document.getElementById('mobileMoreBtn');
   if (moreBtn) moreBtn.classList.toggle('active', !!morePages[state.currentPage]);
 
@@ -4482,6 +4512,11 @@ var renderProjectDetail = function(p) {
       }).then(function() {
         var statusLabels = { todo: 'To Do', doing: 'Doing', done: 'Done' };
         logProjectActivity(p.id, 'status', 'moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus]);
+        // Notify assignee about status change
+        if (task.assigneeId && task.assigneeId !== state.user.uid) {
+          var actor = state.user.displayName || state.user.email || 'Member';
+          writeNotification(task.assigneeId, 'task-status', actor + ' moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus], { page: 'projects', params: { projectId: p.id } });
+        }
       }).catch(function(err) {
         console.error('Task status update error:', err);
         showToast('Failed to update task.', 'error');
@@ -4556,6 +4591,12 @@ var renderProjectDetail = function(p) {
           if (newDueDate !== (task.dueDate || '')) changes.push('due date set to ' + (newDueDate || 'none'));
           if (changes.length > 0) {
             logProjectActivity(p.id, 'edited', '"' + (task.title || 'Untitled') + '": ' + changes.join(', '));
+          }
+          // Notify new assignee on reassignment
+          if (newAssigneeId && newAssigneeId !== task.assigneeId && newAssigneeId !== state.user.uid) {
+            var projName = p.name || 'a project';
+            var actor = state.user.displayName || state.user.email || 'Member';
+            writeNotification(newAssigneeId, 'task-assigned', actor + ' assigned you "' + newTitle + '" in ' + projName, { page: 'projects', params: { projectId: p.id } });
           }
           if (projectsState.detailProject) {
             renderProjectDetail(projectsState.detailProject);
@@ -4730,11 +4771,29 @@ var handleSaveProject = function() {
 
 // ─── Projects: add comment ──────────────────────────────────────────────────
 var handleProjectComment = function(projectId, body) {
+  var projectName = projectsState.detailProject ? (projectsState.detailProject.name || 'a project') : 'a project';
+  var actorName = state.user.displayName || state.user.email || 'Member';
   return addDoc(collection(db, 'projects', projectId, 'comments'), {
     authorId: state.user.uid,
-    authorName: state.user.displayName || state.user.email || 'Member',
+    authorName: actorName,
     body: body,
     createdAt: serverTimestamp()
+  }).then(function() {
+    // Notify @mentioned users
+    var mentionRe = /@(\w[\w\s]{0,30}\w)/g;
+    var match;
+    while ((match = mentionRe.exec(body)) !== null) {
+      var mentionName = match[1].toLowerCase();
+      (membersState.members || []).forEach(function(m) {
+        if ((m.name || '').toLowerCase() === mentionName && m.uid !== state.user.uid) {
+          writeNotification(m.uid, 'mention', actorName + ' mentioned you in ' + projectName, { page: 'projects', params: { projectId: projectId } });
+        }
+      });
+    }
+    // Notify project owner
+    if (projectsState.detailProject && projectsState.detailProject.createdBy && projectsState.detailProject.createdBy !== state.user.uid) {
+      writeNotification(projectsState.detailProject.createdBy, 'project-comment', actorName + ' commented in ' + projectName, { page: 'projects', params: { projectId: projectId } });
+    }
   }).catch(function(err) {
     console.error('Project comment error:', err);
     showToast('Failed to post comment.', 'error');
@@ -4784,6 +4843,12 @@ var handleAddTask = function(projectId, taskData) {
   }).then(function() {
     showToast('Task added.', 'info');
     logProjectActivity(projectId, 'created', 'added task "' + taskData.title + '"');
+    // Notify assignee
+    if (taskData.assigneeId && taskData.assigneeId !== state.user.uid) {
+      var projName = projectsState.detailProject ? (projectsState.detailProject.name || 'a project') : 'a project';
+      var actor = state.user.displayName || state.user.email || 'Member';
+      writeNotification(taskData.assigneeId, 'task-assigned', actor + ' assigned you "' + taskData.title + '" in ' + projName, { page: 'projects', params: { projectId: projectId } });
+    }
   }).catch(function(err) {
     console.error('Add task error:', err);
     showToast('Failed to add task.', 'error');
@@ -4977,6 +5042,167 @@ var showConfirmModal = function(title, message, confirmLabel) {
     cancelLabel: 'Cancel',
     tone: 'danger'
   });
+};
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+var writeNotification = function(recipientId, type, message, link) {
+  if (!state.user || !recipientId) return Promise.resolve();
+  if (recipientId === state.user.uid) return Promise.resolve();
+
+  return addDoc(collection(db, 'notifications'), {
+    recipientId: recipientId,
+    type:        type,
+    message:     message,
+    link:        link || { page: 'feed', params: {} },
+    read:        false,
+    createdAt:   serverTimestamp(),
+    actorId:     state.user.uid,
+    actorName:   state.user.displayName || state.user.email || 'Member'
+  }).catch(function(err) {
+    console.error('Failed to write notification:', err);
+  });
+};
+
+var syncNotificationBadge = function() {
+  var count = notificationsState.unreadCount;
+
+  document.querySelectorAll('[data-page="notifications"]').forEach(function(link) {
+    var badge = link.querySelector('.notif-badge');
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'notif-badge';
+        link.appendChild(badge);
+      }
+      badge.textContent = count > 99 ? '99+' : String(count);
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+};
+
+var subscribeNotifications = function() {
+  if (notificationsState.unsubscribe) {
+    notificationsState.unsubscribe();
+    notificationsState.unsubscribe = null;
+  }
+  if (!state.user) return;
+
+  var q = query(
+    collection(db, 'notifications'),
+    where('recipientId', '==', state.user.uid),
+    orderBy('createdAt', 'desc'),
+    limit(50)
+  );
+
+  notificationsState.unsubscribe = onSnapshot(q, function(snap) {
+    notificationsState.notifications = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      notificationsState.notifications.push(data);
+    });
+
+    notificationsState.unreadCount = notificationsState.notifications.filter(function(n) {
+      return !n.read;
+    }).length;
+
+    syncNotificationBadge();
+
+    if (state.currentPage === 'notifications') {
+      renderNotificationsList();
+    }
+  }, function(err) {
+    console.error('Notifications subscription error:', err);
+  });
+};
+
+var NOTIF_TYPE_ICONS = {
+  'mention':         '💬',
+  'task-assigned':   '📋',
+  'task-status':     '🔄',
+  'post-comment':    '💬',
+  'project-comment': '💬',
+  'event-rsvp':      '📅'
+};
+
+var renderNotificationsList = function() {
+  var listEl = document.getElementById('notificationsList');
+  if (!listEl) return;
+
+  var items = notificationsState.notifications;
+  if (items.length === 0) {
+    listEl.innerHTML = '<p class="text-muted">No notifications yet.</p>';
+    return;
+  }
+
+  listEl.innerHTML = items.map(function(n) {
+    var icon = NOTIF_TYPE_ICONS[n.type] || '🔔';
+    var time = '';
+    if (n.createdAt && typeof n.createdAt.toDate === 'function') {
+      time = relativeTime(n.createdAt.toDate());
+    }
+    var unreadClass = n.read ? '' : ' notif-unread';
+    return '<div class="notif-item' + unreadClass + '" data-notif-id="' + escapeAttr(n.id) + '" data-notif-page="' + escapeAttr(n.link && n.link.page || '') + '" data-notif-params="' + escapeAttr(JSON.stringify(n.link && n.link.params || {})) + '">' +
+      '<span class="notif-icon">' + icon + '</span>' +
+      '<div class="notif-content">' +
+        '<div class="notif-message">' + escapeHTML(n.message) + '</div>' +
+        '<div class="notif-time">' + escapeHTML(time) + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  listEl.querySelectorAll('.notif-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      var nid = item.getAttribute('data-notif-id');
+      var page = item.getAttribute('data-notif-page');
+      var params = {};
+      try { params = JSON.parse(item.getAttribute('data-notif-params')); } catch(e) {}
+
+      // Mark as read
+      var n = notificationsState.notifications.find(function(x) { return x.id === nid; });
+      if (n && !n.read) {
+        updateDoc(doc(db, 'notifications', nid), { read: true }).catch(function(err) {
+          console.error('Mark read error:', err);
+        });
+      }
+
+      // Navigate
+      if (page && VALID_PAGES[page]) {
+        var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+        var url = '?page=' + page + (qs ? '&' + qs : '');
+        window.history.replaceState(null, '', url);
+
+        if (page === 'projects' && params.projectId) {
+          projectsState.activeProjectId = params.projectId;
+        }
+        loadPage(page);
+      }
+    });
+  });
+};
+
+var initNotificationsPage = function() {
+  renderNotificationsList();
+
+  var markAllBtn = document.getElementById('markAllReadBtn');
+  if (markAllBtn) {
+    markAllBtn.addEventListener('click', function() {
+      var unread = notificationsState.notifications.filter(function(n) { return !n.read; });
+      if (unread.length === 0) {
+        showToast('All caught up!', 'info');
+        return;
+      }
+      Promise.all(unread.map(function(n) {
+        return updateDoc(doc(db, 'notifications', n.id), { read: true });
+      })).then(function() {
+        showToast('All marked as read.', 'info');
+      }).catch(function(err) {
+        console.error('Mark all read error:', err);
+      });
+    });
+  }
 };
 
 // ─── Resources ──────────────────────────────────────────────────────────────
