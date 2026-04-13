@@ -216,9 +216,11 @@ var projectsState = {
 };
 
 var resourcesState = {
-  resources:   [],
-  unsubscribe: null,
-  filter:      'all'
+  resources:      [],
+  unsubscribe:    null,
+  filter:         'all',
+  searchQuery:    '',
+  savedResources: []
 };
 
 var notificationsState = {
@@ -383,6 +385,7 @@ var renderLogin = function() {
           '<div class="login-logo-text">ENCLAVE</div>' +
         '</div>' +
         '<div class="login-tagline">private &middot; invite-only</div>' +
+        '<div class="login-desc">A private workspace for business interruption consulting and network management.</div>' +
         deniedHTML +
         '<button id="googleSignInBtn" class="btn-google">' +
           '<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
@@ -393,6 +396,7 @@ var renderLogin = function() {
           '</svg>' +
           '<span>Sign in with Google</span>' +
         '</button>' +
+        '<a class="login-privacy" href="privacy.html">Privacy Policy</a>' +
       '</div>' +
     '</div>';
 
@@ -401,7 +405,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v104';
+var ASSET_VERSION = 'v105';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -3526,7 +3530,7 @@ var openDrivePicker = function() {
   if (!driveTokenClient) {
     driveTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: '834210326738-mo90co5s9c6fogmb4kse67dkshmigt2l.apps.googleusercontent.com',
-      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      scope: 'https://www.googleapis.com/auth/drive.file',
       callback: function(tokenResponse) {
         if (tokenResponse && tokenResponse.access_token) {
           state.googleAccessToken = tokenResponse.access_token;
@@ -5228,25 +5232,45 @@ var renderResourceList = function() {
   var listEl = document.getElementById('resourceList');
   if (!listEl) return;
 
-  var filtered = resourcesState.filter === 'all'
-    ? resourcesState.resources
-    : resourcesState.resources.filter(function(r) { return r.category === resourcesState.filter; });
+  var filtered = resourcesState.resources;
+
+  // Category / saved filter
+  if (resourcesState.filter === 'saved') {
+    filtered = filtered.filter(function(r) {
+      return resourcesState.savedResources.indexOf(r.id) !== -1;
+    });
+  } else if (resourcesState.filter !== 'all') {
+    filtered = filtered.filter(function(r) { return r.category === resourcesState.filter; });
+  }
+
+  // Search filter
+  var q = resourcesState.searchQuery.toLowerCase();
+  if (q) {
+    filtered = filtered.filter(function(r) {
+      return (r.title || '').toLowerCase().indexOf(q) !== -1 ||
+             (r.description || '').toLowerCase().indexOf(q) !== -1 ||
+             (r.url || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
 
   if (filtered.length === 0) {
-    listEl.innerHTML = '<p class="text-muted">No resources yet.</p>';
+    var msg = q ? 'No resources match your search.' : (resourcesState.filter === 'saved' ? 'No saved resources yet.' : 'No resources yet.');
+    listEl.innerHTML = '<p class="text-muted">' + msg + '</p>';
     return;
   }
 
   listEl.innerHTML = filtered.map(function(r) {
     var cat = RESOURCE_CATEGORIES[r.category] || RESOURCE_CATEGORIES.general;
     var desc = r.description ? '<p class="resource-desc">' + escapeHTML(r.description) + '</p>' : '';
+    var isSaved = resourcesState.savedResources.indexOf(r.id) !== -1;
+    var bookmarkBtn = '<button class="btn-ghost resource-bookmark' + (isSaved ? ' saved' : '') + '" data-bookmark="' + r.id + '" title="' + (isSaved ? 'Remove bookmark' : 'Bookmark') + '">' + (isSaved ? '&#9733;' : '&#9734;') + '</button>';
     var deleteBtn = state.isAdmin
       ? '<button class="btn-ghost resource-delete" data-id="' + r.id + '" title="Delete">&#128465;</button>'
       : '';
     return '<div class="resource-card">' +
       '<div class="resource-card-top">' +
         '<span class="resource-cat-badge" style="background:' + cat.color + ';">' + cat.label + '</span>' +
-        deleteBtn +
+        '<div class="resource-card-actions">' + bookmarkBtn + deleteBtn + '</div>' +
       '</div>' +
       '<a href="' + escapeAttr(r.url) + '" target="_blank" rel="noopener" class="resource-title">' + escapeHTML(r.title) + '</a>' +
       desc +
@@ -5254,6 +5278,27 @@ var renderResourceList = function() {
     '</div>';
   }).join('');
 
+  // Wire bookmark buttons
+  listEl.querySelectorAll('.resource-bookmark').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var rid = btn.getAttribute('data-bookmark');
+      var idx = resourcesState.savedResources.indexOf(rid);
+      if (idx !== -1) {
+        resourcesState.savedResources.splice(idx, 1);
+      } else {
+        resourcesState.savedResources.push(rid);
+      }
+      // Persist to user doc
+      updateDoc(doc(db, 'users', state.user.uid), {
+        savedResources: resourcesState.savedResources
+      }).catch(function(err) {
+        console.error('Save bookmark error:', err);
+      });
+      renderResourceList();
+    });
+  });
+
+  // Wire delete buttons
   listEl.querySelectorAll('.resource-delete').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var rid = btn.getAttribute('data-id');
