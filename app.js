@@ -405,7 +405,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v105';
+var ASSET_VERSION = 'v106';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -4142,7 +4142,37 @@ var loadProjectDetail = function(projectId) {
 
   projectsState.detailUnsubscribe = onSnapshot(doc(db, 'projects', projectId), function(snap) {
     if (!snap.exists()) {
-      if (detailEl) detailEl.innerHTML = '<div class="card"><p class="text-muted">Project not found.</p></div>';
+      if (detailEl) {
+        detailEl.innerHTML =
+          '<div class="card" style="max-width:460px;">' +
+            '<div style="font-size:26px;margin-bottom:10px;">⚠️</div>' +
+            '<h3 style="margin:0 0 6px;font-size:16px;font-weight:500;">Collaboration space not found</h3>' +
+            '<p class="text-muted" style="margin-bottom:20px;font-size:13px;line-height:1.6;">' +
+              'This project was deleted, archived, or you no longer have access.' +
+            '</p>' +
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+              '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
+                 'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
+                        'text-decoration:none;font-size:13px;font-weight:700;">' +
+                '← Open Strategy' +
+              '</a>' +
+              '<button id="recoveryBackBtn" class="btn btn-ghost" style="font-size:13px;">Back to Projects</button>' +
+            '</div>' +
+          '</div>';
+        var recoveryBack = document.getElementById('recoveryBackBtn');
+        if (recoveryBack) recoveryBack.onclick = function() {
+          projectsState.activeProjectId = null;
+          resetProjectDetailState();
+          var listEl2 = document.getElementById('projectsList');
+          var headerEl2 = document.querySelector('.page-header-row');
+          if (listEl2) listEl2.hidden = false;
+          if (headerEl2) headerEl2.hidden = false;
+          detailEl.hidden = true;
+          detailEl.innerHTML = '';
+          syncURLState();
+          subscribeProjectsList();
+        };
+      }
       return;
     }
     var p = snap.data();
@@ -4151,7 +4181,37 @@ var loadProjectDetail = function(projectId) {
     renderProjectDetail(p);
   }, function(err) {
     console.error('Project detail error:', err);
-    if (detailEl) detailEl.innerHTML = '<div class="card"><p class="text-muted">Failed to load project.</p></div>';
+    if (detailEl) {
+      detailEl.innerHTML =
+        '<div class="card" style="max-width:460px;">' +
+          '<div style="font-size:26px;margin-bottom:10px;">⚠️</div>' +
+          '<h3 style="margin:0 0 6px;font-size:16px;font-weight:500;">Failed to load project</h3>' +
+          '<p class="text-muted" style="margin-bottom:20px;font-size:13px;line-height:1.6;">' +
+            'This collaboration space could not be loaded. It may have been deleted or you may have lost access.' +
+          '</p>' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+            '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
+               'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
+                      'text-decoration:none;font-size:13px;font-weight:700;">' +
+              '← Open Strategy' +
+            '</a>' +
+            '<button id="recoveryBackBtn2" class="btn btn-ghost" style="font-size:13px;">Back to Projects</button>' +
+          '</div>' +
+        '</div>';
+      var recoveryBack2 = document.getElementById('recoveryBackBtn2');
+      if (recoveryBack2) recoveryBack2.onclick = function() {
+        projectsState.activeProjectId = null;
+        resetProjectDetailState();
+        var listEl2 = document.getElementById('projectsList');
+        var headerEl2 = document.querySelector('.page-header-row');
+        if (listEl2) listEl2.hidden = false;
+        if (headerEl2) headerEl2.hidden = false;
+        detailEl.hidden = true;
+        detailEl.innerHTML = '';
+        syncURLState();
+        subscribeProjectsList();
+      };
+    }
   });
 };
 
