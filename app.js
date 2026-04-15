@@ -405,7 +405,7 @@ var renderLogin = function() {
 
 // Cache-buster for HTML fragment fetches — bumped per release to defeat
 // browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v106';
+var ASSET_VERSION = 'v107';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -4347,7 +4347,16 @@ var renderProjectDetail = function(p) {
 
   detailEl.innerHTML = '' +
     '<div class="project-detail-header">' +
-      '<button class="project-detail-back" id="projectBackBtn">&larr; Back to Projects</button>' +
+      '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
+        '<button class="project-detail-back" id="projectBackBtn" style="margin-bottom:0;">&larr; Back to Projects</button>' +
+        (p.originApp === 'roadmap' ?
+          '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
+             'style="display:inline-flex;align-items:center;gap:4px;background:#C8A96E18;border:1px solid #C8A96E40;' +
+                    'color:#C8A96E;border-radius:20px;padding:3px 12px;text-decoration:none;font-size:11px;font-weight:600;">' +
+            '&#x2197; Open Strategy' +
+          '</a>'
+        : '') +
+      '</div>' +
       '<div class="project-detail-title">' + escapeHTML(p.name || 'Untitled') + '</div>' +
       '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
       (p.description ? '<div class="project-detail-desc">' + escapeHTML(p.description) + '</div>' : '') +
