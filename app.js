@@ -4144,21 +4144,42 @@ var loadProjectDetail = function(projectId) {
     if (!snap.exists()) {
       if (detailEl) {
         detailEl.innerHTML =
-          '<div class="card" style="max-width:460px;">' +
-            '<div style="font-size:26px;margin-bottom:10px;">⚠️</div>' +
-            '<h3 style="margin:0 0 6px;font-size:16px;font-weight:500;">Collaboration space not found</h3>' +
-            '<p class="text-muted" style="margin-bottom:20px;font-size:13px;line-height:1.6;">' +
-              'This project was deleted, archived, or you no longer have access.' +
-            '</p>' +
-            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+          '<div class="card" style="max-width:520px;">' +
+            '<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">' +
+              '<div style="font-size:28px;flex-shrink:0;line-height:1;">⚠️</div>' +
+              '<div>' +
+                '<h3 style="margin:0 0 5px;font-size:16px;font-weight:600;">Collaboration space not found</h3>' +
+                '<p class="text-muted" style="margin:0;font-size:13px;line-height:1.6;">' +
+                  'This project was deleted or the link from your Strategy app is out of date.' +
+                '</p>' +
+              '</div>' +
+            '</div>' +
+            '<div style="padding:12px 14px;border-radius:8px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);margin-bottom:18px;font-size:12px;line-height:1.7;" class="text-muted">' +
+              '<strong style="color:#C8A96E;">To reconnect:</strong> Open the Strategy app and use ' +
+              '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
+            '</div>' +
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
               '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
                  'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
-                        'text-decoration:none;font-size:13px;font-weight:700;">' +
-                '← Open Strategy' +
+                        'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
+                '↗ Open Strategy' +
               '</a>' +
-              '<button id="recoveryBackBtn" class="btn btn-ghost" style="font-size:13px;">Back to Projects</button>' +
+              '<button id="recoveryBackBtn" class="btn btn-ghost" style="font-size:13px;">Browse Projects</button>' +
+              '<button id="recoveryRelinkBtn" class="btn btn-ghost" style="font-size:13px;">↻ Try another ID</button>' +
+            '</div>' +
+            '<div id="recoveryRelinkForm" style="display:none;">' +
+              '<p class="text-muted" style="margin:0 0 8px;font-size:12px;">Paste a project ID to load it directly:</p>' +
+              '<div style="display:flex;gap:8px;">' +
+                '<input id="recoveryRelinkInput" type="text" placeholder="Project ID (e.g. abc123…)" ' +
+                       'style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
+                              'color:var(--text);padding:8px 12px;font-size:13px;outline:none;" />' +
+                '<button id="recoveryRelinkGo" style="background:#C8A96E;border:none;color:#0D0F14;border-radius:6px;' +
+                                                     'padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">Go →</button>' +
+                '<button id="recoveryRelinkCancel" class="btn btn-ghost" style="font-size:13px;flex-shrink:0;">Cancel</button>' +
+              '</div>' +
             '</div>' +
           '</div>';
+
         var recoveryBack = document.getElementById('recoveryBackBtn');
         if (recoveryBack) recoveryBack.onclick = function() {
           projectsState.activeProjectId = null;
@@ -4172,6 +4193,38 @@ var loadProjectDetail = function(projectId) {
           syncURLState();
           subscribeProjectsList();
         };
+
+        var recoveryRelinkBtn = document.getElementById('recoveryRelinkBtn');
+        if (recoveryRelinkBtn) recoveryRelinkBtn.onclick = function() {
+          var form = document.getElementById('recoveryRelinkForm');
+          if (form) {
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            var inp = document.getElementById('recoveryRelinkInput');
+            if (inp && form.style.display !== 'none') inp.focus();
+          }
+        };
+
+        var recoveryRelinkGo = document.getElementById('recoveryRelinkGo');
+        if (recoveryRelinkGo) recoveryRelinkGo.onclick = function() {
+          var inp = document.getElementById('recoveryRelinkInput');
+          if (inp && inp.value.trim()) {
+            var newId = inp.value.trim();
+            projectsState.activeProjectId = newId;
+            syncURLState();
+            loadProjectDetail(newId);
+          }
+        };
+
+        var recoveryRelinkCancel = document.getElementById('recoveryRelinkCancel');
+        if (recoveryRelinkCancel) recoveryRelinkCancel.onclick = function() {
+          var form = document.getElementById('recoveryRelinkForm');
+          if (form) form.style.display = 'none';
+        };
+
+        var recoveryRelinkInput = document.getElementById('recoveryRelinkInput');
+        if (recoveryRelinkInput) recoveryRelinkInput.onkeydown = function(e) {
+          if (e.key === 'Enter') { var go = document.getElementById('recoveryRelinkGo'); if (go) go.click(); }
+        };
       }
       return;
     }
@@ -4183,21 +4236,42 @@ var loadProjectDetail = function(projectId) {
     console.error('Project detail error:', err);
     if (detailEl) {
       detailEl.innerHTML =
-        '<div class="card" style="max-width:460px;">' +
-          '<div style="font-size:26px;margin-bottom:10px;">⚠️</div>' +
-          '<h3 style="margin:0 0 6px;font-size:16px;font-weight:500;">Failed to load project</h3>' +
-          '<p class="text-muted" style="margin-bottom:20px;font-size:13px;line-height:1.6;">' +
-            'This collaboration space could not be loaded. It may have been deleted or you may have lost access.' +
-          '</p>' +
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
+        '<div class="card" style="max-width:520px;">' +
+          '<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">' +
+            '<div style="font-size:28px;flex-shrink:0;line-height:1;">⚠️</div>' +
+            '<div>' +
+              '<h3 style="margin:0 0 5px;font-size:16px;font-weight:600;">Could not load this project</h3>' +
+              '<p class="text-muted" style="margin:0;font-size:13px;line-height:1.6;">' +
+                'A connection error occurred. The project may have been deleted or you may have lost access.' +
+              '</p>' +
+            '</div>' +
+          '</div>' +
+          '<div style="padding:12px 14px;border-radius:8px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);margin-bottom:18px;font-size:12px;line-height:1.7;" class="text-muted">' +
+            '<strong style="color:#C8A96E;">To reconnect:</strong> Open the Strategy app and use ' +
+            '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
             '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
                'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
-                      'text-decoration:none;font-size:13px;font-weight:700;">' +
-              '← Open Strategy' +
+                      'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
+              '↗ Open Strategy' +
             '</a>' +
-            '<button id="recoveryBackBtn2" class="btn btn-ghost" style="font-size:13px;">Back to Projects</button>' +
+            '<button id="recoveryBackBtn2" class="btn btn-ghost" style="font-size:13px;">Browse Projects</button>' +
+            '<button id="recoveryRelinkBtn2" class="btn btn-ghost" style="font-size:13px;">↻ Try another ID</button>' +
+          '</div>' +
+          '<div id="recoveryRelinkForm2" style="display:none;">' +
+            '<p class="text-muted" style="margin:0 0 8px;font-size:12px;">Paste a project ID to load it directly:</p>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<input id="recoveryRelinkInput2" type="text" placeholder="Project ID (e.g. abc123…)" ' +
+                     'style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
+                            'color:var(--text);padding:8px 12px;font-size:13px;outline:none;" />' +
+              '<button id="recoveryRelinkGo2" style="background:#C8A96E;border:none;color:#0D0F14;border-radius:6px;' +
+                                                   'padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">Go →</button>' +
+              '<button id="recoveryRelinkCancel2" class="btn btn-ghost" style="font-size:13px;flex-shrink:0;">Cancel</button>' +
+            '</div>' +
           '</div>' +
         '</div>';
+
       var recoveryBack2 = document.getElementById('recoveryBackBtn2');
       if (recoveryBack2) recoveryBack2.onclick = function() {
         projectsState.activeProjectId = null;
@@ -4210,6 +4284,38 @@ var loadProjectDetail = function(projectId) {
         detailEl.innerHTML = '';
         syncURLState();
         subscribeProjectsList();
+      };
+
+      var recoveryRelinkBtn2 = document.getElementById('recoveryRelinkBtn2');
+      if (recoveryRelinkBtn2) recoveryRelinkBtn2.onclick = function() {
+        var form = document.getElementById('recoveryRelinkForm2');
+        if (form) {
+          form.style.display = form.style.display === 'none' ? 'block' : 'none';
+          var inp = document.getElementById('recoveryRelinkInput2');
+          if (inp && form.style.display !== 'none') inp.focus();
+        }
+      };
+
+      var recoveryRelinkGo2 = document.getElementById('recoveryRelinkGo2');
+      if (recoveryRelinkGo2) recoveryRelinkGo2.onclick = function() {
+        var inp = document.getElementById('recoveryRelinkInput2');
+        if (inp && inp.value.trim()) {
+          var newId = inp.value.trim();
+          projectsState.activeProjectId = newId;
+          syncURLState();
+          loadProjectDetail(newId);
+        }
+      };
+
+      var recoveryRelinkCancel2 = document.getElementById('recoveryRelinkCancel2');
+      if (recoveryRelinkCancel2) recoveryRelinkCancel2.onclick = function() {
+        var form = document.getElementById('recoveryRelinkForm2');
+        if (form) form.style.display = 'none';
+      };
+
+      var recoveryRelinkInput2 = document.getElementById('recoveryRelinkInput2');
+      if (recoveryRelinkInput2) recoveryRelinkInput2.onkeydown = function(e) {
+        if (e.key === 'Enter') { var go = document.getElementById('recoveryRelinkGo2'); if (go) go.click(); }
       };
     }
   });
