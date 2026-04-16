@@ -4471,7 +4471,7 @@ var renderProjectDetail = function(p) {
       '</span>' +
       (p.description ? '<div class="project-detail-desc">' + escapeHTML(p.description) + '</div>' : '') +
       (canEdit ? '<div class="project-detail-actions">' +
-        '<button class="btn btn-ghost" id="projectEditBtn">Edit</button>' +
+        '<button class="btn btn-ghost" id="projectEditBtn">✏ Edit / Members</button>' +
         (canDelete ? '<button class="btn btn-ghost post-action-danger" id="projectDeleteBtn">Delete</button>' : '') +
       '</div>' : '') +
     '</div>' +
@@ -4495,7 +4495,7 @@ var renderProjectDetail = function(p) {
     '</div>' +
 
     '<div class="project-detail-section">' +
-      '<h3>Members</h3>' +
+      '<h3>Members' + (canEdit ? ' <button class="btn btn-ghost" id="projectManageMembersBtn" style="font-size:11px;padding:2px 10px;margin-left:8px;vertical-align:middle;">+ Manage</button>' : '') + '</h3>' +
       '<div class="project-members-list">' + membersHtml + '</div>' +
     '</div>' +
 
@@ -4566,6 +4566,13 @@ var renderProjectDetail = function(p) {
   // Wire edit
   var editBtn = document.getElementById('projectEditBtn');
   if (editBtn) editBtn.onclick = function() {
+    projectsState.editingProjectId = p.id;
+    openProjectModal(p);
+  };
+
+  // Wire manage members shortcut (same modal, members section already scrollable)
+  var manageMembersBtn = document.getElementById('projectManageMembersBtn');
+  if (manageMembersBtn) manageMembersBtn.onclick = function() {
     projectsState.editingProjectId = p.id;
     openProjectModal(p);
   };
