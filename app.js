@@ -4466,7 +4466,7 @@ var renderProjectDetail = function(p) {
       '<div class="project-detail-title">' + escapeHTML(p.name || 'Untitled') + '</div>' +
       '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
       '<span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:11px;font-family:monospace;color:var(--text-muted);background:var(--surface-2,#1e2330);border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;" title="Click to copy project ID" id="projectIdChip">' +
-        'ID: ' + escapeHTML(projectId) +
+        'ID: ' + escapeHTML(p.id) +
         ' <span style="font-size:10px;opacity:0.6;">&#x2398;</span>' +
       '</span>' +
       (p.description ? '<div class="project-detail-desc">' + escapeHTML(p.description) + '</div>' : '') +
@@ -4536,10 +4536,10 @@ var renderProjectDetail = function(p) {
   // Wire project ID copy chip
   var idChip = document.getElementById('projectIdChip');
   if (idChip) idChip.onclick = function() {
-    navigator.clipboard.writeText(projectId).then(function() {
+    navigator.clipboard.writeText(p.id).then(function() {
       idChip.textContent = 'Copied!';
       setTimeout(function() {
-        idChip.innerHTML = 'ID: ' + projectId + ' <span style="font-size:10px;opacity:0.6;">&#x2398;</span>';
+        idChip.innerHTML = 'ID: ' + p.id + ' <span style="font-size:10px;opacity:0.6;">&#x2398;</span>';
       }, 1500);
     });
   };
