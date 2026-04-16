@@ -4159,7 +4159,7 @@ var loadProjectDetail = function(projectId) {
               '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
             '</div>' +
             '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
-              '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
+              '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="forensicBiStrategy" rel="noopener" ' +
                  'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
                         'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
                 '↗ Open Strategy' +
@@ -4251,7 +4251,7 @@ var loadProjectDetail = function(projectId) {
             '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
           '</div>' +
           '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
-            '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
+            '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="forensicBiStrategy" rel="noopener" ' +
                'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
                       'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
               '↗ Open Strategy' +
@@ -4456,7 +4456,7 @@ var renderProjectDetail = function(p) {
       '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<button class="project-detail-back" id="projectBackBtn" style="margin-bottom:0;">&larr; Back to Projects</button>' +
         (p.originApp === 'roadmap' ?
-          '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="_blank" rel="noopener" ' +
+          '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="forensicBiStrategy" rel="noopener" ' +
              'style="display:inline-flex;align-items:center;gap:4px;background:#C8A96E18;border:1px solid #C8A96E40;' +
                     'color:#C8A96E;border-radius:20px;padding:3px 12px;text-decoration:none;font-size:11px;font-weight:600;">' +
             '&#x2197; Open Strategy' +
