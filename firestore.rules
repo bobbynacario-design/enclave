@@ -97,7 +97,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get, list: if signedIn();
+      allow get: if signedIn();
+      allow list: if isAdmin(); // collection queries limited to admin — prevents email enumeration
 
       allow create: if signedIn() &&
         request.auth.uid == userId &&
@@ -216,6 +217,12 @@ service cloud.firestore {
         signedIn() &&
         resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdBy == resource.data.createdBy
+      ) || (
+        // claimPendingInvites self-claim: invited user can add themselves as a member
+        signedIn() &&
+        request.auth.token.email in resource.data.pendingInvites &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['memberIds', 'memberNames', 'pendingInvites', 'updatedAt'])
       );
 
       allow delete: if isAdmin() || (
