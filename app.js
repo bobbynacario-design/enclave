@@ -61,6 +61,12 @@ import { logError } from './src/util/log.js';
 import { showToast } from './src/ui/toast.js';
 
 import {
+  showConfirmModal,
+  showNoticeModal,
+  openBriefingImportModal
+} from './src/ui/modals.js';
+
+import {
   state,
   authFlowState,
   eventsState,
@@ -4840,94 +4846,6 @@ var renderLinkPreview = function(og) {
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
-var showDialogModal = function(opts) {
-  opts = opts || {};
-
-  var existing = document.getElementById('dialogBackdrop');
-  if (existing && existing.parentNode) {
-    existing.parentNode.removeChild(existing);
-  }
-
-  return new Promise(function(resolve) {
-    var backdrop = document.createElement('div');
-    var card = document.createElement('div');
-    var title = document.createElement('div');
-    var message = document.createElement('div');
-    var actions = document.createElement('div');
-    var cancelBtn = document.createElement('button');
-    var confirmBtn = document.createElement('button');
-
-    backdrop.id = 'dialogBackdrop';
-    backdrop.className = 'dialog-backdrop';
-
-    card.className = 'dialog-card';
-    title.className = 'dialog-title';
-    title.textContent = opts.title || 'Notice';
-    message.className = 'dialog-message';
-    message.textContent = opts.message || '';
-    actions.className = 'dialog-actions';
-
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'btn btn-ghost';
-    cancelBtn.textContent = opts.cancelLabel || 'Cancel';
-
-    confirmBtn.type = 'button';
-    confirmBtn.className = opts.tone === 'danger' ? 'btn btn-danger' : 'btn btn-primary';
-    confirmBtn.textContent = opts.confirmLabel || 'OK';
-
-    var close = function(result) {
-      if (backdrop.parentNode) {
-        backdrop.parentNode.removeChild(backdrop);
-      }
-      resolve(result);
-    };
-
-    if (!opts.hideCancel) {
-      actions.appendChild(cancelBtn);
-      cancelBtn.addEventListener('click', function() {
-        close(false);
-      });
-    }
-
-    actions.appendChild(confirmBtn);
-    confirmBtn.addEventListener('click', function() {
-      close(true);
-    });
-
-    backdrop.addEventListener('click', function(e) {
-      if (e.target === backdrop) {
-        close(false);
-      }
-    });
-
-    card.appendChild(title);
-    card.appendChild(message);
-    card.appendChild(actions);
-    backdrop.appendChild(card);
-    document.body.appendChild(backdrop);
-    confirmBtn.focus();
-  });
-};
-
-var showNoticeModal = function(title, message, confirmLabel) {
-  return showDialogModal({
-    title: title,
-    message: message,
-    confirmLabel: confirmLabel || 'OK',
-    hideCancel: true
-  });
-};
-
-var showConfirmModal = function(title, message, confirmLabel) {
-  return showDialogModal({
-    title: title,
-    message: message,
-    confirmLabel: confirmLabel || 'Confirm',
-    cancelLabel: 'Cancel',
-    tone: 'danger'
-  });
-};
-
 // ─── Notifications ──────────────────────────────────────────────────────────
 
 var writeNotification = function(recipientId, type, message, link) {
@@ -5471,94 +5389,6 @@ var subscribeBriefings = function() {
     var listEl = document.getElementById('briefingList');
     if (listEl) listEl.innerHTML = '<p class="text-muted">Failed to load briefings.</p>';
   });
-};
-
-var openBriefingImportModal = function() {
-  var existing = document.getElementById('dialogBackdrop');
-  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-
-  var backdrop = document.createElement('div');
-  backdrop.id = 'dialogBackdrop';
-  backdrop.className = 'dialog-backdrop';
-
-  var card = document.createElement('div');
-  card.className = 'dialog-card';
-
-  var title = document.createElement('div');
-  title.className = 'dialog-title';
-  title.textContent = 'Import Briefing';
-
-  var label = document.createElement('label');
-  label.textContent = 'Paste Gemini JSON';
-  label.style.cssText = 'display:block;font-size:12px;font-weight:500;margin-bottom:6px;color:var(--text-muted)';
-
-  var textarea = document.createElement('textarea');
-  textarea.rows = 12;
-  textarea.style.cssText = 'width:100%;font-family:monospace;font-size:12px;background:var(--surface-2);color:var(--text);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px;resize:vertical';
-
-  var actions = document.createElement('div');
-  actions.className = 'dialog-actions';
-
-  var cancelBtn = document.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.className = 'btn btn-ghost';
-  cancelBtn.textContent = 'Cancel';
-
-  var publishBtn = document.createElement('button');
-  publishBtn.type = 'button';
-  publishBtn.className = 'btn btn-primary';
-  publishBtn.textContent = 'Publish';
-
-  var close = function() {
-    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-  };
-
-  cancelBtn.addEventListener('click', close);
-  backdrop.addEventListener('click', function(e) {
-    if (e.target === backdrop) close();
-  });
-
-  publishBtn.addEventListener('click', function() {
-    var raw = textarea.value.trim();
-    var parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      showToast('Invalid JSON.', 'error');
-      return;
-    }
-
-    if (!parsed.date || !parsed.markets || !parsed.sections) {
-      showToast('Missing required fields: date, markets, sections.', 'error');
-      return;
-    }
-
-    publishBtn.disabled = true;
-    publishBtn.textContent = 'Publishing...';
-
-    parsed.publishedAt  = serverTimestamp();
-    parsed.publishedBy  = state.user.uid;
-    parsed.circle       = 'work-network';
-
-    addDoc(collection(db, 'briefings'), parsed).then(function() {
-      close();
-      showToast('Briefing published.', 'success');
-    }).catch(function(err) {
-      publishBtn.disabled = false;
-      publishBtn.textContent = 'Publish';
-      showToast('Publish failed: ' + err.message, 'error');
-    });
-  });
-
-  actions.appendChild(cancelBtn);
-  actions.appendChild(publishBtn);
-  card.appendChild(title);
-  card.appendChild(label);
-  card.appendChild(textarea);
-  card.appendChild(actions);
-  backdrop.appendChild(card);
-  document.body.appendChild(backdrop);
-  textarea.focus();
 };
 
 var initBriefingsPage = function() {
