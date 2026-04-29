@@ -60,188 +60,26 @@ import { logError } from './src/util/log.js';
 
 import { showToast } from './src/ui/toast.js';
 
-// ─── State ───────────────────────────────────────────────────────────────────
-var state = {
-  currentPage:  'feed',
-  user:         null,
-  accessDenied: false,
-  isAdmin:      false,
-  circles:      [],
-  googleAccessToken: ''
-};
-
-var authFlowState = {
-  busy: false
-};
-
-var eventsState = {
-  upcoming: [],
-  past: []
-};
-
-var feedState = {
-  livePosts:   [],
-  olderPosts:  [],
-  filter:      'all',
-  unsubscribe: null,
-  hasMore:     false,
-  loadingMore: false,
-  lastDoc:     null,
-  openComments: {},
-  targetPostId: '',
-  pendingTargetScroll: false
-};
-
-var membersState = {
-  members: []
-};
-
-var adminState = {
-  allowlist: []
-};
-
-var messagesState = {
-  members:                 [],
-  conversations:           [],
-  activePeerId:            null,
-  activeConversationId:    null,
-  thread:                  [],
-  olderMessages:           [],
-  hasMoreMessages:         false,
-  loadingOlder:            false,
-  oldestDoc:               null,
-  totalUnread:             0,
-  unsubscribeConversations: null,
-  unsubscribeThread:        null
-};
-
-// Drive attachment state for compose box
-var driveAttachment = {
-  fileUrl:  '',
-  fileName: '',
-  iconUrl:  ''
-};
-
-
-var shellState = {
-  unsubscribeOnline: null,
-  presenceTimer:     null
-};
-
-var resetMessagesState = function(fullReset) {
-  if (messagesState.unsubscribeThread) {
-    messagesState.unsubscribeThread();
-    messagesState.unsubscribeThread = null;
-  }
-
-  messagesState.activePeerId = null;
-  messagesState.activeConversationId = null;
-  messagesState.thread = [];
-
-  if (fullReset !== false) {
-    if (messagesState.unsubscribeConversations) {
-      messagesState.unsubscribeConversations();
-      messagesState.unsubscribeConversations = null;
-    }
-
-    messagesState.members = [];
-    messagesState.conversations = [];
-    messagesState.totalUnread = 0;
-  }
-};
-
-var resetShellRealtime = function() {
-  if (shellState.unsubscribeOnline) {
-    shellState.unsubscribeOnline();
-    shellState.unsubscribeOnline = null;
-  }
-
-  if (shellState.presenceTimer) {
-    window.clearInterval(shellState.presenceTimer);
-    shellState.presenceTimer = null;
-  }
-
-  if (notificationsState.unsubscribe) {
-    notificationsState.unsubscribe();
-    notificationsState.unsubscribe = null;
-  }
-};
-
-var resetProjectDetailState = function() {
-  if (projectsState.detailUnsubscribe) {
-    projectsState.detailUnsubscribe();
-    projectsState.detailUnsubscribe = null;
-  }
-
-  if (projectsState.commentsUnsubscribe) {
-    projectsState.commentsUnsubscribe();
-    projectsState.commentsUnsubscribe = null;
-  }
-
-  if (projectsState.filesUnsubscribe) {
-    projectsState.filesUnsubscribe();
-    projectsState.filesUnsubscribe = null;
-  }
-
-  if (projectsState.tasksUnsubscribe) {
-    projectsState.tasksUnsubscribe();
-    projectsState.tasksUnsubscribe = null;
-  }
-
-  if (projectsState.activityUnsubscribe) {
-    projectsState.activityUnsubscribe();
-    projectsState.activityUnsubscribe = null;
-  }
-
-  projectsState.detailProject = null;
-  projectsState.detailComments = [];
-  projectsState.detailFiles = [];
-  projectsState.detailTasks = [];
-  projectsState.detailActivity = [];
-};
-
-var briefingsState = {
-  briefings:   [],
-  unsubscribe: null,
-  unsubscribeNotifier: null,
-  hasUnread: false
-};
-
-var projectsState = {
-  projects:           [],
-  unsubscribe:        null,
-  activeProjectId:    null,
-  detailUnsubscribe:  null,
-  commentsUnsubscribe: null,
-  filesUnsubscribe:   null,
-  sidebarUnsubscribe: null,
-  editingProjectId:   null,
-  detailProject:      null,
-  detailComments:     [],
-  detailFiles:        [],
-  detailTasks:        [],
-  tasksUnsubscribe:   null,
-  taskFilter:         'all',
-  detailActivity:     [],
-  activityUnsubscribe: null
-};
-
-var resourcesState = {
-  resources:      [],
-  unsubscribe:    null,
-  filter:         'all',
-  searchQuery:    '',
-  savedResources: []
-};
-
-var notificationsState = {
-  notifications: [],
-  unsubscribe:   null,
-  unreadCount:   0
-};
-
-var pickerContext = 'feed';
-var pickerProjectId = null;
+import {
+  state,
+  authFlowState,
+  eventsState,
+  feedState,
+  membersState,
+  adminState,
+  messagesState,
+  driveAttachment,
+  shellState,
+  briefingsState,
+  projectsState,
+  resourcesState,
+  notificationsState,
+  pickerState,
+  resetMessagesState,
+  resetShellRealtime,
+  resetProjectDetailState,
+  resetResourcesState
+} from './src/state.js';
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var runSignOut = function(accessDenied) {
@@ -3593,18 +3431,18 @@ var handlePickerResult = function(data) {
     var file = data.docs[0];
 
     // Resource context: fill resource form fields
-    if (pickerContext === 'resource') {
+    if (pickerState.context === 'resource') {
       var rUrlInput = document.getElementById('resourceUrl');
       var rTitleInput = document.getElementById('resourceTitle');
       if (rUrlInput) rUrlInput.value = file.url || '';
       if (rTitleInput && !rTitleInput.value.trim()) rTitleInput.value = file.name || '';
-      pickerContext = 'feed';
+      pickerState.context = 'feed';
       return;
     }
 
     // Project context: attach file to project
-    if (pickerContext === 'project' && pickerProjectId) {
-      handleProjectFileAttach(pickerProjectId, {
+    if (pickerState.context === 'project' && pickerState.projectId) {
+      handleProjectFileAttach(pickerState.projectId, {
         fileUrl:     file.url || '',
         fileName:    file.name || 'Attached file',
         iconUrl:     file.iconUrl || '',
@@ -3612,8 +3450,8 @@ var handlePickerResult = function(data) {
         addedByName: state.user.displayName || state.user.email || 'Member',
         addedAt:     Timestamp.now()
       });
-      pickerContext = 'feed';
-      pickerProjectId = null;
+      pickerState.context = 'feed';
+      pickerState.projectId = null;
       return;
     }
 
@@ -3626,8 +3464,8 @@ var handlePickerResult = function(data) {
 
   // Reset picker context on cancel
   if (data.action === google.picker.Action.CANCEL) {
-    pickerContext = 'feed';
-    pickerProjectId = null;
+    pickerState.context = 'feed';
+    pickerState.projectId = null;
   }
 };
 
@@ -4519,8 +4357,8 @@ var renderProjectDetail = function(p) {
   // Wire file attach
   var attachBtn = document.getElementById('projectAttachFileBtn');
   if (attachBtn) attachBtn.onclick = function() {
-    pickerContext = 'project';
-    pickerProjectId = p.id;
+    pickerState.context = 'project';
+    pickerState.projectId = p.id;
     openDrivePicker();
   };
 
@@ -5261,15 +5099,6 @@ var RESOURCE_CATEGORIES = {
   general: { label: 'General', color: '#8B5CF6' }
 };
 
-var resetResourcesState = function() {
-  if (resourcesState.unsubscribe) {
-    resourcesState.unsubscribe();
-    resourcesState.unsubscribe = null;
-  }
-  resourcesState.resources = [];
-  resourcesState.filter = 'all';
-};
-
 var renderResourceList = function() {
   var listEl = document.getElementById('resourceList');
   if (!listEl) return;
@@ -5377,7 +5206,7 @@ var initResourcesPage = function() {
   var driveBtn = document.getElementById('resourceDriveBtn');
   if (driveBtn) {
     driveBtn.addEventListener('click', function() {
-      pickerContext = 'resource';
+      pickerState.context = 'resource';
       openDrivePicker();
     });
   }
