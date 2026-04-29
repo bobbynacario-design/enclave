@@ -56,6 +56,10 @@ import {
   relativeTime
 } from './src/util/time.js';
 
+import { logError } from './src/util/log.js';
+
+import { showToast } from './src/ui/toast.js';
+
 // ─── State ───────────────────────────────────────────────────────────────────
 var state = {
   currentPage:  'feed',
@@ -265,7 +269,7 @@ var runSignOut = function(accessDenied) {
   resetShellRealtime();
 
   return signOut(auth).catch(function(err) {
-    console.error('Sign-out error:', err);
+    logError('Sign-out error', err);
   }).finally(function() {
     authFlowState.busy = false;
   });
@@ -281,7 +285,7 @@ var handleSignIn = function() {
       state.googleAccessToken = credential.accessToken;
     }
   }).catch(function(err) {
-    console.error('Sign-in error:', err);
+    logError('Sign-in error', err);
   }).finally(function() {
     authFlowState.busy = false;
   });
@@ -309,7 +313,7 @@ var checkAllowlist = function(user) {
         applyURLState();
         renderShell();
       }).catch(function(err) {
-        console.error('User bootstrap failed:', err);
+        logError('User bootstrap failed', err);
         applyURLState();
         renderShell();
       });
@@ -317,7 +321,7 @@ var checkAllowlist = function(user) {
       runSignOut(true);
     }
   }).catch(function(err) {
-    console.error('Allowlist check failed:', err);
+    logError('Allowlist check failed', err);
     runSignOut(true);
   });
 };
@@ -350,7 +354,7 @@ var upsertUserDoc = function(user, allowlistEntry) {
       }
 
       return updateDoc(ref, updatePayload).catch(function(err) {
-        console.error('User doc update failed:', err);
+        logError('User doc update failed', err);
       });
     } else {
       state.circles = allowedCircles.slice();
@@ -359,7 +363,7 @@ var upsertUserDoc = function(user, allowlistEntry) {
       base.role     = '';
       base.circles  = allowedCircles.slice();
       return setDoc(ref, base).catch(function(err) {
-        console.error('User doc create failed:', err);
+        logError('User doc create failed', err);
       });
     }
   });
@@ -514,7 +518,7 @@ var renderShell = function() {
     syncResponsivePanels();
     loadPage(state.currentPage);
   }).catch(function(err) {
-    console.error('Failed to load shell:', err);
+    logError('Failed to load shell', err);
     appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
   });
 };
@@ -524,7 +528,7 @@ window.enclaveGoPage = function(page) {
     refreshCurrentUserState().then(function() {
       loadPage('admin');
     }).catch(function(err) {
-      console.error('Failed to refresh user state before admin nav:', err);
+      logError('Failed to refresh user state before admin nav', err);
       loadPage('admin');
     });
     return;
@@ -903,7 +907,7 @@ var updatePresenceHeartbeat = function() {
   updateDoc(doc(db, 'users', state.user.uid), {
     lastSeen: serverTimestamp()
   }).catch(function(err) {
-    console.error('Failed to update presence heartbeat:', err);
+    logError('Failed to update presence heartbeat', err);
   });
 };
 
@@ -974,7 +978,7 @@ var loadOnlineUsers = function() {
         '</div>';
     }).join('');
   }, function(err) {
-    console.error('Failed to load online users:', err);
+    logError('Failed to load online users', err);
     el.className = 'panel-empty';
     el.textContent = 'Failed to load online users.';
   });
@@ -1026,7 +1030,7 @@ var loadPanelEvents = function() {
         '</div>';
     }).join('');
   }).catch(function(err) {
-    console.error('Failed to load panel events:', err);
+    logError('Failed to load panel events', err);
     el.className = 'panel-empty';
     el.textContent = 'Failed to load events.';
   });
@@ -1109,7 +1113,7 @@ var loadPage = function(page) {
     if (page === 'briefings') initBriefingsPage();
     if (page === 'notifications') initNotificationsPage();
   }).catch(function(err) {
-    console.error('Failed to load page ' + page + ':', err);
+    logError('Failed to load page ' + page, err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
   });
 };
@@ -1225,7 +1229,7 @@ var subscribeFeed = function() {
       renderFeedList();
     });
   }, function(err) {
-    console.error('Feed subscribe error:', err);
+    logError('Feed subscribe error', err);
     var list = document.getElementById('feedList');
     if (list) list.innerHTML = '<div class="card"><p class="text-muted">Failed to load feed. Check Firestore rules.</p></div>';
   });
@@ -1267,7 +1271,7 @@ var ensureTargetPostLoaded = function() {
     }));
     return true;
   }).catch(function(err) {
-    console.error('Failed to load shared post:', err);
+    logError('Failed to load shared post', err);
     return false;
   });
 };
@@ -1346,7 +1350,7 @@ var loadMoreFeedPosts = function() {
       feedState.lastDoc = snap.docs[snap.docs.length - 1];
     }
   }).catch(function(err) {
-    console.error('Failed to load more posts:', err);
+    logError('Failed to load more posts', err);
     showToast('Failed to load more posts. Check console for details.', 'error');
   }).finally(function() {
     feedState.loadingMore = false;
@@ -1404,7 +1408,7 @@ var handleComposeSubmit = function() {
         submitBtn.textContent = 'Post';
       }
     }).catch(function(err) {
-      console.error('Failed to post:', err);
+      logError('Failed to post', err);
       if (submitBtn) {
         submitBtn.disabled    = false;
         submitBtn.textContent = 'Post';
@@ -1635,7 +1639,7 @@ var handleSharePost = function(postId) {
     navigator.clipboard.writeText(shareText + '\n\n' + shareURL).then(function() {
       showToast('Post link copied.', 'success');
     }).catch(function(err) {
-      console.error('Failed to copy share text:', err);
+      logError('Failed to copy share text', err);
       showToast('Unable to share this post right now.', 'error');
     });
     return;
@@ -1712,7 +1716,7 @@ var handleReactPost = function(postId) {
       loadRecentPosts(authorId);
     }
   }).catch(function(err) {
-    console.error('React failed:', err);
+    logError('React failed', err);
     showToast('Could not save reaction. Try again.', 'error');
   });
 };
@@ -1765,7 +1769,7 @@ var handleCommentSubmit = function(postId, authorId, formEl) {
       loadRecentPosts(authorId);
     }
   }).catch(function(err) {
-    console.error('Comment failed:', err);
+    logError('Comment failed', err);
     showToast('Could not save comment. Try again.', 'error');
   }).finally(function() {
     input.disabled = false;
@@ -1784,7 +1788,7 @@ var handleDeletePost = function(postId, authorId) {
       }
       showToast('Post deleted.', 'success');
     }).catch(function(err) {
-      console.error('Failed to delete post:', err);
+      logError('Failed to delete post', err);
       showToast('Failed to delete post. Check console for details.', 'error');
     });
   });
@@ -1800,7 +1804,7 @@ var handlePinPost = function(postId) {
     renderFeedList();
     showToast(newPinned ? 'Post pinned.' : 'Post unpinned.', 'info');
   }).catch(function(err) {
-    console.error('Pin post error:', err);
+    logError('Pin post error', err);
     showToast('Failed to pin post.', 'error');
   });
 };
@@ -1836,7 +1840,7 @@ var loadMembers = function() {
     membersState.members = members;
     renderMembersList();
   }).catch(function(err) {
-    console.error('Failed to load members:', err);
+    logError('Failed to load members', err);
     list.innerHTML = '<div class="card"><p class="text-muted">Failed to load members. Check Firestore rules.</p></div>';
   });
 };
@@ -1937,7 +1941,7 @@ var markConversationRead = function(conversationId) {
   payload['readBy.' + state.user.uid] = serverTimestamp();
 
   return updateDoc(doc(db, 'conversations', conversationId), payload).catch(function(err) {
-    console.error('Failed to mark conversation read:', err);
+    logError('Failed to mark conversation read', err);
   });
 };
 
@@ -2128,7 +2132,7 @@ var subscribeMessageThread = function(conversationId) {
     renderMessagesThread();
     markConversationRead(conversationId);
   }, function(err) {
-    console.error('Failed to load thread:', err);
+    logError('Failed to load thread', err);
     var listEl = document.getElementById('messagesThreadList');
     if (listEl) {
       listEl.innerHTML = '<div class="messages-empty-state text-muted">Failed to load messages.</div>';
@@ -2165,7 +2169,7 @@ var loadOlderMessages = function() {
     messagesState.olderMessages = older.concat(messagesState.olderMessages);
     renderMessagesThread();
   }).catch(function(err) {
-    console.error('Load older messages error:', err);
+    logError('Load older messages error', err);
     showToast('Failed to load older messages.', 'error');
   }).finally(function() {
     messagesState.loadingOlder = false;
@@ -2226,7 +2230,7 @@ var loadMessageMembers = function() {
     renderMessagesPeopleList();
     renderMessagesThread();
   }).catch(function(err) {
-    console.error('Failed to load message members:', err);
+    logError('Failed to load message members', err);
     var list = document.getElementById('messagesPeopleList');
     if (list) {
       list.innerHTML = '<div class="messages-empty-state text-muted">Failed to load members.</div>';
@@ -2283,7 +2287,7 @@ var subscribeConversations = function() {
       renderMessagesThread();
     }
   }, function(err) {
-    console.error('Failed to load conversations:', err);
+    logError('Failed to load conversations', err);
     var list = document.getElementById('messagesPeopleList');
     if (list) {
       list.innerHTML = '<div class="messages-empty-state text-muted">Failed to load conversations.</div>';
@@ -2351,7 +2355,7 @@ var handleSendMessage = function() {
     markConversationRead(conversationId);
     input.value = '';
   }).catch(function(err) {
-    console.error('Failed to send message:', err);
+    logError('Failed to send message', err);
     showToast('Failed to send message. Check console for details.', 'error');
   }).finally(function() {
     input.disabled = false;
@@ -2440,7 +2444,7 @@ var loadAllowlistMembers = function() {
     adminState.allowlist = entries;
     renderAllowlistMembers();
   }).catch(function(err) {
-    console.error('Failed to load allowlist:', err);
+    logError('Failed to load allowlist', err);
     list.innerHTML = '<div class="card"><p class="text-muted">Failed to load allowlist. Check Firestore rules.</p></div>';
   });
 };
@@ -2551,7 +2555,7 @@ var handleAdminInvite = function() {
     showToast('Invite saved and email queued.', 'success');
     return loadAllowlistMembers();
   }).catch(function(err) {
-    console.error('Failed to save allowlist entry:', err);
+    logError('Failed to save allowlist entry', err);
     showToast('Failed to save invite or queue the email. Check console for details.', 'error');
   }).finally(function() {
     saveBtn.disabled = false;
@@ -2574,7 +2578,7 @@ var handleAdminRemove = function(email) {
       renderAllowlistMembers();
       showToast('Invite removed.', 'success');
     }).catch(function(err) {
-      console.error('Failed to remove allowlist entry:', err);
+      logError('Failed to remove allowlist entry', err);
       showToast('Failed to remove invite. Check console for details.', 'error');
     });
   });
@@ -2856,7 +2860,7 @@ var handleSaveProfile = function(uid) {
     renderMembersList();
     openProfile(uid);
   }).catch(function(err) {
-    console.error('Failed to save profile:', err);
+    logError('Failed to save profile', err);
     showToast('Failed to save profile. Check console for details.', 'error');
     if (saveBtn) {
       saveBtn.disabled    = false;
@@ -2929,7 +2933,7 @@ var loadRecentPosts = function(uid) {
       });
     });
   }).catch(function(err) {
-    console.error('Failed to load recent posts:', err);
+    logError('Failed to load recent posts', err);
     // If it's a missing-index error, Firestore returns a specific message
     var msg = err && err.message && err.message.indexOf('index') !== -1
       ? 'Posts query needs a Firestore index. Check browser console for a link to create it.'
@@ -3025,7 +3029,7 @@ var loadEvents = function() {
     eventsState.past = past;
     renderEventsList();
   }).catch(function(err) {
-    console.error('Failed to load events:', err);
+    logError('Failed to load events', err);
     list.innerHTML = '<div class="card"><p class="text-muted">Failed to load events. Check Firestore rules.</p></div>';
   });
 };
@@ -3205,7 +3209,7 @@ var handleRsvp = function(eventId, btn) {
       }
     }
   }).catch(function(err) {
-    console.error('Failed to update RSVP:', err);
+    logError('Failed to update RSVP', err);
     showToast('Failed to update RSVP. Check console for details.', 'error');
     btn.disabled = false;
   });
@@ -3337,7 +3341,7 @@ var handleCreateEvent = function() {
     closeEventModal();
     loadEvents();
   }).catch(function(err) {
-    console.error('Failed to create event:', err);
+    logError('Failed to create event', err);
     showToast('Failed to create event. Check console for details.', 'error');
     if (saveBtn) {
       saveBtn.disabled    = false;
@@ -3485,7 +3489,7 @@ var handleInlineCreateEvent = function() {
     }
     loadEvents();
   }).catch(function(err) {
-    console.error('Failed to create event:', err);
+    logError('Failed to create event', err);
     var msg;
     if (err.code === 'permission-denied') {
       msg = 'PERMISSION DENIED.\n\n' +
@@ -3579,7 +3583,7 @@ var createPicker = function() {
 
     picker.setVisible(true);
   } catch (err) {
-    console.error('Picker build error:', err);
+    logError('Picker build error', err);
     showToast('Failed to open Drive picker: ' + err.message, 'error');
   }
 };
@@ -3839,7 +3843,7 @@ var loadSidebarProjects = function() {
 
     syncSidebarSelection();
   }, function(err) {
-    console.error('Sidebar projects error:', err);
+    logError('Sidebar projects error', err);
     var container = document.getElementById('sidebarProjectsList');
     if (container) {
       container.innerHTML = '<span class="text-muted" style="padding:0 12px;font-size:13px;">Projects unavailable</span>';
@@ -3894,7 +3898,7 @@ var subscribeProjectsList = function() {
     sortProjectsByUpdatedAt(projectsState.projects);
     renderProjectsList();
   }, function(err) {
-    console.error('Projects list error:', err);
+    logError('Projects list error', err);
     var list = document.getElementById('projectsList');
     if (list) {
       list.innerHTML = '<div class="card"><p class="text-muted">Failed to load projects.</p></div>';
@@ -4030,7 +4034,7 @@ var subscribeProjectCollections = function(projectId) {
       refreshProjectDetailView();
     },
     function(err) {
-      console.error('Project comments error:', err);
+      logError('Project comments error', err);
     }
   );
 
@@ -4046,7 +4050,7 @@ var subscribeProjectCollections = function(projectId) {
       refreshProjectDetailView();
     },
     function(err) {
-      console.error('Project files error:', err);
+      logError('Project files error', err);
     }
   );
 
@@ -4062,7 +4066,7 @@ var subscribeProjectCollections = function(projectId) {
       refreshProjectDetailView();
     },
     function(err) {
-      console.error('Project tasks error:', err);
+      logError('Project tasks error', err);
     }
   );
 
@@ -4084,7 +4088,7 @@ var subscribeProjectCollections = function(projectId) {
       refreshProjectDetailView();
     },
     function(err) {
-      console.error('Project activity error:', err);
+      logError('Project activity error', err);
     }
   );
 };
@@ -4217,7 +4221,7 @@ var loadProjectDetail = function(projectId) {
     projectsState.detailProject = p;
     renderProjectDetail(p);
   }, function(err) {
-    console.error('Project detail error:', err);
+    logError('Project detail error', err);
     renderRecoveryCard(detailEl, {
       title: 'Could not load this project',
       message: 'A connection error occurred. The project may have been deleted or you may have lost access.',
@@ -4506,7 +4510,7 @@ var renderProjectDetail = function(p) {
         projectsState.activeProjectId = null;
         loadPage('projects');
       }).catch(function(err) {
-        console.error('Delete project error:', err);
+        logError('Delete project error', err);
         showToast('Failed to delete project.', 'error');
       });
     });
@@ -4624,7 +4628,7 @@ var renderProjectDetail = function(p) {
           writeNotification(task.assigneeId, 'task-status', actor + ' moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus], { page: 'projects', params: { projectId: p.id } });
         }
       }).catch(function(err) {
-        console.error('Task status update error:', err);
+        logError('Task status update error', err);
         showToast('Failed to update task.', 'error');
       });
     };
@@ -4637,7 +4641,7 @@ var renderProjectDetail = function(p) {
       showConfirmModal('Delete task', 'Delete this task?', 'Delete').then(function(ok) {
         if (!ok) return;
         deleteDoc(doc(db, 'projects', p.id, 'tasks', taskId)).catch(function(err) {
-          console.error('Delete task error:', err);
+          logError('Delete task error', err);
           showToast('Failed to delete task.', 'error');
         });
       });
@@ -4708,7 +4712,7 @@ var renderProjectDetail = function(p) {
             renderProjectDetail(projectsState.detailProject);
           }
         }).catch(function(err) {
-          console.error('Task edit error:', err);
+          logError('Task edit error', err);
           showToast('Failed to update task.', 'error');
         });
       };
@@ -4791,7 +4795,7 @@ var loadProjectMemberChecks = function(existingProject) {
     });
     container.innerHTML = html;
   }).catch(function(err) {
-    console.error('Load members error:', err);
+    logError('Load members error', err);
     container.innerHTML = '<span class="text-muted">Failed to load members.</span>';
   });
 };
@@ -4844,7 +4848,7 @@ var handleSaveProject = function() {
       showToast('Project updated.', 'info');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     }).catch(function(err) {
-      console.error('Update project error:', err);
+      logError('Update project error', err);
       showToast('Failed to update: ' + (err.message || ''), 'error');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     });
@@ -4868,7 +4872,7 @@ var handleSaveProject = function() {
       syncURLState();
       loadProjectDetail(docRef.id);
     }).catch(function(err) {
-      console.error('Create project error:', err);
+      logError('Create project error', err);
       showToast('Failed to create: ' + (err.message || ''), 'error');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     });
@@ -4901,7 +4905,7 @@ var handleProjectComment = function(projectId, body) {
       writeNotification(projectsState.detailProject.createdBy, 'project-comment', actorName + ' commented in ' + projectName, { page: 'projects', params: { projectId: projectId } });
     }
   }).catch(function(err) {
-    console.error('Project comment error:', err);
+    logError('Project comment error', err);
     showToast('Failed to post comment.', 'error');
   });
 };
@@ -4918,7 +4922,7 @@ var handleProjectFileAttach = function(projectId, fileData) {
   }).then(function() {
     showToast('File attached!', 'info');
   }).catch(function(err) {
-    console.error('Project file attach error:', err);
+    logError('Project file attach error', err);
     showToast('Failed to attach file.', 'error');
   });
 };
@@ -4932,7 +4936,7 @@ var logProjectActivity = function(projectId, action, detail) {
     authorName: state.user.displayName || state.user.email || 'Member',
     createdAt: serverTimestamp()
   }).catch(function(err) {
-    console.error('Activity log error:', err);
+    logError('Activity log error', err);
   });
 };
 
@@ -4956,7 +4960,7 @@ var handleAddTask = function(projectId, taskData) {
       writeNotification(taskData.assigneeId, 'task-assigned', actor + ' assigned you "' + taskData.title + '" in ' + projName, { page: 'projects', params: { projectId: projectId } });
     }
   }).catch(function(err) {
-    console.error('Add task error:', err);
+    logError('Add task error', err);
     showToast('Failed to add task.', 'error');
   });
 };
@@ -4998,40 +5002,6 @@ var renderLinkPreview = function(og) {
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
-var ensureToastRoot = function() {
-  var root = document.getElementById('toastRoot');
-  if (root) return root;
-
-  root = document.createElement('div');
-  root.id = 'toastRoot';
-  root.className = 'toast-root';
-  document.body.appendChild(root);
-  return root;
-};
-
-var showToast = function(message, tone, timeoutMs) {
-  var root = ensureToastRoot();
-  var toast = document.createElement('div');
-
-  toast.className = 'toast toast-' + (tone || 'info');
-  toast.textContent = String(message || '');
-  root.appendChild(toast);
-
-  requestAnimationFrame(function() {
-    toast.classList.add('toast-visible');
-  });
-
-  var dismiss = function() {
-    toast.classList.remove('toast-visible');
-    window.setTimeout(function() {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    }, 180);
-  };
-
-  toast.addEventListener('click', dismiss);
-  window.setTimeout(dismiss, timeoutMs || 3200);
-};
-
 var showDialogModal = function(opts) {
   opts = opts || {};
 
@@ -5136,7 +5106,7 @@ var writeNotification = function(recipientId, type, message, link) {
     actorId:     state.user.uid,
     actorName:   state.user.displayName || state.user.email || 'Member'
   }).catch(function(err) {
-    console.error('Failed to write notification:', err);
+    logError('Failed to write notification', err);
   });
 };
 
@@ -5190,7 +5160,7 @@ var subscribeNotifications = function() {
       renderNotificationsList();
     }
   }, function(err) {
-    console.error('Notifications subscription error:', err);
+    logError('Notifications subscription error', err);
   });
 };
 
@@ -5240,7 +5210,7 @@ var renderNotificationsList = function() {
       var n = notificationsState.notifications.find(function(x) { return x.id === nid; });
       if (n && !n.read) {
         updateDoc(doc(db, 'notifications', nid), { read: true }).catch(function(err) {
-          console.error('Mark read error:', err);
+          logError('Mark read error', err);
         });
       }
 
@@ -5275,7 +5245,7 @@ var initNotificationsPage = function() {
       })).then(function() {
         showToast('All marked as read.', 'info');
       }).catch(function(err) {
-        console.error('Mark all read error:', err);
+        logError('Mark all read error', err);
       });
     });
   }
@@ -5364,7 +5334,7 @@ var renderResourceList = function() {
       updateDoc(doc(db, 'users', state.user.uid), {
         savedResources: resourcesState.savedResources
       }).catch(function(err) {
-        console.error('Save bookmark error:', err);
+        logError('Save bookmark error', err);
       });
       renderResourceList();
     });
@@ -5377,7 +5347,7 @@ var renderResourceList = function() {
       showConfirmModal('Delete Resource', 'Remove this resource from the library?', 'Delete').then(function(ok) {
         if (!ok) return;
         deleteDoc(doc(db, 'resources', rid)).catch(function(err) {
-          console.error('Delete resource error:', err);
+          logError('Delete resource error', err);
         });
       });
     });
@@ -5442,7 +5412,7 @@ var initResourcesPage = function() {
         document.getElementById('resourceDesc').value = '';
         document.getElementById('resourceCategory').value = 'general';
       }).catch(function(err) {
-        console.error('Add resource error:', err);
+        logError('Add resource error', err);
       }).finally(function() {
         addBtn.disabled = false;
       });
@@ -5461,7 +5431,7 @@ var initResourcesPage = function() {
     });
     renderResourceList();
   }, function(err) {
-    console.error('Resources subscribe error:', err);
+    logError('Resources subscribe error', err);
   });
 };
 
@@ -5506,7 +5476,7 @@ var subscribeBriefingNotifier = function() {
     briefingsState.hasUnread = latestMs > lastRead;
     syncBriefingBadge();
   }, function(err) {
-    console.error('Briefing notifier error:', err);
+    logError('Briefing notifier error', err);
   });
 };
 
@@ -5668,7 +5638,7 @@ var subscribeBriefings = function() {
     renderBriefingList();
     markBriefingsRead();
   }, function(err) {
-    console.error('Briefings subscribe error:', err);
+    logError('Briefings subscribe error', err);
     var listEl = document.getElementById('briefingList');
     if (listEl) listEl.innerHTML = '<p class="text-muted">Failed to load briefings.</p>';
   });
