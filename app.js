@@ -37,14 +37,24 @@ import {
   extractFirstUrl
 } from './src/util/escape.js';
 
-var ALL_CIRCLES = [
-  'hustle-hub',
-  'work-network',
-  'family'
-];
+import {
+  ALL_CIRCLES,
+  FEED_PAGE_SIZE,
+  STRATEGY_APP_URL,
+  VALID_PAGES,
+  BRIEFING_SECTION_META
+} from './src/util/constants.js';
 
-var FEED_PAGE_SIZE = 20;
-var STRATEGY_APP_URL = 'https://bobbynacario-design.github.io/forensic-bi-strategy/';
+import {
+  normalizeCircles,
+  getVisibleCircles,
+  getInitials
+} from './src/util/circles.js';
+
+import {
+  formatCalendarMonthLabel,
+  relativeTime
+} from './src/util/time.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 var state = {
@@ -184,18 +194,6 @@ var resetProjectDetailState = function() {
   projectsState.detailFiles = [];
   projectsState.detailTasks = [];
   projectsState.detailActivity = [];
-};
-
-var VALID_PAGES = {
-  feed:      true,
-  events:    true,
-  members:   true,
-  admin:     true,
-  messages:  true,
-  projects:  true,
-  resources: true,
-  briefings: true,
-  notifications: true
 };
 
 var briefingsState = {
@@ -439,7 +437,7 @@ var renderShell = function() {
     });
 
     document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-      btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+      btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         window.enclaveGoCircle(btn.dataset.circle);
@@ -562,7 +560,7 @@ var refreshCurrentUserState = function() {
     });
 
     document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-      btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+      btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
     });
 
     syncSidebarSelection();
@@ -610,7 +608,7 @@ var applyURLState = function() {
       feedState.openComments[feedState.targetPostId] = true;
     }
 
-    if (circle && getVisibleCircles().indexOf(circle) !== -1) {
+    if (circle && getVisibleCircles(state).indexOf(circle) !== -1) {
       feedState.filter = circle;
     } else {
       feedState.filter = 'all';
@@ -721,13 +719,6 @@ var formatDateButtonLabel = function(value) {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
-  });
-};
-
-var formatCalendarMonthLabel = function(year, month) {
-  return new Date(year, month, 1).toLocaleDateString([], {
-    month: 'long',
     year: 'numeric'
   });
 };
@@ -998,7 +989,7 @@ var loadPanelEvents = function() {
 
   var q = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles(state)),
     where('date', '>=', getUpcomingEventsThreshold()),
     orderBy('date', 'asc'),
     limit(4)
@@ -1125,7 +1116,7 @@ var loadPage = function(page) {
 
 // ─── Feed: init ──────────────────────────────────────────────────────────────
 var initFeedPage = function() {
-  var visibleCircles = getVisibleCircles();
+  var visibleCircles = getVisibleCircles(state);
   var composeCircle = document.getElementById('composeCircle');
   var filterPills = document.querySelector('.filter-pills');
 
@@ -1205,7 +1196,7 @@ var subscribeFeed = function() {
 
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles(state)),
     orderBy('timestamp', 'desc'),
     limit(FEED_PAGE_SIZE)
   );
@@ -1267,7 +1258,7 @@ var ensureTargetPostLoaded = function() {
     var data = snap.data() || {};
     data.id = snap.id;
 
-    if (getVisibleCircles().indexOf(data.circle || 'all') === -1) {
+    if (getVisibleCircles(state).indexOf(data.circle || 'all') === -1) {
       return false;
     }
 
@@ -1333,7 +1324,7 @@ var loadMoreFeedPosts = function() {
 
   var q = query(
     collection(db, 'posts'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles(state)),
     orderBy('timestamp', 'desc'),
     startAfter(feedState.lastDoc),
     limit(FEED_PAGE_SIZE)
@@ -2607,7 +2598,7 @@ var syncUserDocsForAllowlist = function(email, circles) {
       if (state.user && state.user.uid === userSnap.id) {
         state.circles = normalized.slice();
         document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-          btn.hidden = getVisibleCircles().indexOf(btn.dataset.circle) === -1;
+          btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
         });
         syncSidebarSelection();
         loadPanelCircles();
@@ -2887,7 +2878,7 @@ var loadRecentPosts = function(uid) {
   var q = query(
     collection(db, 'posts'),
     where('authorId', '==', uid),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles(state)),
     orderBy('timestamp', 'desc'),
     limit(5)
   );
@@ -3002,13 +2993,13 @@ var loadEvents = function() {
   var threshold = getUpcomingEventsThreshold();
   var upcomingQuery = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles(state)),
     where('date', '>=', threshold),
     orderBy('date', 'asc')
   );
   var pastQuery = query(
     collection(db, 'events'),
-    where('circle', 'in', getVisibleCircles()),
+    where('circle', 'in', getVisibleCircles(state)),
     where('date', '<', threshold),
     orderBy('date', 'asc')
   );
@@ -3721,14 +3712,6 @@ var renderCircleChecks = function(selectedCircles) {
   }).join('');
 };
 
-var normalizeCircles = function(circles) {
-  if (!Array.isArray(circles)) return [];
-
-  return circles.filter(function(circle, index) {
-    return ALL_CIRCLES.indexOf(circle) !== -1 && circles.indexOf(circle) === index;
-  });
-};
-
 var getCheckedCircles = function(containerSelector) {
   var selected = [];
 
@@ -3747,23 +3730,6 @@ var setCheckedCircles = function(containerSelector, circles) {
   });
 };
 
-var getInitials = function(name) {
-  if (!name) return '?';
-  var parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-};
-
-var relativeTime = function(date) {
-  var sec = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (sec < 5)      return 'just now';
-  if (sec < 60)     return sec + 's ago';
-  if (sec < 3600)   return Math.floor(sec / 60)    + 'm ago';
-  if (sec < 86400)  return Math.floor(sec / 3600)  + 'h ago';
-  if (sec < 604800) return Math.floor(sec / 86400) + 'd ago';
-  return date.toLocaleDateString();
-};
-
 var circleLabel = function(id) {
   if (id === 'all') return 'All';
 
@@ -3772,18 +3738,6 @@ var circleLabel = function(id) {
   });
 
   return circle ? circle.label : id;
-};
-
-var getVisibleCircles = function() {
-  var circles = state.isAdmin
-    ? ALL_CIRCLES.slice()
-    : (Array.isArray(state.circles) ? state.circles.slice() : []);
-
-  circles.unshift('all');
-
-  return circles.filter(function(circle, index) {
-    return circles.indexOf(circle) === index;
-  });
 };
 
 var syncSidebarSelection = function() {
@@ -5570,14 +5524,6 @@ var markBriefingsRead = function() {
     briefingsState.hasUnread = false;
     syncBriefingBadge();
   }
-};
-
-var BRIEFING_SECTION_META = {
-  global:  { label: 'Global',      color: '#378ADD' },
-  ph:      { label: 'Philippines',  color: '#BA7517' },
-  ai:      { label: 'AI',           color: '#7F77DD' },
-  markets: { label: 'Markets',      color: '#1D9E75' },
-  ev:      { label: 'EV',           color: '#639922' }
 };
 
 var renderBriefingCard = function(b) {
