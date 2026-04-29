@@ -64,6 +64,12 @@ import {
   showNoticeModal
 } from './src/ui/modals.js';
 
+import {
+  openDrivePicker,
+  clearDriveAttachment,
+  registerPickerHandler
+} from './src/ui/drivePicker.js';
+
 // Pages
 import {
   initBriefingsPage,
@@ -90,6 +96,31 @@ import {
   resetProjectDetailState,
   resetResourcesState
 } from './src/state.js';
+
+registerPickerHandler('resource', function(file) {
+  var rUrlInput = document.getElementById('resourceUrl');
+  var rTitleInput = document.getElementById('resourceTitle');
+  if (rUrlInput) rUrlInput.value = file.url || '';
+  if (rTitleInput && !rTitleInput.value.trim()) rTitleInput.value = file.name || '';
+  pickerState.context = 'feed';
+  return true;
+});
+
+registerPickerHandler('project', function(file) {
+  if (!pickerState.projectId) return false;
+
+  handleProjectFileAttach(pickerState.projectId, {
+    fileUrl:     file.url || '',
+    fileName:    file.name || 'Attached file',
+    iconUrl:     file.iconUrl || '',
+    addedBy:     state.user.uid,
+    addedByName: state.user.displayName || state.user.email || 'Member',
+    addedAt:     Timestamp.now()
+  });
+  pickerState.context = 'feed';
+  pickerState.projectId = null;
+  return true;
+});
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
 var runSignOut = function(accessDenied) {
@@ -3353,176 +3384,6 @@ var handleInlineCreateEvent = function() {
       saveBtn.textContent = 'Create Event';
     }
   });
-};
-
-// ─── Drive Picker ────────────────────────────────────────────────────────────
-var PICKER_APP_ID = '834210326738';
-var PICKER_API_KEY = 'AIzaSyBC8nqTgaqMp0R45dnKpA44u0S5C3nnbFE';
-var pickerApiLoaded = false;
-
-var driveTokenClient = null;
-
-var openDrivePicker = function() {
-  if (!state.user) {
-    showToast('Sign in first.', 'error');
-    return;
-  }
-
-  if (!window.google || !window.google.accounts) {
-    showToast('Google Identity Services still loading. Try again.', 'error');
-    return;
-  }
-
-  // If we already have a token, go straight to picker
-  if (state.googleAccessToken) {
-    loadAndShowPicker();
-    return;
-  }
-
-  // Use GIS token client to get Drive access token on demand
-  if (!driveTokenClient) {
-    driveTokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: '834210326738-mo90co5s9c6fogmb4kse67dkshmigt2l.apps.googleusercontent.com',
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: function(tokenResponse) {
-        if (tokenResponse && tokenResponse.access_token) {
-          state.googleAccessToken = tokenResponse.access_token;
-          loadAndShowPicker();
-        } else {
-          showToast('Could not get Drive access.', 'error');
-        }
-      }
-    });
-  }
-
-  driveTokenClient.requestAccessToken({ prompt: '' });
-};
-
-var loadAndShowPicker = function() {
-  if (!window.gapi) {
-    showToast('Google API still loading. Try again in a moment.', 'error');
-    return;
-  }
-
-  if (pickerApiLoaded) {
-    createPicker();
-    return;
-  }
-
-  window.gapi.load('picker', function() {
-    pickerApiLoaded = true;
-    createPicker();
-  });
-};
-
-var createPicker = function() {
-  try {
-    var docsView = new google.picker.DocsView()
-      .setIncludeFolders(true)
-      .setSelectFolderEnabled(false);
-
-    var picker = new google.picker.PickerBuilder()
-      .addView(docsView)
-      .setOAuthToken(state.googleAccessToken)
-      .setAppId(PICKER_APP_ID)
-      .setCallback(handlePickerResult)
-      .setTitle('Attach a file from Google Drive')
-      .build();
-
-    picker.setVisible(true);
-  } catch (err) {
-    logError('Picker build error', err);
-    showToast('Failed to open Drive picker: ' + err.message, 'error');
-  }
-};
-
-var handlePickerResult = function(data) {
-  if (data.action === google.picker.Action.PICKED && data.docs && data.docs.length > 0) {
-    var file = data.docs[0];
-
-    // Resource context: fill resource form fields
-    if (pickerState.context === 'resource') {
-      var rUrlInput = document.getElementById('resourceUrl');
-      var rTitleInput = document.getElementById('resourceTitle');
-      if (rUrlInput) rUrlInput.value = file.url || '';
-      if (rTitleInput && !rTitleInput.value.trim()) rTitleInput.value = file.name || '';
-      pickerState.context = 'feed';
-      return;
-    }
-
-    // Project context: attach file to project
-    if (pickerState.context === 'project' && pickerState.projectId) {
-      handleProjectFileAttach(pickerState.projectId, {
-        fileUrl:     file.url || '',
-        fileName:    file.name || 'Attached file',
-        iconUrl:     file.iconUrl || '',
-        addedBy:     state.user.uid,
-        addedByName: state.user.displayName || state.user.email || 'Member',
-        addedAt:     Timestamp.now()
-      });
-      pickerState.context = 'feed';
-      pickerState.projectId = null;
-      return;
-    }
-
-    // Default: feed compose attachment
-    driveAttachment.fileUrl  = file.url || '';
-    driveAttachment.fileName = file.name || 'Attached file';
-    driveAttachment.iconUrl  = file.iconUrl || '';
-    renderDrivePreview();
-  }
-
-  // Reset picker context on cancel
-  if (data.action === google.picker.Action.CANCEL) {
-    pickerState.context = 'feed';
-    pickerState.projectId = null;
-  }
-};
-
-var renderDrivePreview = function() {
-  var el = document.getElementById('driveAttachmentPreview');
-  if (!el) return;
-
-  if (!driveAttachment.fileUrl) {
-    el.hidden = true;
-    el.innerHTML = '';
-    return;
-  }
-
-  var nameEsc = escapeHTML(driveAttachment.fileName);
-  el.hidden = false;
-  el.innerHTML =
-    '<div class="drive-preview-file">' +
-      (driveAttachment.iconUrl
-        ? '<img src="' + escapeAttr(driveAttachment.iconUrl) + '" class="drive-preview-icon" alt="" />'
-        : '<span class="drive-preview-icon-fallback">&#128196;</span>') +
-      '<span class="drive-preview-name">' + nameEsc + '</span>' +
-      '<button type="button" class="drive-preview-remove" title="Remove attachment">&times;</button>' +
-    '</div>' +
-    '<div class="drive-preview-reminder">' +
-      '&#9888;&#65039; Before posting, set sharing in Google Drive:<br>' +
-      '<strong>Open file → Share → General access → "Anyone with the link" → Viewer/Commenter/Editor</strong><br>' +
-      'Choose <em>Viewer</em> for read-only, <em>Commenter</em> for feedback, or <em>Editor</em> for full collaboration.' +
-    '</div>';
-
-  // Wire remove button
-  var removeBtn = el.querySelector('.drive-preview-remove');
-  if (removeBtn) {
-    removeBtn.onclick = function() {
-      clearDriveAttachment();
-    };
-  }
-};
-
-var clearDriveAttachment = function() {
-  driveAttachment.fileUrl  = '';
-  driveAttachment.fileName = '';
-  driveAttachment.iconUrl  = '';
-  var el = document.getElementById('driveAttachmentPreview');
-  if (el) {
-    el.hidden = true;
-    el.innerHTML = '';
-  }
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
