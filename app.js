@@ -41,8 +41,7 @@ import {
   ALL_CIRCLES,
   FEED_PAGE_SIZE,
   STRATEGY_APP_URL,
-  VALID_PAGES,
-  BRIEFING_SECTION_META
+  VALID_PAGES
 } from './src/util/constants.js';
 
 import {
@@ -62,9 +61,15 @@ import { showToast } from './src/ui/toast.js';
 
 import {
   showConfirmModal,
-  showNoticeModal,
-  openBriefingImportModal
+  showNoticeModal
 } from './src/ui/modals.js';
+
+// Pages
+import {
+  initBriefingsPage,
+  resetBriefingsState,
+  subscribeBriefingNotifier
+} from './src/pages/briefings.js';
 
 import {
   state,
@@ -76,7 +81,6 @@ import {
   messagesState,
   driveAttachment,
   shellState,
-  briefingsState,
   projectsState,
   resourcesState,
   notificationsState,
@@ -5180,225 +5184,6 @@ var initResourcesPage = function() {
   }, function(err) {
     logError('Resources subscribe error', err);
   });
-};
-
-// ─── Briefings ──────────────────────────────────────────────────────────────
-
-var resetBriefingsState = function() {
-  if (briefingsState.unsubscribe) {
-    briefingsState.unsubscribe();
-    briefingsState.unsubscribe = null;
-  }
-  briefingsState.briefings = [];
-};
-
-var BRIEFING_READ_KEY = 'enclave_last_briefing_ts';
-
-var getBriefingPublishedMs = function(b) {
-  if (b.publishedAt && typeof b.publishedAt.toMillis === 'function') return b.publishedAt.toMillis();
-  if (b.publishedAt && b.publishedAt.seconds) return b.publishedAt.seconds * 1000;
-  return 0;
-};
-
-var syncBriefingBadge = function() {
-  var dot = document.getElementById('briefingUnreadDot');
-  if (dot) dot.style.display = briefingsState.hasUnread ? 'inline-block' : 'none';
-  var headerBadge = document.getElementById('briefingNewBadge');
-  if (headerBadge) headerBadge.style.display = briefingsState.hasUnread ? 'inline-block' : 'none';
-};
-
-var subscribeBriefingNotifier = function() {
-  if (briefingsState.unsubscribeNotifier) briefingsState.unsubscribeNotifier();
-
-  var q = query(collection(db, 'briefings'), orderBy('publishedAt', 'desc'), limit(1));
-  briefingsState.unsubscribeNotifier = onSnapshot(q, function(snap) {
-    if (snap.empty) {
-      briefingsState.hasUnread = false;
-      syncBriefingBadge();
-      return;
-    }
-    var latest = snap.docs[0].data();
-    var latestMs = getBriefingPublishedMs(latest);
-    var lastRead = parseInt(localStorage.getItem(BRIEFING_READ_KEY) || '0', 10);
-    briefingsState.hasUnread = latestMs > lastRead;
-    syncBriefingBadge();
-  }, function(err) {
-    logError('Briefing notifier error', err);
-  });
-};
-
-var markBriefingsRead = function() {
-  var latest = briefingsState.briefings[0];
-  if (!latest) return;
-  // Find the newest publishedAt among all loaded briefings
-  var maxMs = 0;
-  briefingsState.briefings.forEach(function(b) {
-    var ms = getBriefingPublishedMs(b);
-    if (ms > maxMs) maxMs = ms;
-  });
-  if (maxMs > 0) {
-    localStorage.setItem(BRIEFING_READ_KEY, String(maxMs));
-    briefingsState.hasUnread = false;
-    syncBriefingBadge();
-  }
-};
-
-var renderBriefingCard = function(b) {
-  var m = b.markets || {};
-  var pseiMove = String(m.psei_move || '');
-  var asxMove = String(m.asx_move || '');
-  var spMove = String(m.sp500_move || '');
-
-  var tickerClass = function(move) {
-    if (move.indexOf('up') === 0) return 'up';
-    if (move.indexOf('down') === 0) return 'dn';
-    return '';
-  };
-
-  var tickers =
-    '<div class="briefing-tickers">' +
-      '<div class="briefing-ticker">' +
-        '<div class="briefing-ticker-label">PSEi</div>' +
-        '<div class="briefing-ticker-value">' + escapeHTML(m.psei || '—') + '</div>' +
-        '<div class="briefing-ticker-move ' + tickerClass(pseiMove) + '">' + escapeHTML(pseiMove || '—') + '</div>' +
-      '</div>' +
-      '<div class="briefing-ticker">' +
-        '<div class="briefing-ticker-label">ASX 200</div>' +
-        '<div class="briefing-ticker-value">' + escapeHTML(m.asx || '—') + '</div>' +
-        '<div class="briefing-ticker-move ' + tickerClass(asxMove) + '">' + escapeHTML(asxMove || '—') + '</div>' +
-      '</div>' +
-      '<div class="briefing-ticker">' +
-        '<div class="briefing-ticker-label">S&amp;P 500</div>' +
-        '<div class="briefing-ticker-value">' + escapeHTML(m.sp500 || '—') + '</div>' +
-        '<div class="briefing-ticker-move ' + tickerClass(spMove) + '">' + escapeHTML(spMove || '—') + '</div>' +
-      '</div>' +
-    '</div>';
-
-  // Normalize sections: accept array [{id, stories}] or object {global: [...]}
-  var sectionList = [];
-  if (Array.isArray(b.sections)) {
-    sectionList = b.sections;
-  } else if (b.sections && typeof b.sections === 'object') {
-    Object.keys(b.sections).forEach(function(key) {
-      sectionList.push({ id: key, stories: b.sections[key] });
-    });
-  }
-
-  var sections = '';
-  sectionList.forEach(function(sec) {
-    var stories = sec.stories || [];
-    // If stories have a 'relevant' boolean field, filter by it; otherwise show all
-    var hasRelevantField = stories.length > 0 && typeof stories[0].relevant === 'boolean';
-    var relevant = hasRelevantField ? stories.filter(function(s) { return s.relevant === true; }) : stories;
-    if (!relevant.length) return;
-    var meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id, color: '#888' };
-    var storiesHtml = relevant.map(function(s) {
-      return '<div class="briefing-story" style="border-left-color:' + meta.color + '">' +
-        '<div class="briefing-story-head">' + escapeHTML(s.headline) + '</div>' +
-        '<div class="briefing-story-body">' + escapeHTML(s.body) + '</div>' +
-      '</div>';
-    }).join('');
-    sections +=
-      '<div class="briefing-section">' +
-        '<div class="briefing-section-label">' +
-          '<span class="briefing-section-dot" style="background:' + meta.color + '"></span>' +
-          escapeHTML(meta.label) +
-        '</div>' +
-        storiesHtml +
-      '</div>';
-  });
-
-  var watchBox = '';
-  if (b.watch) {
-    watchBox =
-      '<div class="briefing-watch">' +
-        '<div class="briefing-watch-label">Watch</div>' +
-        '<div class="briefing-watch-body">' + escapeHTML(b.watch) + '</div>' +
-        (b.watch_source ? '<div class="briefing-watch-source">' + escapeHTML(b.watch_source) + '</div>' : '') +
-      '</div>';
-  }
-
-  var adminBtn = '';
-  if (state.isAdmin) {
-    adminBtn = '<button class="btn btn-ghost" style="margin-left:auto;font-size:11px;color:var(--red)" data-briefing-delete="' + escapeAttr(b.id) + '">Delete</button>';
-  }
-
-  return '<div class="briefing-card">' +
-    '<div class="briefing-card-head">' +
-      '<div class="briefing-card-title">' + escapeHTML(b.date || 'Untitled') + '</div>' +
-      '<div class="briefing-card-sub">Work Network · Daily Briefing</div>' +
-    '</div>' +
-    tickers +
-    (sections ? '<div class="briefing-sections">' + sections + '</div>' : '') +
-    watchBox +
-    '<div class="briefing-footer">' +
-      '<span class="briefing-footer-tag">' + escapeHTML(b.circle || 'work-network') + '</span>' +
-      '<span class="briefing-footer-tag">Daily Briefing</span>' +
-      '<span class="briefing-footer-tag">' + escapeHTML(b.date || '') + '</span>' +
-      adminBtn +
-    '</div>' +
-  '</div>';
-};
-
-var renderBriefingList = function() {
-  var listEl = document.getElementById('briefingList');
-  if (!listEl) return;
-
-  if (!briefingsState.briefings.length) {
-    listEl.innerHTML = '<p class="text-muted">No briefings yet.</p>';
-    return;
-  }
-
-  var sorted = briefingsState.briefings.slice().sort(function(a, b) {
-    // Parse "Friday, April 10, 2026" → Date by stripping the day-name prefix
-    var da = new Date((a.date || '').replace(/^\w+,\s*/, ''));
-    var db2 = new Date((b.date || '').replace(/^\w+,\s*/, ''));
-    return (db2.getTime() || 0) - (da.getTime() || 0);
-  });
-  listEl.innerHTML = sorted.map(renderBriefingCard).join('');
-
-  listEl.querySelectorAll('[data-briefing-delete]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var bid = btn.getAttribute('data-briefing-delete');
-      showConfirmModal('Delete briefing', 'Delete this briefing?', 'Delete').then(function(confirmed) {
-        if (!confirmed) return;
-        deleteDoc(doc(db, 'briefings', bid)).then(function() {
-          showToast('Briefing deleted.', 'success');
-        }).catch(function(err) {
-          showToast('Delete failed: ' + err.message, 'error');
-        });
-      });
-    });
-  });
-};
-
-var subscribeBriefings = function() {
-  if (briefingsState.unsubscribe) briefingsState.unsubscribe();
-
-  var q = query(collection(db, 'briefings'), orderBy('publishedAt', 'desc'), limit(10));
-  briefingsState.unsubscribe = onSnapshot(q, function(snap) {
-    briefingsState.briefings = snap.docs.map(function(d) {
-      var data = d.data();
-      data.id = d.id;
-      return data;
-    });
-    renderBriefingList();
-    markBriefingsRead();
-  }, function(err) {
-    logError('Briefings subscribe error', err);
-    var listEl = document.getElementById('briefingList');
-    if (listEl) listEl.innerHTML = '<p class="text-muted">Failed to load briefings.</p>';
-  });
-};
-
-var initBriefingsPage = function() {
-  var adminBar = document.getElementById('briefingAdminBar');
-  if (adminBar && state.isAdmin) adminBar.hidden = false;
-
-  var importBtn = document.getElementById('briefingImportBtn');
-  if (importBtn) importBtn.addEventListener('click', openBriefingImportModal);
-
-  subscribeBriefings();
 };
 
 onAuthStateChanged(auth, function(user) {
