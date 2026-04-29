@@ -29,6 +29,14 @@ import {
 
 import { auth, db, googleProvider } from './firebase.js';
 
+import {
+  escapeHTML,
+  escapeAttr,
+  linkifyText,
+  highlightMentions,
+  extractFirstUrl
+} from './src/util/escape.js';
+
 var ALL_CIRCLES = [
   'hustle-hub',
   'work-network',
@@ -36,6 +44,7 @@ var ALL_CIRCLES = [
 ];
 
 var FEED_PAGE_SIZE = 20;
+var STRATEGY_APP_URL = 'https://bobbynacario-design.github.io/forensic-bi-strategy/';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 var state = {
@@ -3164,8 +3173,9 @@ var handleRsvp = function(eventId, btn) {
         var eventData = eventSnap.data() || {};
         var currentCount = typeof eventData.rsvpCount === 'number' ? eventData.rsvpCount : 0;
 
+        var nextCount;
         if (rsvpSnap.exists()) {
-          var nextCount = currentCount > 0 ? currentCount - 1 : 0;
+          nextCount = currentCount > 0 ? currentCount - 1 : 0;
           transaction.delete(rsvpRef);
           transaction.update(eventRef, { rsvpCount: nextCount });
           return {
@@ -3174,7 +3184,7 @@ var handleRsvp = function(eventId, btn) {
           };
         }
 
-        var nextCount = currentCount + 1;
+        nextCount = currentCount + 1;
         transaction.set(rsvpRef, {
           uid:       state.user.uid,
           name:      state.user.displayName || state.user.email,
@@ -4126,6 +4136,105 @@ var subscribeProjectCollections = function(projectId) {
 };
 
 // ─── Projects: detail view ──────────────────────────────────────────────────
+var renderRecoveryCard = function(detailEl, opts) {
+  // opts: { title: string, message: string, idSuffix: string }
+  // Mounts the card HTML into detailEl and wires up all click handlers.
+  // No return value.
+  if (!detailEl) return;
+
+  opts = opts || {};
+  opts.idSuffix = opts.idSuffix || '';
+  var recoveryBackId = 'recoveryBackBtn' + opts.idSuffix;
+  var recoveryRelinkBtnId = 'recoveryRelinkBtn' + opts.idSuffix;
+  var recoveryRelinkFormId = 'recoveryRelinkForm' + opts.idSuffix;
+  var recoveryRelinkInputId = 'recoveryRelinkInput' + opts.idSuffix;
+  var recoveryRelinkGoId = 'recoveryRelinkGo' + opts.idSuffix;
+  var recoveryRelinkCancelId = 'recoveryRelinkCancel' + opts.idSuffix;
+
+  detailEl.innerHTML =
+    '<div class="card" style="max-width:520px;">' +
+      '<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">' +
+        '<div style="font-size:28px;flex-shrink:0;line-height:1;">⚠️</div>' +
+        '<div>' +
+          '<h3 style="margin:0 0 5px;font-size:16px;font-weight:600;">' + opts.title + '</h3>' +
+          '<p class="text-muted" style="margin:0;font-size:13px;line-height:1.6;">' +
+            opts.message +
+          '</p>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:12px 14px;border-radius:8px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);margin-bottom:18px;font-size:12px;line-height:1.7;" class="text-muted">' +
+        '<strong style="color:#C8A96E;">To reconnect:</strong> Open the Strategy app and use ' +
+        '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
+        '<a href="' + STRATEGY_APP_URL + '" target="forensicBiStrategy" ' +
+           'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
+                  'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
+          '↗ Open Strategy' +
+        '</a>' +
+        '<button id="' + recoveryBackId + '" class="btn btn-ghost" style="font-size:13px;">Browse Projects</button>' +
+        '<button id="' + recoveryRelinkBtnId + '" class="btn btn-ghost" style="font-size:13px;">↻ Try another ID</button>' +
+      '</div>' +
+      '<div id="' + recoveryRelinkFormId + '" style="display:none;">' +
+        '<p class="text-muted" style="margin:0 0 8px;font-size:12px;">Paste a project ID to load it directly:</p>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<input id="' + recoveryRelinkInputId + '" type="text" placeholder="Project ID (e.g. abc123…)" ' +
+                 'style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
+                        'color:var(--text);padding:8px 12px;font-size:13px;outline:none;" />' +
+          '<button id="' + recoveryRelinkGoId + '" style="background:#C8A96E;border:none;color:#0D0F14;border-radius:6px;' +
+                                               'padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">Go →</button>' +
+          '<button id="' + recoveryRelinkCancelId + '" class="btn btn-ghost" style="font-size:13px;flex-shrink:0;">Cancel</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  var recoveryBack = document.getElementById(recoveryBackId);
+  if (recoveryBack) recoveryBack.onclick = function() {
+    projectsState.activeProjectId = null;
+    resetProjectDetailState();
+    var listEl2 = document.getElementById('projectsList');
+    var headerEl2 = document.querySelector('.page-header-row');
+    if (listEl2) listEl2.hidden = false;
+    if (headerEl2) headerEl2.hidden = false;
+    detailEl.hidden = true;
+    detailEl.innerHTML = '';
+    syncURLState();
+    subscribeProjectsList();
+  };
+
+  var recoveryRelinkBtn = document.getElementById(recoveryRelinkBtnId);
+  if (recoveryRelinkBtn) recoveryRelinkBtn.onclick = function() {
+    var form = document.getElementById(recoveryRelinkFormId);
+    if (form) {
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      var inp = document.getElementById(recoveryRelinkInputId);
+      if (inp && form.style.display !== 'none') inp.focus();
+    }
+  };
+
+  var recoveryRelinkGo = document.getElementById(recoveryRelinkGoId);
+  if (recoveryRelinkGo) recoveryRelinkGo.onclick = function() {
+    var inp = document.getElementById(recoveryRelinkInputId);
+    if (inp && inp.value.trim()) {
+      var newId = inp.value.trim();
+      projectsState.activeProjectId = newId;
+      syncURLState();
+      loadProjectDetail(newId);
+    }
+  };
+
+  var recoveryRelinkCancel = document.getElementById(recoveryRelinkCancelId);
+  if (recoveryRelinkCancel) recoveryRelinkCancel.onclick = function() {
+    var form = document.getElementById(recoveryRelinkFormId);
+    if (form) form.style.display = 'none';
+  };
+
+  var recoveryRelinkInput = document.getElementById(recoveryRelinkInputId);
+  if (recoveryRelinkInput) recoveryRelinkInput.onkeydown = function(e) {
+    if (e.key === 'Enter') { var go = document.getElementById(recoveryRelinkGoId); if (go) go.click(); }
+  };
+};
+
 var loadProjectDetail = function(projectId) {
   var listEl = document.getElementById('projectsList');
   var headerEl = document.querySelector('.page-header-row');
@@ -4142,90 +4251,11 @@ var loadProjectDetail = function(projectId) {
 
   projectsState.detailUnsubscribe = onSnapshot(doc(db, 'projects', projectId), function(snap) {
     if (!snap.exists()) {
-      if (detailEl) {
-        detailEl.innerHTML =
-          '<div class="card" style="max-width:520px;">' +
-            '<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">' +
-              '<div style="font-size:28px;flex-shrink:0;line-height:1;">⚠️</div>' +
-              '<div>' +
-                '<h3 style="margin:0 0 5px;font-size:16px;font-weight:600;">Collaboration space not found</h3>' +
-                '<p class="text-muted" style="margin:0;font-size:13px;line-height:1.6;">' +
-                  'This project was deleted or the link from your Strategy app is out of date.' +
-                '</p>' +
-              '</div>' +
-            '</div>' +
-            '<div style="padding:12px 14px;border-radius:8px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);margin-bottom:18px;font-size:12px;line-height:1.7;" class="text-muted">' +
-              '<strong style="color:#C8A96E;">To reconnect:</strong> Open the Strategy app and use ' +
-              '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
-            '</div>' +
-            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
-              '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="forensicBiStrategy" ' +
-                 'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
-                        'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
-                '↗ Open Strategy' +
-              '</a>' +
-              '<button id="recoveryBackBtn" class="btn btn-ghost" style="font-size:13px;">Browse Projects</button>' +
-              '<button id="recoveryRelinkBtn" class="btn btn-ghost" style="font-size:13px;">↻ Try another ID</button>' +
-            '</div>' +
-            '<div id="recoveryRelinkForm" style="display:none;">' +
-              '<p class="text-muted" style="margin:0 0 8px;font-size:12px;">Paste a project ID to load it directly:</p>' +
-              '<div style="display:flex;gap:8px;">' +
-                '<input id="recoveryRelinkInput" type="text" placeholder="Project ID (e.g. abc123…)" ' +
-                       'style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
-                              'color:var(--text);padding:8px 12px;font-size:13px;outline:none;" />' +
-                '<button id="recoveryRelinkGo" style="background:#C8A96E;border:none;color:#0D0F14;border-radius:6px;' +
-                                                     'padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">Go →</button>' +
-                '<button id="recoveryRelinkCancel" class="btn btn-ghost" style="font-size:13px;flex-shrink:0;">Cancel</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-
-        var recoveryBack = document.getElementById('recoveryBackBtn');
-        if (recoveryBack) recoveryBack.onclick = function() {
-          projectsState.activeProjectId = null;
-          resetProjectDetailState();
-          var listEl2 = document.getElementById('projectsList');
-          var headerEl2 = document.querySelector('.page-header-row');
-          if (listEl2) listEl2.hidden = false;
-          if (headerEl2) headerEl2.hidden = false;
-          detailEl.hidden = true;
-          detailEl.innerHTML = '';
-          syncURLState();
-          subscribeProjectsList();
-        };
-
-        var recoveryRelinkBtn = document.getElementById('recoveryRelinkBtn');
-        if (recoveryRelinkBtn) recoveryRelinkBtn.onclick = function() {
-          var form = document.getElementById('recoveryRelinkForm');
-          if (form) {
-            form.style.display = form.style.display === 'none' ? 'block' : 'none';
-            var inp = document.getElementById('recoveryRelinkInput');
-            if (inp && form.style.display !== 'none') inp.focus();
-          }
-        };
-
-        var recoveryRelinkGo = document.getElementById('recoveryRelinkGo');
-        if (recoveryRelinkGo) recoveryRelinkGo.onclick = function() {
-          var inp = document.getElementById('recoveryRelinkInput');
-          if (inp && inp.value.trim()) {
-            var newId = inp.value.trim();
-            projectsState.activeProjectId = newId;
-            syncURLState();
-            loadProjectDetail(newId);
-          }
-        };
-
-        var recoveryRelinkCancel = document.getElementById('recoveryRelinkCancel');
-        if (recoveryRelinkCancel) recoveryRelinkCancel.onclick = function() {
-          var form = document.getElementById('recoveryRelinkForm');
-          if (form) form.style.display = 'none';
-        };
-
-        var recoveryRelinkInput = document.getElementById('recoveryRelinkInput');
-        if (recoveryRelinkInput) recoveryRelinkInput.onkeydown = function(e) {
-          if (e.key === 'Enter') { var go = document.getElementById('recoveryRelinkGo'); if (go) go.click(); }
-        };
-      }
+      renderRecoveryCard(detailEl, {
+        title: 'Collaboration space not found',
+        message: 'This project was deleted or the link from your Strategy app is out of date.',
+        idSuffix: ''
+      });
       return;
     }
     var p = snap.data();
@@ -4234,90 +4264,11 @@ var loadProjectDetail = function(projectId) {
     renderProjectDetail(p);
   }, function(err) {
     console.error('Project detail error:', err);
-    if (detailEl) {
-      detailEl.innerHTML =
-        '<div class="card" style="max-width:520px;">' +
-          '<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">' +
-            '<div style="font-size:28px;flex-shrink:0;line-height:1;">⚠️</div>' +
-            '<div>' +
-              '<h3 style="margin:0 0 5px;font-size:16px;font-weight:600;">Could not load this project</h3>' +
-              '<p class="text-muted" style="margin:0;font-size:13px;line-height:1.6;">' +
-                'A connection error occurred. The project may have been deleted or you may have lost access.' +
-              '</p>' +
-            '</div>' +
-          '</div>' +
-          '<div style="padding:12px 14px;border-radius:8px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);margin-bottom:18px;font-size:12px;line-height:1.7;" class="text-muted">' +
-            '<strong style="color:#C8A96E;">To reconnect:</strong> Open the Strategy app and use ' +
-            '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
-          '</div>' +
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
-            '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="forensicBiStrategy" ' +
-               'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
-                      'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
-              '↗ Open Strategy' +
-            '</a>' +
-            '<button id="recoveryBackBtn2" class="btn btn-ghost" style="font-size:13px;">Browse Projects</button>' +
-            '<button id="recoveryRelinkBtn2" class="btn btn-ghost" style="font-size:13px;">↻ Try another ID</button>' +
-          '</div>' +
-          '<div id="recoveryRelinkForm2" style="display:none;">' +
-            '<p class="text-muted" style="margin:0 0 8px;font-size:12px;">Paste a project ID to load it directly:</p>' +
-            '<div style="display:flex;gap:8px;">' +
-              '<input id="recoveryRelinkInput2" type="text" placeholder="Project ID (e.g. abc123…)" ' +
-                     'style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
-                            'color:var(--text);padding:8px 12px;font-size:13px;outline:none;" />' +
-              '<button id="recoveryRelinkGo2" style="background:#C8A96E;border:none;color:#0D0F14;border-radius:6px;' +
-                                                   'padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">Go →</button>' +
-              '<button id="recoveryRelinkCancel2" class="btn btn-ghost" style="font-size:13px;flex-shrink:0;">Cancel</button>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-
-      var recoveryBack2 = document.getElementById('recoveryBackBtn2');
-      if (recoveryBack2) recoveryBack2.onclick = function() {
-        projectsState.activeProjectId = null;
-        resetProjectDetailState();
-        var listEl2 = document.getElementById('projectsList');
-        var headerEl2 = document.querySelector('.page-header-row');
-        if (listEl2) listEl2.hidden = false;
-        if (headerEl2) headerEl2.hidden = false;
-        detailEl.hidden = true;
-        detailEl.innerHTML = '';
-        syncURLState();
-        subscribeProjectsList();
-      };
-
-      var recoveryRelinkBtn2 = document.getElementById('recoveryRelinkBtn2');
-      if (recoveryRelinkBtn2) recoveryRelinkBtn2.onclick = function() {
-        var form = document.getElementById('recoveryRelinkForm2');
-        if (form) {
-          form.style.display = form.style.display === 'none' ? 'block' : 'none';
-          var inp = document.getElementById('recoveryRelinkInput2');
-          if (inp && form.style.display !== 'none') inp.focus();
-        }
-      };
-
-      var recoveryRelinkGo2 = document.getElementById('recoveryRelinkGo2');
-      if (recoveryRelinkGo2) recoveryRelinkGo2.onclick = function() {
-        var inp = document.getElementById('recoveryRelinkInput2');
-        if (inp && inp.value.trim()) {
-          var newId = inp.value.trim();
-          projectsState.activeProjectId = newId;
-          syncURLState();
-          loadProjectDetail(newId);
-        }
-      };
-
-      var recoveryRelinkCancel2 = document.getElementById('recoveryRelinkCancel2');
-      if (recoveryRelinkCancel2) recoveryRelinkCancel2.onclick = function() {
-        var form = document.getElementById('recoveryRelinkForm2');
-        if (form) form.style.display = 'none';
-      };
-
-      var recoveryRelinkInput2 = document.getElementById('recoveryRelinkInput2');
-      if (recoveryRelinkInput2) recoveryRelinkInput2.onkeydown = function(e) {
-        if (e.key === 'Enter') { var go = document.getElementById('recoveryRelinkGo2'); if (go) go.click(); }
-      };
-    }
+    renderRecoveryCard(detailEl, {
+      title: 'Could not load this project',
+      message: 'A connection error occurred. The project may have been deleted or you may have lost access.',
+      idSuffix: '2'
+    });
   });
 };
 
@@ -4456,7 +4407,7 @@ var renderProjectDetail = function(p) {
       '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<button class="project-detail-back" id="projectBackBtn" style="margin-bottom:0;">&larr; Back to Projects</button>' +
         (p.originApp === 'roadmap' ?
-          '<a href="https://bobbynacario-design.github.io/forensic-bi-strategy/" target="forensicBiStrategy" ' +
+          '<a href="' + STRATEGY_APP_URL + '" target="forensicBiStrategy" ' +
              'style="display:inline-flex;align-items:center;gap:4px;background:#C8A96E18;border:1px solid #C8A96E40;' +
                     'color:#C8A96E;border-radius:20px;padding:3px 12px;text-decoration:none;font-size:11px;font-weight:600;">' +
             '&#x2197; Open Strategy' +
@@ -5057,26 +5008,6 @@ var handleAddTask = function(projectId, taskData) {
 };
 
 // ─── URL detection & link preview ───────────────────────────────────────────
-var URL_REGEX = /https?:\/\/[^\s<>"'`,;)}\]]+/gi;
-
-var linkifyText = function(escapedHtml) {
-  return escapedHtml.replace(URL_REGEX, function(url) {
-    var clean = url.replace(/[.,;:!?)]+$/, '');
-    var safeUrl = escapeAttr(clean);
-    return '<a href="' + safeUrl + '" class="post-link" target="_blank" rel="noopener">' + clean + '</a>';
-  });
-};
-
-var highlightMentions = function(html) {
-  return html.replace(/@(\w[\w\s]{0,30}\w)/g, '<span class="mention">@$1</span>');
-};
-
-var extractFirstUrl = function(text) {
-  var match = (text || '').match(URL_REGEX);
-  if (!match) return '';
-  return match[0].replace(/[.,;:!?)]+$/, '');
-};
-
 var renderLinkPreview = function(og) {
   if (!og || !og.ogUrl) return '';
 
@@ -5110,16 +5041,6 @@ var renderLinkPreview = function(og) {
           : '') +
       '</div>' +
     '</a>';
-};
-
-var escapeHTML = function(str) {
-  var d = document.createElement('div');
-  d.textContent = str == null ? '' : String(str);
-  return d.innerHTML;
-};
-
-var escapeAttr = function(str) {
-  return String(str == null ? '' : str).replace(/"/g, '&quot;').replace(/</g, '&lt;');
 };
 
 // ─── Init: auth state listener drives the whole app ─────────────────────────
@@ -5708,7 +5629,7 @@ var renderBriefingCard = function(b) {
     var relevant = hasRelevantField ? stories.filter(function(s) { return s.relevant === true; }) : stories;
     if (!relevant.length) return;
     var meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id, color: '#888' };
-    var stories = relevant.map(function(s) {
+    var storiesHtml = relevant.map(function(s) {
       return '<div class="briefing-story" style="border-left-color:' + meta.color + '">' +
         '<div class="briefing-story-head">' + escapeHTML(s.headline) + '</div>' +
         '<div class="briefing-story-body">' + escapeHTML(s.body) + '</div>' +
@@ -5720,7 +5641,7 @@ var renderBriefingCard = function(b) {
           '<span class="briefing-section-dot" style="background:' + meta.color + '"></span>' +
           escapeHTML(meta.label) +
         '</div>' +
-        stories +
+        storiesHtml +
       '</div>';
   });
 
