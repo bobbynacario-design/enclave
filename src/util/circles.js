@@ -62,3 +62,26 @@ export const renderCircleOptions = function(includeAll) {
     return '<option value="' + circle.id + '">' + escapeHTML(circle.label) + '</option>';
   }).join('');
 };
+
+export const renderCircleChecks = function(selectedCircles) {
+  const selected = normalizeCircles(selectedCircles);
+
+  return getCircleDefinitions().map(function(circle) {
+    const checked = selected.indexOf(circle.id) !== -1 ? ' checked' : '';
+    return '' +
+      '<label class="circle-check">' +
+        '<input type="checkbox" value="' + circle.id + '"' + checked + ' />' +
+        '<span>' + escapeHTML(circle.label) + '</span>' +
+      '</label>';
+  }).join('');
+};
+
+export const getCheckedCircles = function(containerSelector) {
+  const selected = [];
+
+  document.querySelectorAll(containerSelector + ' input[type="checkbox"]').forEach(function(cb) {
+    if (cb.checked) selected.push(cb.value);
+  });
+
+  return normalizeCircles(selected);
+};

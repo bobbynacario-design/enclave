@@ -49,7 +49,9 @@ import {
   getVisibleCircles,
   getInitials,
   circleLabel,
-  renderCircleOptions
+  renderCircleOptions,
+  renderCircleChecks,
+  getCheckedCircles
 } from './src/util/circles.js';
 
 import { relativeTime } from './src/util/time.js';
@@ -2564,29 +2566,6 @@ var renderCirclePills = function() {
     getCircleDefinitions().map(function(circle) {
       return '<button class="pill" data-filter="' + circle.id + '">' + escapeHTML(circle.label) + '</button>';
     }).join('');
-};
-
-var renderCircleChecks = function(selectedCircles) {
-  var selected = normalizeCircles(selectedCircles);
-
-  return getCircleDefinitions().map(function(circle) {
-    var checked = selected.indexOf(circle.id) !== -1 ? ' checked' : '';
-    return '' +
-      '<label class="circle-check">' +
-        '<input type="checkbox" value="' + circle.id + '"' + checked + ' />' +
-        '<span>' + escapeHTML(circle.label) + '</span>' +
-      '</label>';
-  }).join('');
-};
-
-var getCheckedCircles = function(containerSelector) {
-  var selected = [];
-
-  document.querySelectorAll(containerSelector + ' input[type="checkbox"]').forEach(function(cb) {
-    if (cb.checked) selected.push(cb.value);
-  });
-
-  return normalizeCircles(selected);
 };
 
 var setCheckedCircles = function(containerSelector, circles) {
