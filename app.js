@@ -77,6 +77,8 @@ import {
   subscribeBriefingNotifier
 } from './src/pages/briefings.js';
 
+import { initResourcesPage } from './src/pages/resources.js';
+
 import {
   state,
   authFlowState,
@@ -88,7 +90,6 @@ import {
   driveAttachment,
   shellState,
   projectsState,
-  resourcesState,
   notificationsState,
   pickerState,
   resetMessagesState,
@@ -96,15 +97,6 @@ import {
   resetProjectDetailState,
   resetResourcesState
 } from './src/state.js';
-
-registerPickerHandler('resource', function(file) {
-  var rUrlInput = document.getElementById('resourceUrl');
-  var rTitleInput = document.getElementById('resourceTitle');
-  if (rUrlInput) rUrlInput.value = file.url || '';
-  if (rTitleInput && !rTitleInput.value.trim()) rTitleInput.value = file.name || '';
-  pickerState.context = 'feed';
-  return true;
-});
 
 registerPickerHandler('project', function(file) {
   if (!pickerState.projectId) return false;
@@ -4870,181 +4862,6 @@ var initNotificationsPage = function() {
       });
     });
   }
-};
-
-// ─── Resources ──────────────────────────────────────────────────────────────
-
-var RESOURCE_CATEGORIES = {
-  podcast: { label: 'Podcast', color: '#E87040' },
-  video:   { label: 'Video',   color: '#6366F1' },
-  legal:   { label: 'Legal',   color: '#F59E0B' },
-  tool:    { label: 'Tool',    color: '#10B981' },
-  general: { label: 'General', color: '#8B5CF6' }
-};
-
-var renderResourceList = function() {
-  var listEl = document.getElementById('resourceList');
-  if (!listEl) return;
-
-  var filtered = resourcesState.resources;
-
-  // Category / saved filter
-  if (resourcesState.filter === 'saved') {
-    filtered = filtered.filter(function(r) {
-      return resourcesState.savedResources.indexOf(r.id) !== -1;
-    });
-  } else if (resourcesState.filter !== 'all') {
-    filtered = filtered.filter(function(r) { return r.category === resourcesState.filter; });
-  }
-
-  // Search filter
-  var q = resourcesState.searchQuery.toLowerCase();
-  if (q) {
-    filtered = filtered.filter(function(r) {
-      return (r.title || '').toLowerCase().indexOf(q) !== -1 ||
-             (r.description || '').toLowerCase().indexOf(q) !== -1 ||
-             (r.url || '').toLowerCase().indexOf(q) !== -1;
-    });
-  }
-
-  if (filtered.length === 0) {
-    var msg = q ? 'No resources match your search.' : (resourcesState.filter === 'saved' ? 'No saved resources yet.' : 'No resources yet.');
-    listEl.innerHTML = '<p class="text-muted">' + msg + '</p>';
-    return;
-  }
-
-  listEl.innerHTML = filtered.map(function(r) {
-    var cat = RESOURCE_CATEGORIES[r.category] || RESOURCE_CATEGORIES.general;
-    var desc = r.description ? '<p class="resource-desc">' + escapeHTML(r.description) + '</p>' : '';
-    var isSaved = resourcesState.savedResources.indexOf(r.id) !== -1;
-    var bookmarkBtn = '<button class="btn-ghost resource-bookmark' + (isSaved ? ' saved' : '') + '" data-bookmark="' + r.id + '" title="' + (isSaved ? 'Remove bookmark' : 'Bookmark') + '">' + (isSaved ? '&#9733;' : '&#9734;') + '</button>';
-    var deleteBtn = state.isAdmin
-      ? '<button class="btn-ghost resource-delete" data-id="' + r.id + '" title="Delete">&#128465;</button>'
-      : '';
-    return '<div class="resource-card">' +
-      '<div class="resource-card-top">' +
-        '<span class="resource-cat-badge" style="background:' + cat.color + ';">' + cat.label + '</span>' +
-        '<div class="resource-card-actions">' + bookmarkBtn + deleteBtn + '</div>' +
-      '</div>' +
-      '<a href="' + escapeAttr(r.url) + '" target="_blank" rel="noopener" class="resource-title">' + escapeHTML(r.title) + '</a>' +
-      desc +
-      '<div class="resource-meta">Added by ' + escapeHTML(r.addedByName) + (r.createdAt ? ' &middot; ' + (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)).toLocaleDateString() : '') + '</div>' +
-    '</div>';
-  }).join('');
-
-  // Wire bookmark buttons
-  listEl.querySelectorAll('.resource-bookmark').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var rid = btn.getAttribute('data-bookmark');
-      var idx = resourcesState.savedResources.indexOf(rid);
-      if (idx !== -1) {
-        resourcesState.savedResources.splice(idx, 1);
-      } else {
-        resourcesState.savedResources.push(rid);
-      }
-      // Persist to user doc
-      updateDoc(doc(db, 'users', state.user.uid), {
-        savedResources: resourcesState.savedResources
-      }).catch(function(err) {
-        logError('Save bookmark error', err);
-      });
-      renderResourceList();
-    });
-  });
-
-  // Wire delete buttons
-  listEl.querySelectorAll('.resource-delete').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var rid = btn.getAttribute('data-id');
-      showConfirmModal('Delete Resource', 'Remove this resource from the library?', 'Delete').then(function(ok) {
-        if (!ok) return;
-        deleteDoc(doc(db, 'resources', rid)).catch(function(err) {
-          logError('Delete resource error', err);
-        });
-      });
-    });
-  });
-};
-
-var initResourcesPage = function() {
-  // Show add form for all signed-in members
-  var addForm = document.getElementById('resourceAddForm');
-  if (addForm && state.user) addForm.style.display = 'block';
-
-  // Filter pills
-  var filtersEl = document.getElementById('resourceFilters');
-  if (filtersEl) {
-    filtersEl.addEventListener('click', function(e) {
-      var pill = e.target.closest('.resource-filter-pill');
-      if (!pill) return;
-      resourcesState.filter = pill.getAttribute('data-cat');
-      filtersEl.querySelectorAll('.resource-filter-pill').forEach(function(p) {
-        p.classList.toggle('active', p.getAttribute('data-cat') === resourcesState.filter);
-      });
-      renderResourceList();
-    });
-  }
-
-  // Drive picker button
-  var driveBtn = document.getElementById('resourceDriveBtn');
-  if (driveBtn) {
-    driveBtn.addEventListener('click', function() {
-      pickerState.context = 'resource';
-      openDrivePicker();
-    });
-  }
-
-  // Add button
-  var addBtn = document.getElementById('resourceAddBtn');
-  if (addBtn) {
-    addBtn.addEventListener('click', function() {
-      var title = document.getElementById('resourceTitle').value.trim();
-      var url   = document.getElementById('resourceUrl').value.trim();
-      var desc  = document.getElementById('resourceDesc').value.trim();
-      var cat   = document.getElementById('resourceCategory').value;
-
-      if (!title || !url) return;
-      if (!/^https?:\/\//i.test(url)) {
-        showToast('URL must start with http:// or https://', 'error');
-        return;
-      }
-
-      addBtn.disabled = true;
-      addDoc(collection(db, 'resources'), {
-        title:       title,
-        url:         url,
-        description: desc,
-        category:    cat,
-        addedBy:     state.user.uid,
-        addedByName: state.user.displayName || state.user.email || 'Member',
-        createdAt:   serverTimestamp()
-      }).then(function() {
-        document.getElementById('resourceTitle').value = '';
-        document.getElementById('resourceUrl').value = '';
-        document.getElementById('resourceDesc').value = '';
-        document.getElementById('resourceCategory').value = 'general';
-      }).catch(function(err) {
-        logError('Add resource error', err);
-      }).finally(function() {
-        addBtn.disabled = false;
-      });
-    });
-  }
-
-  // Subscribe to resources collection
-  if (resourcesState.unsubscribe) resourcesState.unsubscribe();
-
-  var q = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
-  resourcesState.unsubscribe = onSnapshot(q, function(snap) {
-    resourcesState.resources = snap.docs.map(function(d) {
-      var data = d.data();
-      data.id = d.id;
-      return data;
-    });
-    renderResourceList();
-  }, function(err) {
-    logError('Resources subscribe error', err);
-  });
 };
 
 onAuthStateChanged(auth, function(user) {
