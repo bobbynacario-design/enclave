@@ -80,6 +80,13 @@ import {
 import { initResourcesPage } from './src/pages/resources.js';
 
 import {
+  initNotificationsPage,
+  registerNotificationNavigator,
+  subscribeNotifications,
+  writeNotification
+} from './src/pages/notifications.js';
+
+import {
   state,
   authFlowState,
   eventsState,
@@ -90,7 +97,6 @@ import {
   driveAttachment,
   shellState,
   projectsState,
-  notificationsState,
   pickerState,
   resetMessagesState,
   resetShellRealtime,
@@ -112,6 +118,19 @@ registerPickerHandler('project', function(file) {
   pickerState.context = 'feed';
   pickerState.projectId = null;
   return true;
+});
+
+registerNotificationNavigator(function(page, params) {
+  if (page && VALID_PAGES[page]) {
+    var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+    var url = '?page=' + page + (qs ? '&' + qs : '');
+    window.history.replaceState(null, '', url);
+
+    if (page === 'projects' && params.projectId) {
+      projectsState.activeProjectId = params.projectId;
+    }
+    loadPage(page);
+  }
 });
 
 // ─── Auth: sign in / sign out ────────────────────────────────────────────────
@@ -4700,168 +4719,6 @@ var renderLinkPreview = function(og) {
           : '') +
       '</div>' +
     '</a>';
-};
-
-// ─── Init: auth state listener drives the whole app ─────────────────────────
-// ─── Notifications ──────────────────────────────────────────────────────────
-
-var writeNotification = function(recipientId, type, message, link) {
-  if (!state.user || !recipientId) return Promise.resolve();
-  if (recipientId === state.user.uid) return Promise.resolve();
-
-  return addDoc(collection(db, 'notifications'), {
-    recipientId: recipientId,
-    type:        type,
-    message:     message,
-    link:        link || { page: 'feed', params: {} },
-    read:        false,
-    createdAt:   serverTimestamp(),
-    actorId:     state.user.uid,
-    actorName:   state.user.displayName || state.user.email || 'Member'
-  }).catch(function(err) {
-    logError('Failed to write notification', err);
-  });
-};
-
-var syncNotificationBadge = function() {
-  var count = notificationsState.unreadCount;
-
-  document.querySelectorAll('[data-page="notifications"]').forEach(function(link) {
-    var badge = link.querySelector('.notif-badge');
-    if (count > 0) {
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'notif-badge';
-        link.appendChild(badge);
-      }
-      badge.textContent = count > 99 ? '99+' : String(count);
-    } else if (badge) {
-      badge.remove();
-    }
-  });
-};
-
-var subscribeNotifications = function() {
-  if (notificationsState.unsubscribe) {
-    notificationsState.unsubscribe();
-    notificationsState.unsubscribe = null;
-  }
-  if (!state.user) return;
-
-  var q = query(
-    collection(db, 'notifications'),
-    where('recipientId', '==', state.user.uid),
-    orderBy('createdAt', 'desc'),
-    limit(50)
-  );
-
-  notificationsState.unsubscribe = onSnapshot(q, function(snap) {
-    notificationsState.notifications = [];
-    snap.forEach(function(d) {
-      var data = d.data();
-      data.id = d.id;
-      notificationsState.notifications.push(data);
-    });
-
-    notificationsState.unreadCount = notificationsState.notifications.filter(function(n) {
-      return !n.read;
-    }).length;
-
-    syncNotificationBadge();
-
-    if (state.currentPage === 'notifications') {
-      renderNotificationsList();
-    }
-  }, function(err) {
-    logError('Notifications subscription error', err);
-  });
-};
-
-var NOTIF_TYPE_ICONS = {
-  'mention':         '💬',
-  'task-assigned':   '📋',
-  'task-status':     '🔄',
-  'post-comment':    '💬',
-  'project-comment': '💬',
-  'event-rsvp':      '📅'
-};
-
-var renderNotificationsList = function() {
-  var listEl = document.getElementById('notificationsList');
-  if (!listEl) return;
-
-  var items = notificationsState.notifications;
-  if (items.length === 0) {
-    listEl.innerHTML = '<p class="text-muted">No notifications yet.</p>';
-    return;
-  }
-
-  listEl.innerHTML = items.map(function(n) {
-    var icon = NOTIF_TYPE_ICONS[n.type] || '🔔';
-    var time = '';
-    if (n.createdAt && typeof n.createdAt.toDate === 'function') {
-      time = relativeTime(n.createdAt.toDate());
-    }
-    var unreadClass = n.read ? '' : ' notif-unread';
-    return '<div class="notif-item' + unreadClass + '" data-notif-id="' + escapeAttr(n.id) + '" data-notif-page="' + escapeAttr(n.link && n.link.page || '') + '" data-notif-params="' + escapeAttr(JSON.stringify(n.link && n.link.params || {})) + '">' +
-      '<span class="notif-icon">' + icon + '</span>' +
-      '<div class="notif-content">' +
-        '<div class="notif-message">' + escapeHTML(n.message) + '</div>' +
-        '<div class="notif-time">' + escapeHTML(time) + '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-
-  listEl.querySelectorAll('.notif-item').forEach(function(item) {
-    item.addEventListener('click', function() {
-      var nid = item.getAttribute('data-notif-id');
-      var page = item.getAttribute('data-notif-page');
-      var params = {};
-      try { params = JSON.parse(item.getAttribute('data-notif-params')); } catch(e) {}
-
-      // Mark as read
-      var n = notificationsState.notifications.find(function(x) { return x.id === nid; });
-      if (n && !n.read) {
-        updateDoc(doc(db, 'notifications', nid), { read: true }).catch(function(err) {
-          logError('Mark read error', err);
-        });
-      }
-
-      // Navigate
-      if (page && VALID_PAGES[page]) {
-        var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
-        var url = '?page=' + page + (qs ? '&' + qs : '');
-        window.history.replaceState(null, '', url);
-
-        if (page === 'projects' && params.projectId) {
-          projectsState.activeProjectId = params.projectId;
-        }
-        loadPage(page);
-      }
-    });
-  });
-};
-
-var initNotificationsPage = function() {
-  renderNotificationsList();
-
-  var markAllBtn = document.getElementById('markAllReadBtn');
-  if (markAllBtn) {
-    markAllBtn.addEventListener('click', function() {
-      var unread = notificationsState.notifications.filter(function(n) { return !n.read; });
-      if (unread.length === 0) {
-        showToast('All caught up!', 'info');
-        return;
-      }
-      Promise.all(unread.map(function(n) {
-        return updateDoc(doc(db, 'notifications', n.id), { read: true });
-      })).then(function() {
-        showToast('All marked as read.', 'info');
-      }).catch(function(err) {
-        logError('Mark all read error', err);
-      });
-    });
-  }
 };
 
 onAuthStateChanged(auth, function(user) {
