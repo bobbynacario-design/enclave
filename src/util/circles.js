@@ -1,4 +1,20 @@
 import { ALL_CIRCLES } from './constants.js';
+import { escapeHTML } from './escape.js';
+
+const CIRCLE_LABELS = {
+  'hustle-hub': 'Hustle Hub',
+  'work-network': 'Work Network',
+  'family': 'Family'
+};
+
+const getCircleDefinitions = function() {
+  return ALL_CIRCLES.map(function(circle) {
+    return {
+      id: circle,
+      label: CIRCLE_LABELS[circle] || circle
+    };
+  });
+};
 
 export const normalizeCircles = function(circles) {
   if (!Array.isArray(circles)) return [];
@@ -25,4 +41,24 @@ export const getInitials = function(name) {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
+
+export const circleLabel = function(id) {
+  if (id === 'all') return 'All';
+
+  const circle = getCircleDefinitions().find(function(item) {
+    return item.id === id;
+  });
+
+  return circle ? circle.label : id;
+};
+
+export const renderCircleOptions = function(includeAll) {
+  const html = includeAll
+    ? '<option value="all">All</option>'
+    : '';
+
+  return html + getCircleDefinitions().map(function(circle) {
+    return '<option value="' + circle.id + '">' + escapeHTML(circle.label) + '</option>';
+  }).join('');
 };

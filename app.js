@@ -47,7 +47,9 @@ import {
 import {
   normalizeCircles,
   getVisibleCircles,
-  getInitials
+  getInitials,
+  circleLabel,
+  renderCircleOptions
 } from './src/util/circles.js';
 
 import {
@@ -3406,16 +3408,6 @@ var getCircleDefinitions = function() {
   ];
 };
 
-var renderCircleOptions = function(includeAll) {
-  var html = includeAll
-    ? '<option value="all">All</option>'
-    : '';
-
-  return html + getCircleDefinitions().map(function(circle) {
-    return '<option value="' + circle.id + '">' + escapeHTML(circle.label) + '</option>';
-  }).join('');
-};
-
 var renderCirclePills = function() {
   return '<button class="pill active" data-filter="all">All</button>' +
     getCircleDefinitions().map(function(circle) {
@@ -3452,16 +3444,6 @@ var setCheckedCircles = function(containerSelector, circles) {
   document.querySelectorAll(containerSelector + ' input[type="checkbox"]').forEach(function(cb) {
     cb.checked = normalized.indexOf(cb.value) !== -1;
   });
-};
-
-var circleLabel = function(id) {
-  if (id === 'all') return 'All';
-
-  var circle = getCircleDefinitions().find(function(item) {
-    return item.id === id;
-  });
-
-  return circle ? circle.label : id;
 };
 
 var syncSidebarSelection = function() {
