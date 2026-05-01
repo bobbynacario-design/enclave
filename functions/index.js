@@ -41,11 +41,14 @@ exports.sendNotificationPush = onDocumentCreated(
       }
 
       const userData = userSnap.data();
-      const tokens = Array.isArray(userData.fcmTokens) ?
+      const rawTokens = Array.isArray(userData.fcmTokens) ?
         userData.fcmTokens : [];
+      const tokens = rawTokens.filter((t) =>
+        typeof t === "string" && t.length > 0);
       if (tokens.length === 0) {
-        logger.info("No FCM tokens for recipient", {
+        logger.info("No valid FCM tokens for recipient", {
           recipientId: notif.recipientId,
+          rawTokenCount: rawTokens.length,
         });
         return;
       }
@@ -55,7 +58,7 @@ exports.sendNotificationPush = onDocumentCreated(
       const message = {
         notification: {
           title: "Enclave",
-          body: notif.message || "You have a new notification",
+          body: String(notif.message || "You have a new notification"),
         },
         data: {
           type: String(notif.type || "general"),
@@ -70,8 +73,20 @@ exports.sendNotificationPush = onDocumentCreated(
         tokens: tokens,
       };
 
-      // Send to all tokens in one multicast call
-      const response = await messaging.sendEachForMulticast(message);
+      // Send to all tokens in one multicast call.
+      // Any throw here would cause a retry of the entire function,
+      // potentially delivering duplicate pushes — so we catch.
+      let response;
+      try {
+        response = await messaging.sendEachForMulticast(message);
+      } catch (err) {
+        logger.error("FCM send failed", {
+          recipientId: notif.recipientId,
+          error: err.message,
+          code: err.code,
+        });
+        return;
+      }
 
       // Remove any tokens that are no longer valid
       const deadTokens = [];
@@ -89,9 +104,17 @@ exports.sendNotificationPush = onDocumentCreated(
       });
 
       if (deadTokens.length > 0) {
-        await userRef.update({
-          fcmTokens: FieldValue.arrayRemove(...deadTokens),
-        });
+        try {
+          await userRef.update({
+            fcmTokens: FieldValue.arrayRemove(...deadTokens),
+          });
+        } catch (err) {
+          // Cleanup is best-effort. Don't retry the function over this.
+          logger.warn("Failed to remove dead tokens", {
+            recipientId: notif.recipientId,
+            error: err.message,
+          });
+        }
       }
 
       logger.info("Push send summary", {
