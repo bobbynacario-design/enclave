@@ -67,8 +67,8 @@ registerURLApplier(function()         { applyURLState(); });
 
 registerNotificationNavigator(function(page, params) {
   if (page && VALID_PAGES[page]) {
-    var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
-    var url = '?page=' + page + (qs ? '&' + qs : '');
+    const qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+    const url = '?page=' + page + (qs ? '&' + qs : '');
     window.history.replaceState(null, '', url);
 
     if (page === 'projects' && params.projectId) {
@@ -101,6 +101,6 @@ window.addEventListener('resize', function() {
 
 // Close mobile More menu on outside tap (registered once, not per renderShell)
 document.addEventListener('click', function() {
-  var m = document.getElementById('mobileMoreMenu');
+  const m = document.getElementById('mobileMoreMenu');
   if (m) m.classList.remove('open');
 });
