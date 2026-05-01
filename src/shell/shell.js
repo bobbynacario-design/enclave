@@ -44,6 +44,23 @@ import { subscribeNotifications }    from '../pages/notifications.js';
 import { loadPanelEvents }           from '../pages/events.js';
 import { loadSidebarProjects }       from '../pages/projects.js';
 
+// ─── PWA install prompt ───────────────────────────────────────────────────────
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show install button if shell is already rendered
+  const btn = document.getElementById('installEnclaveBtn');
+  if (btn) btn.style.display = 'inline-flex';
+});
+
+window.addEventListener('appinstalled', function() {
+  deferredInstallPrompt = null;
+  const btn = document.getElementById('installEnclaveBtn');
+  if (btn) btn.style.display = 'none';
+});
+
 // ─── Render: loading screen ───────────────────────────────────────────────────
 export var renderLoading = function(msg) {
   var app = document.getElementById('app');
@@ -136,9 +153,36 @@ export var renderShell = function() {
       });
     });
 
-    // Sign out
+    // Sign out + install button
     var signOutBtn = document.querySelector('[data-action="sign-out"]');
-    if (signOutBtn) signOutBtn.addEventListener('click', handleSignOut);
+    if (signOutBtn) {
+      signOutBtn.addEventListener('click', handleSignOut);
+
+      // Inject install button before the sign-out button
+      var installBtnEl = document.createElement('button');
+      installBtnEl.id = 'installEnclaveBtn';
+      installBtnEl.className = 'btn btn-ghost';
+      installBtnEl.style.cssText = 'display:none;font-size:13px;';
+      installBtnEl.title = 'Install Enclave on this device';
+      installBtnEl.textContent = '↓ Install';
+      signOutBtn.parentNode.insertBefore(installBtnEl, signOutBtn);
+    }
+
+    // Wire install prompt click handler
+    const installBtn = document.getElementById('installEnclaveBtn');
+    if (installBtn) {
+      if (deferredInstallPrompt) {
+        installBtn.style.display = 'inline-flex';
+      }
+      installBtn.addEventListener('click', async function() {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        installBtn.style.display = 'none';
+        console.log('[Enclave] PWA install outcome:', outcome);
+      });
+    }
 
     // Mobile "More" menu toggle
     var moreBtn = document.getElementById('mobileMoreBtn');
