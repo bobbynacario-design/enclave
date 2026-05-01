@@ -3037,3 +3037,96 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ─── Phase 3.2.2: Mobile typography pass ────────────────────────────────── */
+/* All overrides are mobile-only (≤768px). Desktop styles are untouched.     */
+@media (max-width: 768px) {
+
+  /* A + G: Body / reading content */
+  .post-body {
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .post-comment-body,
+  .post-comments-empty {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .message-bubble-body {
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .project-card-desc {
+    font-size: 15px;
+  }
+  .project-detail-desc {
+    font-size: 15px;
+  }
+  .notif-message {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  /* G: Briefing story body — worst-affected reading surface */
+  .briefing-story-body {
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .briefing-watch-body {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* B: Content headings */
+  .briefing-story-head {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .briefing-card-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* D + H: Secondary / metadata text */
+  .post-submeta {
+    font-size: 13px;
+  }
+  .post-comment-meta {
+    font-size: 13px;
+  }
+  .message-bubble-status {
+    font-size: 12px;
+  }
+  .circle-tag {
+    font-size: 12px;
+  }
+  /* H: Section labels (GLOBAL, PHILIPPINES, etc.) */
+  .briefing-section-label {
+    font-size: 12px;
+  }
+  .briefing-watch-label {
+    font-size: 12px;
+  }
+  .briefing-watch-source {
+    font-size: 12px;
+  }
+  .notif-time {
+    font-size: 12px;
+  }
+
+  /* E: Bottom navigation labels — critical for readability */
+  .mobile-nav-label {
+    font-size: 12px;
+  }
+
+  /* F: Form inputs — 16px prevents iOS Safari auto-zoom on focus */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+  .post-comment-input {
+    font-size: 16px;
+  }
+
+}
