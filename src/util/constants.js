@@ -1,3 +1,5 @@
+export const ASSET_VERSION = 'v107';
+
 export const ALL_CIRCLES = [
   'hustle-hub',
   'work-network',

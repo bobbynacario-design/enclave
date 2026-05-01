@@ -39,6 +39,7 @@ import {
 
 import {
   ALL_CIRCLES,
+  ASSET_VERSION,
   FEED_PAGE_SIZE,
   STRATEGY_APP_URL,
   VALID_PAGES
@@ -114,6 +115,15 @@ import {
   handleSignOut,
   checkAllowlist
 } from './src/auth/auth.js';
+
+import {
+  loadPage,
+  applyURLState,
+  syncURLState,
+  getAppURL,
+  syncSidebarSelection,
+  syncResponsivePanels
+} from './src/shell/routing.js';
 
 import {
   initProjectsPage,
@@ -218,9 +228,6 @@ var renderLogin = function() {
   document.getElementById('googleSignInBtn').addEventListener('click', handleSignIn);
 };
 
-// Cache-buster for HTML fragment fetches — bumped per release to defeat
-// browser/CDN caching of components and pages.
-var ASSET_VERSION = 'v107';
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────
 var renderShell = function() {
@@ -326,145 +333,6 @@ var renderShell = function() {
     appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
   });
 };
-
-window.enclaveGoPage = function(page) {
-  if (page === 'admin' && state.user) {
-    refreshCurrentUserState().then(function() {
-      loadPage('admin');
-    }).catch(function(err) {
-      logError('Failed to refresh user state before admin nav', err);
-      loadPage('admin');
-    });
-    return;
-  }
-
-  if (page === 'feed') {
-    feedState.filter = 'all';
-    feedState.targetPostId = '';
-    feedState.pendingTargetScroll = false;
-  }
-  loadPage(page);
-};
-
-window.enclaveGoCircle = function(circle) {
-  feedState.filter = circle;
-  feedState.targetPostId = '';
-  feedState.pendingTargetScroll = false;
-  loadPage('feed');
-};
-
-var refreshCurrentUserState = function() {
-  if (!state.user) return Promise.resolve();
-
-  return getDoc(doc(db, 'users', state.user.uid)).then(function(snap) {
-    if (!snap.exists()) return;
-
-    var data = snap.data() || {};
-    state.isAdmin = data.role === 'admin';
-    state.circles = normalizeCircles(data.circles);
-
-    document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
-      btn.hidden = !state.isAdmin;
-    });
-
-    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-      btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
-    });
-
-    syncSidebarSelection();
-    loadPanelCircles();
-  });
-};
-
-var syncResponsivePanels = function() {
-  var shell = document.querySelector('.shell');
-  var rightRail = document.querySelector('.shell-right');
-  if (shell) {
-    shell.setAttribute('data-current-page', state.currentPage || 'feed');
-  }
-  if (!rightRail) return;
-
-  var isCompactLayout = window.matchMedia('(max-width: 1100px)').matches;
-  if (isCompactLayout) {
-    rightRail.style.display = state.currentPage === 'feed' ? 'block' : 'none';
-  } else {
-    rightRail.style.display = '';
-  }
-};
-
-var applyURLState = function() {
-  var params = new URLSearchParams(window.location.search);
-  var page = params.get('page');
-  var circle = params.get('circle');
-  var postId = params.get('postId');
-
-  if (page && VALID_PAGES[page]) {
-    state.currentPage = page;
-  }
-
-  if (state.currentPage === 'projects') {
-    var projectId = params.get('projectId');
-    if (projectId) {
-      projectsState.activeProjectId = projectId;
-    }
-  }
-
-  if (state.currentPage === 'feed') {
-    feedState.targetPostId = postId || '';
-    feedState.pendingTargetScroll = !!feedState.targetPostId;
-    if (feedState.targetPostId) {
-      feedState.openComments[feedState.targetPostId] = true;
-    }
-
-    if (circle && getVisibleCircles(state).indexOf(circle) !== -1) {
-      feedState.filter = circle;
-    } else {
-      feedState.filter = 'all';
-    }
-  } else {
-    feedState.targetPostId = '';
-    feedState.pendingTargetScroll = false;
-  }
-};
-
-var syncURLState = function() {
-  var params = new URLSearchParams(window.location.search);
-  params.set('page', state.currentPage);
-
-  if (state.currentPage === 'feed' && feedState.filter !== 'all') {
-    params.set('circle', feedState.filter);
-  } else {
-    params.delete('circle');
-  }
-
-  if (state.currentPage === 'feed' && feedState.targetPostId) {
-    params.set('postId', feedState.targetPostId);
-  } else {
-    params.delete('postId');
-  }
-
-  if (state.currentPage === 'projects' && projectsState.activeProjectId) {
-    params.set('projectId', projectsState.activeProjectId);
-  } else {
-    params.delete('projectId');
-  }
-
-  var nextURL = window.location.pathname + '?' + params.toString();
-  window.history.replaceState({}, '', nextURL);
-};
-
-var getAppURL = function() {
-  var url = new URL(window.location.href);
-  url.search = '';
-  url.hash = '';
-
-  if (/\/index\.html$/i.test(url.pathname)) {
-    url.pathname = url.pathname.replace(/index\.html$/i, '');
-  }
-
-  return url.toString();
-};
-
 
 var getOnlineUsersThreshold = function() {
   return Timestamp.fromDate(new Date(Date.now() - 5 * 60000));
@@ -581,93 +449,6 @@ var loadPanelCircles = function() {
     btn.addEventListener('click', function() {
       window.enclaveGoCircle(btn.dataset.panelCircle);
     });
-  });
-};
-
-// ─── Page loader ─────────────────────────────────────────────────────────────
-var loadPage = function(page) {
-  state.currentPage = page;
-  syncURLState();
-  syncResponsivePanels();
-
-  // Clean up any previous page subscriptions
-  if (feedState.unsubscribe) {
-    feedState.unsubscribe();
-    feedState.unsubscribe = null;
-  }
-  if (projectsState.unsubscribe) {
-    projectsState.unsubscribe();
-    projectsState.unsubscribe = null;
-  }
-  resetProjectDetailState();
-  if (page !== 'projects') {
-    projectsState.activeProjectId = null;
-  }
-
-  resetMessagesState(false);
-  resetResourcesState();
-  resetBriefingsState();
-
-  var slot = document.querySelector('[data-slot="page"]');
-  if (!slot) return;
-
-  // Highlight active nav link
-  syncSidebarSelection();
-
-  fetch('pages/' + page + '.html?' + ASSET_VERSION).then(function(res) {
-    if (!res.ok) throw new Error('page HTTP ' + res.status);
-    return res.text();
-  }).then(function(pageHTML) {
-    slot.innerHTML = pageHTML;
-
-    // Page-specific init
-    if (page === 'feed')    initFeedPage();
-    if (page === 'members') initMembersPage();
-    if (page === 'events')  initEventsPage();
-    if (page === 'admin')   initAdminPage();
-    if (page === 'messages') initMessagesPage();
-    if (page === 'projects') initProjectsPage();
-    if (page === 'resources') initResourcesPage();
-    if (page === 'briefings') initBriefingsPage();
-    if (page === 'notifications') initNotificationsPage();
-  }).catch(function(err) {
-    logError('Failed to load page ' + page, err);
-    slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
-  });
-};
-
-var syncSidebarSelection = function() {
-  document.querySelectorAll('.sidebar-link[data-page]').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.page === state.currentPage);
-  });
-
-  document.querySelectorAll('.mobile-nav-link[data-page]').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.page === state.currentPage);
-  });
-
-  // Highlight More button when a "more" page is active
-  var morePages = { events: true, members: true, resources: true, admin: true, notifications: true };
-  var moreBtn = document.getElementById('mobileMoreBtn');
-  if (moreBtn) moreBtn.classList.toggle('active', !!morePages[state.currentPage]);
-
-  document.querySelectorAll('.mobile-more-item[data-page]').forEach(function(item) {
-    item.classList.toggle('active', item.dataset.page === state.currentPage);
-  });
-
-  document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-    var isActive = state.currentPage === 'feed' &&
-      feedState.filter !== 'all' &&
-      btn.dataset.circle === feedState.filter;
-
-    btn.classList.toggle('active', isActive);
-  });
-
-  document.querySelectorAll('.sidebar-link[data-project]').forEach(function(btn) {
-    btn.classList.toggle('active',
-      state.currentPage === 'projects' &&
-      projectsState.activeProjectId &&
-      btn.dataset.project === projectsState.activeProjectId
-    );
   });
 };
 
