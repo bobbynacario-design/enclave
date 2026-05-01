@@ -195,6 +195,22 @@ export var renderShell = function() {
       moreMenu.addEventListener('click', function(e) {
         e.stopPropagation();
       });
+
+      // Inject sign-out at bottom of More menu (mobile users have no other way to sign out)
+      moreMenu.insertAdjacentHTML('beforeend',
+        '<hr style="border:0;border-top:1px solid var(--border);margin:8px 0" />' +
+        '<button id="mobileMoreSignOut" class="mobile-more-item" style="color:var(--red);">' +
+          '<span class="mobile-more-icon">⏻</span>' +
+          '<span>Sign out</span>' +
+        '</button>'
+      );
+      var mobileSignOutBtn = document.getElementById('mobileMoreSignOut');
+      if (mobileSignOutBtn) {
+        mobileSignOutBtn.addEventListener('click', function() {
+          moreMenu.classList.remove('open');
+          handleSignOut();
+        });
+      }
     }
 
     // User profile row
