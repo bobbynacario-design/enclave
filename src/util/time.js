@@ -1,3 +1,16 @@
+export const getFirestoreTimeMs = function(value) {
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate().getTime();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  var parsed = new Date(value || 0).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+};
+
 export const formatCalendarMonthLabel = function(year, month) {
   return new Date(year, month, 1).toLocaleDateString([], {
     month: 'long',
