@@ -37,22 +37,8 @@ import { openDrivePicker, clearDriveAttachment } from '../ui/drivePicker.js';
 // Cross-page
 import { writeNotification } from './notifications.js';
 
-// ─── Callback registry ────────────────────────────────────────────────────────
-
-var sidebarSyncer = null;
-export const registerSidebarSyncer = function(fn) {
-  sidebarSyncer = fn;
-};
-
-var urlStateSyncer = null;
-export const registerURLStateSyncer = function(fn) {
-  urlStateSyncer = fn;
-};
-
-var appURLGetter = function() { return ''; };
-export const registerAppURLGetter = function(fn) {
-  appURLGetter = fn;
-};
+// Shell bridge
+import { syncSidebarSelection, syncURLState, getAppURL } from '../util/shell-bridge.js';
 
 // ─── Feed: init ──────────────────────────────────────────────────────────────
 export const initFeedPage = function() {
@@ -109,11 +95,11 @@ export const initFeedPage = function() {
       feedState.filter = pill.dataset.filter;
       feedState.targetPostId = '';
       feedState.pendingTargetScroll = false;
-      if (urlStateSyncer) urlStateSyncer();
+      syncURLState();
       document.querySelectorAll('.filter-pills .pill').forEach(function(p) {
         p.classList.toggle('active', p === pill);
       });
-      if (sidebarSyncer) sidebarSyncer();
+      syncSidebarSelection();
       renderFeedList();
     });
   });
@@ -122,7 +108,7 @@ export const initFeedPage = function() {
     p.classList.toggle('active', p.dataset.filter === feedState.filter);
   });
 
-  if (sidebarSyncer) sidebarSyncer();
+  syncSidebarSelection();
   subscribeFeed();
 };
 
@@ -557,7 +543,7 @@ var handleSharePost = function(postId) {
   var summary = body.length > 140
     ? body.slice(0, 137) + '...'
     : body;
-  var shareURL = appURLGetter() + '?page=feed&postId=' + encodeURIComponent(postId);
+  var shareURL = getAppURL() + '?page=feed&postId=' + encodeURIComponent(postId);
   var shareText = author + ' in Enclave: ' + summary;
 
   if (navigator.share) {
