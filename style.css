@@ -816,6 +816,32 @@ label {
   margin-bottom: 24px;
 }
 
+.login-error-card {
+  text-align: left;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(220, 50, 50, 0.08);
+  border: 1px solid rgba(220, 50, 50, 0.25);
+  margin: 16px 0;
+}
+.login-error-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--red, #dc3232);
+  margin-bottom: 6px;
+}
+.login-error-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.login-error-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .btn-google {
   display: inline-flex;
   align-items: center;

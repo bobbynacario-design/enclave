@@ -71,9 +71,45 @@ export var renderLoading = function(msg) {
 export var renderLogin = function() {
   var app = document.getElementById('app');
 
-  var deniedHTML = state.accessDenied
-    ? '<div class="login-error">Access restricted. You need an invite.</div>'
-    : '';
+  var deniedHTML = '';
+  if (state.accessDenied === 'no-invite') {
+    deniedHTML =
+      '<div class="login-error login-error-card">' +
+        '<div class="login-error-title">No invite found</div>' +
+        '<div class="login-error-body">' +
+          'Your email is not on the access list. Enclave is invite-only.' +
+        '</div>' +
+        '<div class="login-error-actions">' +
+          '<a class="btn btn-primary" ' +
+             'href="mailto:bobbynacario@gmail.com?subject=Enclave%20access%20request">' +
+            'Request access' +
+          '</a>' +
+          '<button id="loginRetryBtn" class="btn btn-ghost">Try a different account</button>' +
+        '</div>' +
+      '</div>';
+  } else if (state.accessDenied === 'no-email') {
+    deniedHTML =
+      '<div class="login-error login-error-card">' +
+        '<div class="login-error-title">Email required</div>' +
+        '<div class="login-error-body">' +
+          'Your Google account doesn\'t expose an email address. ' +
+          'Try a different account.' +
+        '</div>' +
+      '</div>';
+  } else if (state.accessDenied === 'rules-error') {
+    deniedHTML =
+      '<div class="login-error login-error-card">' +
+        '<div class="login-error-title">Couldn\'t verify access</div>' +
+        '<div class="login-error-body">' +
+          'There was a problem checking your access. ' +
+          'Please try again in a moment.' +
+        '</div>' +
+      '</div>';
+  } else if (state.accessDenied) {
+    // Legacy boolean true — fallback to generic message
+    deniedHTML =
+      '<div class="login-error">Access restricted. You need an invite.</div>';
+  }
 
   app.innerHTML =
     '<div class="login-wrap">' +
@@ -104,6 +140,14 @@ export var renderLogin = function() {
     '</div>';
 
   document.getElementById('googleSignInBtn').addEventListener('click', handleSignIn);
+
+  var retryBtn = document.getElementById('loginRetryBtn');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', function() {
+      state.accessDenied = false;
+      renderLogin();
+    });
+  }
 };
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────

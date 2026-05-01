@@ -2,6 +2,8 @@
 
 import {
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   GoogleAuthProvider as GAP
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
@@ -32,12 +34,46 @@ import { normalizeCircles, getInitials } from '../util/circles.js';
 
 import { logError } from '../util/log.js';
 
+import { showToast } from '../ui/toast.js';
+
 import { renderShell, applyURLState } from '../util/shell-bridge.js';
+
+// ─── Auth: friendly error handler ────────────────────────────────────────────
+var handleSignInError = function(err) {
+  var code = err && err.code;
+  var message;
+  switch (code) {
+    case 'auth/network-request-failed':
+      message = 'Network error. Check your connection and try again.';
+      break;
+    case 'auth/popup-blocked':
+    case 'auth/popup-closed-by-user':
+      message = 'Sign-in popup was blocked or closed. Try again.';
+      break;
+    case 'auth/cancelled-popup-request':
+      // User started a second sign-in attempt — silent
+      return;
+    case 'auth/account-exists-with-different-credential':
+      message = 'An account already exists with this email using a different sign-in method.';
+      break;
+    case 'auth/user-disabled':
+      message = 'This account has been disabled. Contact admin.';
+      break;
+    case 'auth/operation-not-supported-in-this-environment':
+      message = 'Sign-in not supported in this browser. Try Chrome or Safari.';
+      break;
+    default:
+      message = 'Couldn\'t sign in. Please try again.';
+      break;
+  }
+  logError('Sign-in error', err);
+  showToast(message, 'error');
+};
 
 // ─── Auth: sign in / sign out ─────────────────────────────────────────────────
 var runSignOut = function(accessDenied) {
   authFlowState.busy = true;
-  state.accessDenied = !!accessDenied;
+  state.accessDenied = accessDenied || false;
   state.user = null;
   state.isAdmin = false;
   state.circles = [];
@@ -66,6 +102,13 @@ var runSignOut = function(accessDenied) {
   });
 };
 
+var REDIRECT_ERROR_CODES = [
+  'auth/popup-blocked',
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+  'auth/operation-not-supported-in-this-environment'
+];
+
 export var handleSignIn = function() {
   if (authFlowState.busy) return;
   state.accessDenied = false;
@@ -76,9 +119,16 @@ export var handleSignIn = function() {
       state.googleAccessToken = credential.accessToken;
     }
   }).catch(function(err) {
-    logError('Sign-in error', err);
+    // Popup blocked, cancelled, or unsupported — fall back to full-page redirect
+    if (REDIRECT_ERROR_CODES.indexOf(err.code) !== -1) {
+      return signInWithRedirect(auth, googleProvider);
+    }
+    // Other errors — show user-friendly message
+    handleSignInError(err);
   }).finally(function() {
-    authFlowState.busy = false;
+    // Note: when redirect fires the page navigates away; .finally never
+    // runs in the same context. busy gets reset on redirect-return below.
+    if (!state.user) authFlowState.busy = false;
   });
 };
 
@@ -90,7 +140,7 @@ export var handleSignOut = function() {
 // ─── Auth: allowlist check ────────────────────────────────────────────────────
 export var checkAllowlist = function(user) {
   if (!user.email) {
-    runSignOut(true);
+    runSignOut('no-email');
     return;
   }
 
@@ -109,11 +159,11 @@ export var checkAllowlist = function(user) {
         renderShell();
       });
     } else {
-      runSignOut(true);
+      runSignOut('no-invite');
     }
   }).catch(function(err) {
     logError('Allowlist check failed', err);
-    runSignOut(true);
+    runSignOut('rules-error');
   });
 };
 
@@ -159,3 +209,20 @@ var upsertUserDoc = function(user, allowlistEntry) {
     }
   });
 };
+
+// ─── Redirect return: pick up result if user just came back from redirect ────
+// Runs once at module load. onAuthStateChanged in app.js handles the rest.
+getRedirectResult(auth).then(function(result) {
+  if (result) {
+    var credential = GAP.credentialFromResult(result);
+    if (credential && credential.accessToken) {
+      state.googleAccessToken = credential.accessToken;
+    }
+    // onAuthStateChanged will fire and call checkAllowlist
+  }
+}).catch(function(err) {
+  // Ignore the common "no pending redirect" non-error
+  if (err.code && err.code !== 'auth/null-redirect-result') {
+    handleSignInError(err);
+  }
+});
