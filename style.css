@@ -3130,3 +3130,75 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   }
 
 }
+
+/* ─── Phase 3.2.3: Mobile tap target audit — 44px hit areas ─────────────── */
+/* Apple HIG / Material minimum: 44px. All changes are mobile-only (≤768px). */
+/* Category 1 (.mobile-nav-link) already has min-height: 56px — skipped.     */
+@media (max-width: 768px) {
+
+  /* 2. Post action buttons (like, comment, share) */
+  .post-action {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 3. Comment compose submit button */
+  .post-comment-submit {
+    min-height: 44px;
+  }
+
+  /* 4. Modal close button */
+  .profile-modal-close {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 5. Filter pills */
+  .pill {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* 6. Compose box: Drive attach + Post buttons */
+  .compose-actions .btn {
+    min-height: 44px;
+  }
+
+  /* 7. Mobile topbar theme toggle */
+  .theme-toggle {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 8. Mobile More menu items */
+  .mobile-more-item {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* 9. Project task rows; status badge gets a generous touch pad too */
+  .task-row {
+    min-height: 44px;
+  }
+  .task-status-btn {
+    min-height: 32px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* 10. Notification list items */
+  .notif-item {
+    min-height: 44px;
+  }
+
+}
