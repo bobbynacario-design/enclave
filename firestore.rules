@@ -81,7 +81,10 @@ service cloud.firestore {
     }
 
     match /allowlist/{email} {
-      allow get: if signedIn();
+      // Users can only read their own allowlist entry (used during sign-in
+      // to determine circle access). Admins can list the full allowlist.
+      allow get: if signedIn() &&
+        request.auth.token.email.lower() == email;
       allow list: if isAdmin();
       allow create, update: if isAdmin() &&
         request.resource.data.email == email &&
@@ -98,7 +101,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if signedIn();
-      allow list: if isAdmin(); // collection queries limited to admin — prevents email enumeration
+      // list is broader than ideal: any signed-in user with a user doc can
+      // enumerate all members. Accepted because (a) Enclave is an invite-only
+      // private community where members already know each other exists, and
+      // (b) the Members page and Messages people sidebar both need this query.
+      // Email is not displayed in the UI; it's used only for admin invite flows.
+      // Reconsider if app moves toward broader access.
+      allow list: if userDocExists();
 
       allow create: if signedIn() &&
         request.auth.uid == userId &&
@@ -218,11 +227,19 @@ service cloud.firestore {
         resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdBy == resource.data.createdBy
       ) || (
-        // claimPendingInvites self-claim: invited user can add themselves as a member
+        // claimPendingInvites self-claim: invited user adds ONLY themselves
+        // as a member and removes ONLY their own email from pendingInvites.
         signedIn() &&
         request.auth.token.email in resource.data.pendingInvites &&
         request.resource.data.diff(resource.data)
-          .affectedKeys().hasOnly(['memberIds', 'memberNames', 'pendingInvites', 'updatedAt'])
+          .affectedKeys().hasOnly(['memberIds', 'memberNames', 'pendingInvites', 'updatedAt']) &&
+        // Must add self to memberIds (and only self)
+        request.auth.uid in request.resource.data.memberIds &&
+        !(request.auth.uid in resource.data.memberIds) &&
+        request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+        // Must remove self from pendingInvites (and only self)
+        !(request.auth.token.email in request.resource.data.pendingInvites) &&
+        request.resource.data.pendingInvites.size() == resource.data.pendingInvites.size() - 1
       );
 
       allow delete: if isAdmin() || (
