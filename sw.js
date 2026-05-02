@@ -1,6 +1,6 @@
 // Enclave Service Worker
 
-const CACHE_NAME = 'enclave-shell-v1';
+const CACHE_NAME = 'enclave-shell-v2';
 
 const PRECACHE_URLS = [
   './',
@@ -55,6 +55,16 @@ function shouldBypass(url) {
   return BYPASS_ORIGINS.some(origin => url.startsWith(origin));
 }
 
+// Same-origin JS and CSS — use network-first so app code never goes stale
+function isAppCode(request) {
+  const url = new URL(request.url);
+  return url.origin === self.location.origin &&
+    (request.destination === 'script' ||
+     request.destination === 'style' ||
+     url.pathname.endsWith('.js') ||
+     url.pathname.endsWith('.css'));
+}
+
 // ─── Install: pre-cache app shell ─────────────────────────────────────────────
 self.addEventListener('install', event => {
   // Do not skipWaiting here — the update toast in the page handles activation.
@@ -104,18 +114,27 @@ self.addEventListener('fetch', event => {
   const isNavigation = request.mode === 'navigate';
 
   if (isNavigation) {
-    // Network-first for HTML navigation requests
+    // Network-first for HTML navigation requests; offline fallback
     event.respondWith(
       fetch(request).then(response => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         return response;
-      }).catch(() => {
-        return caches.match('./offline.html');
-      })
+      }).catch(() => caches.match('./offline.html'))
+    );
+  } else if (isAppCode(request)) {
+    // Network-first for same-origin JS/CSS — always fetch fresh, cache as backup
+    event.respondWith(
+      fetch(request).then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(request))
     );
   } else {
-    // Cache-first for static assets
+    // Cache-first for images, manifest, and other static media
     event.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached;
