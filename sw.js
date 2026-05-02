@@ -5,6 +5,7 @@ const CACHE_NAME = 'enclave-shell-v1';
 const PRECACHE_URLS = [
   './',
   './index.html',
+  './offline.html',
   './style.css',
   './manifest.json',
   './app.js',
@@ -103,7 +104,7 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         return response;
       }).catch(() => {
-        return caches.match('./index.html');
+        return caches.match('./offline.html');
       })
     );
   } else {
