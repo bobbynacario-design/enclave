@@ -16,7 +16,7 @@ const APP_URL = "https://bobbynacario-design.github.io/enclave/";
 exports.sendNotificationPush = onDocumentCreated(
     {
       document: "notifications/{notificationId}",
-      region: "us-central1",
+      region: "asia-southeast1",
     },
     async (event) => {
       const snap = event.data;
