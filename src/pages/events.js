@@ -353,6 +353,20 @@ export const initEventsPage = function() {
   if (state.isAdmin) {
     renderInlineEventComposer();
   }
+
+  var eventsList = document.getElementById('eventsList');
+  if (eventsList) {
+    eventsList.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-ics]');
+      if (!btn) return;
+      e.stopPropagation();
+      var eventId = btn.dataset.ics;
+      var allEvents = (eventsState.upcoming || []).concat(eventsState.past || []);
+      var ev = allEvents.find(function(item) { return item.id === eventId; });
+      if (ev) { generateIcs(ev); }
+    });
+  }
+
   loadEvents();
 };
 
@@ -495,10 +509,17 @@ const renderEventCard = function(ev, opts) {
   var statusHtml = opts.isPast
     ? '<span class="event-status-label">Past Event</span>'
     : '';
+  var icsBtn = ev.id
+    ? '<button class="btn btn-ghost" data-ics="' + escapeAttr(ev.id) + '">Add to calendar</button>'
+    : '';
   var actionsHtml = opts.isPast
-    ? '<div class="event-actions event-actions-static"><span class="text-muted">RSVP closed</span></div>'
+    ? '<div class="event-actions event-actions-static">' +
+        '<span class="text-muted">RSVP closed</span>' +
+        icsBtn +
+      '</div>'
     : '<div class="event-actions">' +
         '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">' + rsvpButtonLabel(rsvpCount, false) + '</button>' +
+        icsBtn +
       '</div>';
 
   return '' +
@@ -869,6 +890,71 @@ const handleInlineCreateEvent = function() {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const icsEscape = function(str) {
+  return (str || '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+};
+
+const toIcsDate = function(date) {
+  var pad = function(n) { return String(n).padStart(2, '0'); };
+  return '' +
+    date.getUTCFullYear() +
+    pad(date.getUTCMonth() + 1) +
+    pad(date.getUTCDate()) + 'T' +
+    pad(date.getUTCHours()) +
+    pad(date.getUTCMinutes()) +
+    pad(date.getUTCSeconds()) + 'Z';
+};
+
+const foldIcsLine = function(line) {
+  if (line.length <= 75) return line;
+  var out = '';
+  while (line.length > 75) {
+    out += line.slice(0, 75) + '\r\n ';
+    line = line.slice(75);
+  }
+  return out + line;
+};
+
+const generateIcs = function(ev) {
+  if (!ev.date || typeof ev.date.toDate !== 'function') {
+    showToast('This event has no date — cannot export.', 'error');
+    return;
+  }
+
+  var start = ev.date.toDate();
+  var end   = new Date(start.getTime() + 3600000); // default DTEND = +1 hour
+  var now   = new Date();
+  var uid   = (ev.id || String(now.getTime())) + '@enclave-social';
+
+  var lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Enclave//Events//EN',
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + toIcsDate(now),
+    'DTSTART:' + toIcsDate(start),
+    'DTEND:' + toIcsDate(end),
+    'SUMMARY:' + icsEscape(ev.title || 'Untitled')
+  ];
+
+  if (ev.description) { lines.push('DESCRIPTION:' + icsEscape(ev.description)); }
+  if (ev.location)    { lines.push('LOCATION:'    + icsEscape(ev.location));    }
+
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+
+  var content = lines.map(foldIcsLine).join('\r\n');
+  var blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  a.download = ((ev.title || 'event').replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'event') + '.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 const rsvpButtonLabel = function(count, isRsvped) {
   var total = typeof count === 'number' ? count : 0;
