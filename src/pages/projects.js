@@ -491,7 +491,7 @@ var renderProjectDetail = function(p) {
       '<div class="project-tasks-list">' + tasksHtml + '</div>' +
       '<form class="task-add-form" id="taskAddForm">' +
         '<input type="text" class="form-input" id="taskTitleInput" placeholder="Task title..." maxlength="200" />' +
-        '<select class="form-input task-add-assignee" id="taskAssigneeInput">' +
+        '<select class="form-input task-add-assignee" id="taskAssigneeInput" aria-label="Assignee">' +
           '<option value="">Unassigned</option>' +
           memberIds.map(function(uid) {
             return '<option value="' + escapeAttr(uid) + '">' + escapeHTML(memberNames[uid] || 'Member') + '</option>';
@@ -765,7 +765,7 @@ var renderProjectDetail = function(p) {
       row.innerHTML = '' +
         '<form class="task-edit-form" data-task-save="' + escapeAttr(taskId) + '">' +
           '<input type="text" class="form-input" value="' + escapeAttr(task.title || '') + '" data-edit-title maxlength="200" />' +
-          '<select class="form-input task-add-assignee" data-edit-assignee>' + assigneeOptions + '</select>' +
+          '<select class="form-input task-add-assignee" data-edit-assignee aria-label="Assignee">' + assigneeOptions + '</select>' +
           '<input type="date" class="form-input task-add-date" value="' + escapeAttr(task.dueDate || '') + '" data-edit-due />' +
           '<button class="btn btn-primary" type="submit">Save</button>' +
           '<button class="btn btn-ghost" type="button" data-edit-cancel>Cancel</button>' +
