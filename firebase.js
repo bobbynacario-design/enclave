@@ -5,6 +5,10 @@ import { initializeApp }                from 'https://www.gstatic.com/firebasejs
 import { getAuth, GoogleAuthProvider }  from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getFirestore }                 from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage }                   from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
+import {
+  getMessaging,
+  isSupported as isMessagingSupported
+} from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js';
 
 const firebaseConfig = {
   apiKey:            'AIzaSyBC8nqTgaqMp0R45dnKpA44u0S5C3nnbFE',
@@ -22,3 +26,12 @@ export const auth           = getAuth(app);
 export const db             = getFirestore(app);
 export const storage        = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Messaging is only available in browsers with full Service Worker
+// and PushManager support. We export a Promise so callers can
+// gracefully handle unsupported browsers.
+export const messagingPromise = isMessagingSupported().then(function(supported) {
+  return supported ? getMessaging(app) : null;
+}).catch(function() {
+  return null;
+});

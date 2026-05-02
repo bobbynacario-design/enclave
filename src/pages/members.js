@@ -22,6 +22,13 @@ import { logError } from '../util/log.js';
 // UI helpers
 import { showToast } from '../ui/toast.js';
 
+// Push notifications
+import {
+  enablePush,
+  disablePush,
+  getPushSupport
+} from '../util/push.js';
+
 // ─── Callback registry ────────────────────────────────────────────────────────
 
 var recentPostsLoader = null;
@@ -233,6 +240,15 @@ var renderEditProfileForm = function(member) {
       '<div class="profile-section-title">Circles</div>' +
       circlesHTML +
     '</div>' +
+    '<div class="profile-section">' +
+      '<div class="profile-section-title">Notifications</div>' +
+      '<div class="notifications-control">' +
+        '<button type="button" id="notificationsToggleBtn" class="btn btn-ghost" style="font-size:13px;">Loading...</button>' +
+        '<div class="form-help" style="font-size:12px;color:var(--text-muted);margin-top:6px;">' +
+          'Get pushes for new messages, comments, mentions, and more.' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
     '<div class="edit-actions">' +
       '<button class="btn" id="editCancelBtn">Cancel</button>' +
       '<button class="btn btn-primary" id="editSaveBtn">Save</button>' +
@@ -244,6 +260,49 @@ var renderEditProfileForm = function(member) {
   document.getElementById('editSaveBtn').addEventListener('click', function() {
     handleSaveProfile(member.uid);
   });
+
+  // Async: determine push support and wire the toggle button
+  (function() {
+    var notifBtn = document.getElementById('notificationsToggleBtn');
+    if (!notifBtn) return;
+
+    getPushSupport().then(function(support) {
+      if (support === 'unsupported') {
+        notifBtn.textContent = 'Not supported in this browser';
+        notifBtn.disabled = true;
+      } else if (support === 'denied') {
+        notifBtn.textContent = 'Permission denied (check browser settings)';
+        notifBtn.disabled = true;
+      } else if (support === 'granted') {
+        notifBtn.textContent = 'Disable notifications';
+        notifBtn.addEventListener('click', function() {
+          notifBtn.disabled = true;
+          disablePush().then(function() {
+            return getPushSupport();
+          }).then(function(newSupport) {
+            notifBtn.textContent = newSupport === 'granted'
+              ? 'Disable notifications'
+              : 'Enable notifications';
+            notifBtn.disabled = false;
+          });
+        });
+      } else {
+        // 'default' — never asked
+        notifBtn.textContent = 'Enable notifications';
+        notifBtn.addEventListener('click', function() {
+          notifBtn.disabled = true;
+          enablePush().then(function() {
+            return getPushSupport();
+          }).then(function(newSupport) {
+            notifBtn.textContent = newSupport === 'granted'
+              ? 'Disable notifications'
+              : 'Enable notifications';
+            notifBtn.disabled = false;
+          });
+        });
+      }
+    });
+  })();
 };
 
 // ─── Members: save profile edits ────────────────────────────────────────────
