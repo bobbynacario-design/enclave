@@ -21,6 +21,32 @@ import { showToast } from '../ui/toast.js';
 
 var VAPID_KEY = 'BISFf7BoZ7wV4j_OhBr76JICT9MgvEBT5PzDXQFzDnzw7Hxw7-5bUyVx1nq3NSOBdSx5eR96zfoap_ZPovJIoYg';
 
+// Register or retrieve the Firebase Messaging service worker.
+// FCM by default looks for /firebase-messaging-sw.js at the
+// origin root, but the app lives at /enclave/, so we register
+// explicitly and pass the registration to getToken.
+var fcmSwRegistration = null;
+var registerFcmSw = async function() {
+  if (fcmSwRegistration) return fcmSwRegistration;
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    // Check if already registered (e.g. from previous session)
+    var existing = await navigator.serviceWorker.getRegistration('./firebase-messaging-sw.js');
+    if (existing) {
+      fcmSwRegistration = existing;
+      return existing;
+    }
+    // Register fresh
+    fcmSwRegistration = await navigator.serviceWorker.register(
+      './firebase-messaging-sw.js'
+    );
+    return fcmSwRegistration;
+  } catch (err) {
+    logError('FCM SW register failed', err);
+    return null;
+  }
+};
+
 // Returns the current push state for the user:
 //   'unsupported' — browser cannot do push
 //   'denied'      — user previously denied permission
@@ -54,8 +80,17 @@ export var enablePush = async function() {
       return false;
     }
 
+    // Ensure FCM service worker is registered before requesting token
+    var swReg = await registerFcmSw();
+    if (!swReg) {
+      showToast('Could not register notification handler.', 'error');
+      return false;
+    }
     // Get the FCM token. This also registers with FCM servers.
-    var token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    var token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg
+    });
     if (!token) {
       showToast('Could not generate notification token.', 'error');
       return false;
@@ -94,7 +129,11 @@ export var disablePush = async function() {
     // Get current token (may already be expired/missing)
     var currentToken = null;
     try {
-      currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+      var swReg = await registerFcmSw();
+      currentToken = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swReg
+      });
     } catch (err) {
       // Token already gone — fine, proceed
     }
