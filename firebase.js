@@ -2,6 +2,7 @@
 // Replace the placeholder config values with your real Firebase project credentials.
 
 import { initializeApp }                from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check.js';
 import { getAuth, GoogleAuthProvider }  from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getFirestore }                 from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage }                   from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
@@ -21,6 +22,14 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// App Check — reCAPTCHA Enterprise provider.
+// Enforcement is currently OFF (monitoring-only) in Firebase Console.
+// Flip to enforced once token metrics look healthy.
+initializeAppCheck(app, {
+  provider: new ReCaptchaEnterpriseProvider('6LdxtNUsAAAAAOjXFBOF28ijVtZvYRCK8PhG8v8r'),
+  isTokenAutoRefreshEnabled: true
+});
 
 export const auth           = getAuth(app);
 export const db             = getFirestore(app);
