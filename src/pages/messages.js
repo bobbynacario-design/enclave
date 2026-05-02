@@ -29,6 +29,9 @@ import { logError } from '../util/log.js';
 // UI helpers
 import { showToast } from '../ui/toast.js';
 
+// Notifications
+import { writeNotification } from './notifications.js';
+
 // ─── Messages ────────────────────────────────────────────────────────────────
 var getConversationId = function(uidA, uidB) {
   return [uidA, uidB].sort().join('__');
@@ -537,6 +540,15 @@ var handleSendMessage = function() {
     }
     markConversationRead(conversationId);
     input.value = '';
+    var actor = state.user.displayName || state.user.email || 'Member';
+    try {
+      writeNotification(peer.uid, 'message', actor + ' sent you a message', {
+        page: 'messages',
+        params: { peer: state.user.uid }
+      });
+    } catch (err) {
+      logError('Notification write failed', err);
+    }
   }).catch(function(err) {
     logError('Failed to send message', err);
     showToast('Failed to send message. Check console for details.', 'error');
