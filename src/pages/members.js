@@ -177,7 +177,19 @@ var openProfile = function(uid) {
     '</div>' +
     '<div class="profile-section">' +
       '<div class="profile-section-title">Recent Posts</div>' +
-      '<div id="profilePosts"><p class="text-muted">Loading...</p></div>' +
+      '<div id="profilePosts">' +
+        '<div class="skeleton-card" aria-hidden="true">' +
+          '<div class="skeleton-row">' +
+            '<div class="skeleton skeleton-avatar"></div>' +
+            '<div class="skeleton-stack">' +
+              '<div class="skeleton skeleton-line" style="width:40%"></div>' +
+              '<div class="skeleton skeleton-line" style="width:20%"></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="skeleton skeleton-line" style="width:100%"></div>' +
+          '<div class="skeleton skeleton-line" style="width:75%;margin-top:4px"></div>' +
+        '</div>' +
+      '</div>' +
     '</div>';
 
   if (isSelf) {

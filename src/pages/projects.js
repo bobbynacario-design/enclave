@@ -295,7 +295,12 @@ var loadProjectDetail = function(projectId) {
   if (headerEl) headerEl.hidden = true;
   if (detailEl) {
     detailEl.hidden = false;
-    detailEl.innerHTML = '<div class="feed-loading text-muted">Loading project...</div>';
+    detailEl.innerHTML = '<div class="skeleton-card" aria-hidden="true">' +
+      '<div class="skeleton skeleton-line" style="width:50%;height:18px;margin-bottom:12px"></div>' +
+      '<div class="skeleton skeleton-line" style="width:100%"></div>' +
+      '<div class="skeleton skeleton-line" style="width:80%;margin-top:8px"></div>' +
+      '<div class="skeleton skeleton-line" style="width:60%;margin-top:8px"></div>' +
+      '</div>';
   }
 
   resetProjectDetailState();
