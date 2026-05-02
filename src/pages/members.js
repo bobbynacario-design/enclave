@@ -83,7 +83,7 @@ var renderMembersList = function() {
   if (!list) return;
 
   if (membersState.members.length === 0) {
-    list.innerHTML = '<div class="card"><p class="text-muted">No members yet. As people sign in, they\'ll appear here.</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No members yet</div><p class="empty-state-text">As people join the enclave, they\'ll appear here.</p></div>';
     return;
   }
 

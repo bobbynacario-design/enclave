@@ -136,7 +136,7 @@ var renderMessagesPeopleList = function() {
   if (!list) return;
 
   if (messagesState.members.length === 0) {
-    list.innerHTML = '<div class="messages-empty-state text-muted">No other members found yet.</div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No members found</div><p class="empty-state-text">Members will appear here once they\'ve signed in.</p></div>';
     return;
   }
 
@@ -205,7 +205,7 @@ var renderMessagesThread = function() {
   if (!peer) {
     titleEl.textContent = 'Select a member';
     subtitleEl.textContent = 'Choose someone to start chatting.';
-    listEl.innerHTML = '<div class="messages-empty-state text-muted">No conversation selected yet.</div>';
+    listEl.innerHTML = '<div class="empty-state"><div class="empty-state-title">No conversation selected</div><p class="empty-state-text">Choose a member to start or continue a conversation.</p></div>';
     inputEl.value = '';
     inputEl.disabled = true;
     sendBtn.disabled = true;
@@ -237,7 +237,7 @@ var renderMessagesThread = function() {
   var allMessages = messagesState.olderMessages.concat(messagesState.thread);
 
   if (allMessages.length === 0) {
-    listEl.innerHTML = '<div class="messages-empty-state text-muted">No messages yet. Send the first one.</div>';
+    listEl.innerHTML = '<div class="empty-state"><div class="empty-state-title">No messages yet</div><p class="empty-state-text">Send the first message to start the conversation.</p></div>';
     return;
   }
 

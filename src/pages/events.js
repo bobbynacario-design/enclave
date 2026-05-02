@@ -436,8 +436,9 @@ const renderEventsList = function() {
   var hasPast = eventsState.past.length > 0;
 
   if (!hasUpcoming && !hasPast) {
-    list.innerHTML = '<div class="card"><p class="text-muted">No events yet. ' +
-      (state.isAdmin ? 'Create one to get the calendar started.' : 'Check back soon.') + '</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No events yet</div><p class="empty-state-text">' +
+      (state.isAdmin ? 'Create the first event to get the calendar going.' : 'Upcoming gatherings and important dates will appear here.') +
+      '</p></div>';
     return;
   }
 
@@ -445,13 +446,13 @@ const renderEventsList = function() {
     ? eventsState.upcoming.map(function(ev) {
       return renderEventCard(ev, { isPast: false });
     }).join('')
-    : '<div class="card"><p class="text-muted">No upcoming events right now.</p></div>';
+    : '<div class="empty-state"><div class="empty-state-title">No upcoming events</div><p class="empty-state-text">Check back soon for new gatherings.</p></div>';
 
   var pastHtml = hasPast
     ? eventsState.past.map(function(ev) {
       return renderEventCard(ev, { isPast: true });
     }).join('')
-    : '<div class="card"><p class="text-muted">No past events yet.</p></div>';
+    : '<div class="empty-state"><div class="empty-state-title">No past events</div><p class="empty-state-text">Past events will be archived here.</p></div>';
 
   list.innerHTML =
     '<section class="events-section">' +

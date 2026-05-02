@@ -1098,7 +1098,7 @@ var renderProjectsList = function() {
   if (!list) return;
 
   if (projectsState.projects.length === 0) {
-    list.innerHTML = '<div class="card"><p class="text-muted">No projects yet. Create one to get started.</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No projects yet</div><p class="empty-state-text">Shared work and project updates will appear here.</p></div>';
     return;
   }
 

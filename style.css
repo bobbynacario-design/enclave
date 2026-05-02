@@ -1006,6 +1006,25 @@ label {
   gap: 8px;
 }
 
+/* ─── Empty states ───────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+}
+.empty-state-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.empty-state-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 280px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
 .post-card {
   background: var(--surface);
   border: 1px solid var(--border);

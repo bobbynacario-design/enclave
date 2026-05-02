@@ -359,7 +359,7 @@ var renderFeedList = function() {
   var posts = getRenderedFeedPosts();
 
   if (posts.length === 0) {
-    list.innerHTML = '<div class="card"><p class="text-muted">No posts yet. Be the first to share.</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No posts yet</div><p class="empty-state-text">When someone shares an update, it will appear here.</p></div>';
   } else {
     list.innerHTML = posts.map(renderPostCard).join('');
   }
