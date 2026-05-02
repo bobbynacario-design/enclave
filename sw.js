@@ -57,7 +57,7 @@ function shouldBypass(url) {
 
 // ─── Install: pre-cache app shell ─────────────────────────────────────────────
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  // Do not skipWaiting here — the update toast in the page handles activation.
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(PRECACHE_URLS);
@@ -65,6 +65,13 @@ self.addEventListener('install', event => {
       console.error('[SW] Pre-cache failed:', err);
     })
   );
+});
+
+// ─── Message: skip waiting on user request ─────────────────────────────────
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // ─── Activate: clean up old caches ────────────────────────────────────────────

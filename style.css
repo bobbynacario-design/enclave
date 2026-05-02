@@ -679,6 +679,39 @@ body {
   border-color: rgba(124, 92, 191, 0.45);
 }
 
+/* ─── SW update banner ───────────────────────────────────────────────────── */
+#swUpdateBanner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+}
+#swUpdateBanner button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+#swUpdateBanner button:hover {
+  background: var(--accent-hover);
+}
+
 .dialog-backdrop {
   position: fixed;
   inset: 0;
