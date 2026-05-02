@@ -681,12 +681,12 @@ body {
 
 /* ─── SW update banner ───────────────────────────────────────────────────── */
 #swUpdateBanner {
+  display: none;
   position: fixed;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2000;
-  display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
@@ -697,6 +697,9 @@ body {
   font-size: 14px;
   color: var(--text);
   white-space: nowrap;
+}
+#swUpdateBanner.is-visible {
+  display: flex;
 }
 #swUpdateBanner button {
   background: var(--accent);

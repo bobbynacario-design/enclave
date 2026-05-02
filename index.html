@@ -29,7 +29,7 @@
     if (savedTheme === 'light') document.body.classList.add('light');
   </script>
   <script type="module" src="app.js?v=112"></script>
-  <div id="swUpdateBanner" hidden>
+  <div id="swUpdateBanner">
     <span>New version available</span>
     <button id="swUpdateBtn">Refresh</button>
   </div>
@@ -42,9 +42,17 @@
         var banner = document.getElementById('swUpdateBanner');
         if (!banner || banner._bound) return;
         banner._bound = true;
-        banner.hidden = false;
+        banner.classList.add('is-visible');
         document.getElementById('swUpdateBtn').addEventListener('click', function() {
-          waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+          if (waitingWorker) {
+            waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+          } else {
+            banner.classList.remove('is-visible');
+            if (!_swReloading) {
+              _swReloading = true;
+              window.location.reload();
+            }
+          }
         });
       }
 
