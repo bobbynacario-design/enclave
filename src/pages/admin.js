@@ -10,7 +10,8 @@ import {
   serverTimestamp,
   query,
   where,
-  setDoc
+  setDoc,
+  onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 import { db } from '../../firebase.js';
@@ -293,8 +294,19 @@ var handleAdminResend = function(email, btn) {
 
   if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
-  queueInviteEmail(email, entry.circles).then(function() {
-    showToast('Invite queued — delivery may take a minute.', 'success');
+  queueInviteEmail(email, entry.circles).then(function(mailRef) {
+    showToast('Invite queued. Checking delivery...', 'info');
+    return waitForDelivery(mailRef, 30000);
+  }).then(function(result) {
+    if (result.state === 'SUCCESS') {
+      showToast('Invite sent to ' + email + '.', 'success');
+    } else if (result.state === 'ERROR') {
+      showToast('Delivery failed: ' + (result.error || 'unknown error'), 'error');
+    } else if (result.state === 'RETRY') {
+      showToast('Delivery is retrying. Check back in a few minutes.', 'info');
+    } else {
+      showToast('Still sending — delivery may take a minute.', 'info');
+    }
   }).catch(function(err) {
     logError('Failed to resend invite', err);
     showToast('Failed to resend invite. Check console for details.', 'error');
@@ -493,6 +505,30 @@ var queueInviteEmail = function(email, circles) {
         'email, you can ignore it.',
       html: html
     }
+  }).then(function(ref) {
+    return ref;
+  });
+};
+
+// ─── Wait for email delivery ──────────────────────────────────────────────────
+var waitForDelivery = function(docRef, timeoutMs) {
+  return new Promise(function(resolve) {
+    var unsubscribe;
+    var timer = setTimeout(function() {
+      unsubscribe();
+      resolve({ state: 'TIMEOUT' });
+    }, timeoutMs);
+
+    unsubscribe = onSnapshot(docRef, function(snap) {
+      var delivery = snap.exists() ? (snap.data().delivery || null) : null;
+      if (!delivery) return;
+      var s = delivery.state || '';
+      if (s === 'SUCCESS' || s === 'ERROR' || s === 'RETRY') {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve({ state: s, error: delivery.error || null });
+      }
+    });
   });
 };
 
