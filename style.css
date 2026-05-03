@@ -1658,6 +1658,32 @@ label {
   opacity: 0.6;
 }
 
+.admin-inactive-badge {
+  background: var(--warning-dim);
+  color: var(--warning);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+}
+
+.admin-nudge-options {
+  display: flex;
+  gap: 16px;
+  margin: 14px 0 4px;
+  flex-wrap: wrap;
+}
+
+.admin-nudge-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.admin-nudge-option input[type="checkbox"] {
+  cursor: pointer;
+}
+
 /* ─── Members: profile modal ─────────────────────────────────────────────── */
 .profile-modal {
   position: fixed;

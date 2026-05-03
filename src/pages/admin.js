@@ -38,12 +38,16 @@ import { showToast } from '../ui/toast.js';
 
 import { showConfirmModal, showCirclePickerModal } from '../ui/modals.js';
 
+import { writeNotification } from './notifications.js';
+
 import {
   syncSidebarSelection,
   loadPage,
   getAppURL,
   loadPanelCircles
 } from '../util/shell-bridge.js';
+
+var INACTIVE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
 
 // ─── Admin: init ──────────────────────────────────────────────────────────────
 export var initAdminPage = function() {
@@ -111,14 +115,35 @@ var loadAllowlistMembers = function() {
       if (e) { adminState.usersByEmail[e] = d.data(); }
     });
 
+    var now = Date.now();
     var entries = [];
     allowlistSnap.forEach(function(d) {
       var data = d.data() || {};
       var email = (data.email || d.id || '').toLowerCase();
+      var userDoc = adminState.usersByEmail[email];
+      var pending = !userDoc;
+      var inactive = false;
+      var lastSeenMs = 0;
+
+      if (!pending && userDoc.lastSeen) {
+        if (typeof userDoc.lastSeen.toMillis === 'function') {
+          lastSeenMs = userDoc.lastSeen.toMillis();
+        } else if (typeof userDoc.lastSeen.toDate === 'function') {
+          lastSeenMs = userDoc.lastSeen.toDate().getTime();
+        }
+        if (lastSeenMs > 0 && (now - lastSeenMs) > INACTIVE_THRESHOLD_MS) {
+          inactive = true;
+        }
+      }
+
       entries.push({
-        email:   email,
-        circles: normalizeCircles(data.circles),
-        pending: !adminState.usersByEmail[email]
+        email:      email,
+        circles:    normalizeCircles(data.circles),
+        pending:    pending,
+        inactive:   inactive,
+        uid:        userDoc ? (userDoc.uid || '') : '',
+        name:       userDoc ? (userDoc.name || userDoc.displayName || '') : '',
+        lastSeenMs: lastSeenMs
       });
     });
 
@@ -154,17 +179,26 @@ var renderAllowlistMembers = function() {
       ? '<span class="circle-tag circle-tag-empty">Not joined</span>'
       : '';
 
+    var inactiveBadge = entry.inactive
+      ? '<span class="circle-tag admin-inactive-badge">Inactive</span>'
+      : '';
+
     var resendBtn = entry.pending
       ? '<button class="btn btn-ghost" data-resend-email="' + escapeAttr(entry.email) + '">Resend</button>'
+      : '';
+
+    var nudgeBtn = entry.inactive
+      ? '<button class="btn btn-ghost" data-nudge-email="' + escapeAttr(entry.email) + '">Nudge</button>'
       : '';
 
     return '' +
       '<div class="card admin-member-row">' +
         '<div class="admin-member-meta">' +
           '<div class="admin-member-email">' + escapeHTML(entry.email) + '</div>' +
-          '<div class="member-circles">' + circleTags + pendingBadge + '</div>' +
+          '<div class="member-circles">' + circleTags + pendingBadge + inactiveBadge + '</div>' +
         '</div>' +
         resendBtn +
+        nudgeBtn +
         '<button class="btn btn-ghost" data-edit-email="' + escapeAttr(entry.email) + '">Edit</button>' +
         '<button class="btn btn-ghost admin-remove-btn" data-remove-email="' + escapeAttr(entry.email) + '">Remove</button>' +
       '</div>';
@@ -180,6 +214,10 @@ var renderAllowlistMembers = function() {
 
   list.querySelectorAll('[data-resend-email]').forEach(function(btn) {
     btn.addEventListener('click', function() { handleAdminResend(btn.dataset.resendEmail, btn); });
+  });
+
+  list.querySelectorAll('[data-nudge-email]').forEach(function(btn) {
+    btn.addEventListener('click', function() { handleAdminNudge(btn.dataset.nudgeEmail, btn); });
   });
 };
 
@@ -378,6 +416,229 @@ var handleAdminBulkInvite = function() {
   };
 
   processNext(0);
+};
+
+// ─── Admin: nudge ─────────────────────────────────────────────────────────────
+var showNudgeModal = function(email, name) {
+  return new Promise(function(resolve) {
+    var existing = document.getElementById('dialogBackdrop');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+
+    var displayName = name || email.split('@')[0] || 'there';
+    var defaultMessage = 'Hi ' + displayName + ', it\'s been a while! ' +
+      'There\'s been activity in Enclave — come check it out.';
+
+    var backdrop    = document.createElement('div');
+    var card        = document.createElement('div');
+    var title       = document.createElement('div');
+    var subtitle    = document.createElement('div');
+    var label       = document.createElement('label');
+    var textarea    = document.createElement('textarea');
+    var optionsRow  = document.createElement('div');
+    var emailLabel  = document.createElement('label');
+    var emailCheck  = document.createElement('input');
+    var emailText   = document.createElement('span');
+    var notifLabel  = document.createElement('label');
+    var notifCheck  = document.createElement('input');
+    var notifText   = document.createElement('span');
+    var actions     = document.createElement('div');
+    var cancelBtn   = document.createElement('button');
+    var sendBtn     = document.createElement('button');
+
+    backdrop.id        = 'dialogBackdrop';
+    backdrop.className = 'dialog-backdrop';
+
+    card.className = 'dialog-card';
+
+    title.className   = 'dialog-title';
+    title.textContent = 'Nudge ' + (name || email);
+
+    subtitle.className   = 'dialog-message';
+    subtitle.textContent = 'Send a friendly reminder by email and in-app notification.';
+
+    label.className   = 'profile-section-title';
+    label.textContent = 'Message';
+    label.htmlFor     = 'nudgeMessage';
+
+    textarea.id        = 'nudgeMessage';
+    textarea.className = 'edit-input edit-textarea';
+    textarea.rows      = 4;
+    textarea.maxLength = 500;
+    textarea.value     = defaultMessage;
+
+    optionsRow.className = 'admin-nudge-options';
+
+    emailCheck.type    = 'checkbox';
+    emailCheck.id      = 'nudgeSendEmail';
+    emailCheck.checked = true;
+    emailText.textContent = 'Send email';
+    emailLabel.appendChild(emailCheck);
+    emailLabel.appendChild(emailText);
+    emailLabel.className = 'admin-nudge-option';
+
+    notifCheck.type    = 'checkbox';
+    notifCheck.id      = 'nudgeSendNotif';
+    notifCheck.checked = true;
+    notifText.textContent = 'Send in-app notification';
+    notifLabel.appendChild(notifCheck);
+    notifLabel.appendChild(notifText);
+    notifLabel.className = 'admin-nudge-option';
+
+    optionsRow.appendChild(emailLabel);
+    optionsRow.appendChild(notifLabel);
+
+    actions.className = 'dialog-actions';
+
+    cancelBtn.type      = 'button';
+    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.textContent = 'Cancel';
+
+    sendBtn.type      = 'button';
+    sendBtn.className = 'btn btn-primary';
+    sendBtn.textContent = 'Send Nudge';
+
+    var close = function(result) {
+      if (backdrop.parentNode) {
+        backdrop.parentNode.removeChild(backdrop);
+      }
+      resolve(result);
+    };
+
+    cancelBtn.addEventListener('click', function() { close(null); });
+
+    sendBtn.addEventListener('click', function() {
+      var message = textarea.value.trim();
+      if (!message) {
+        showToast('Message is required.', 'error');
+        return;
+      }
+      close({
+        message:   message,
+        sendEmail: emailCheck.checked,
+        sendNotif: notifCheck.checked
+      });
+    });
+
+    backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) { close(null); }
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(sendBtn);
+
+    card.appendChild(title);
+    card.appendChild(subtitle);
+    card.appendChild(label);
+    card.appendChild(textarea);
+    card.appendChild(optionsRow);
+    card.appendChild(actions);
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    textarea.focus();
+    textarea.select();
+  });
+};
+
+var queueNudgeEmail = function(email, name, message) {
+  var inviteURL   = getAppURL();
+  var inviterName = (state.user && (state.user.displayName || state.user.email)) || 'Enclave Admin';
+  var displayName = name || email.split('@')[0] || 'there';
+  var subject     = inviterName + ' reminded you about Enclave';
+
+  var html =
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f5f7">' +
+    '<tr><td align="center" style="padding:24px 16px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">' +
+    '<tr><td bgcolor="#7c5cbf" style="padding:24px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td style="vertical-align:middle;">' +
+    '<img src="https://bobbynacario-design.github.io/enclave/icon-192.png" width="56" height="56" alt="Enclave" style="display:block;border:0;border-radius:12px;">' +
+    '</td>' +
+    '<td style="vertical-align:middle;padding-left:16px;">' +
+    '<span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:600;color:#ffffff;">Enclave</span>' +
+    '</td>' +
+    '</tr></table></td></tr>' +
+    '<tr><td style="padding:40px 32px 24px;">' +
+    '<h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:600;color:#1a1a1a;margin:0 0 8px 0;">Hey ' + escapeHTML(displayName) + '</h1>' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;font-style:italic;color:#6b6b6b;margin:0;">A quick note from ' + escapeHTML(inviterName) + '.</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 24px;">' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1a1a1a;line-height:1.6;margin:0;white-space:pre-wrap;">' + escapeHTML(message) + '</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:8px 32px 32px;" align="center">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td bgcolor="#7c5cbf" style="border-radius:8px;">' +
+    '<a href="' + escapeAttr(inviteURL) + '" target="_blank" style="display:inline-block;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Open Enclave</a>' +
+    '</td></tr></table>' +
+    '</td></tr>' +
+    '<tr><td style="border-top:1px solid #e5e5e5;padding:24px 32px;">' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6b6b6b;line-height:1.5;text-align:center;margin:0;">You received this because you are a member of Enclave.</p>' +
+    '</td></tr>' +
+    '</table></td></tr></table>';
+
+  var text =
+    'Hey ' + displayName + ',\n\n' +
+    message + '\n\n' +
+    'Open Enclave: ' + inviteURL + '\n\n' +
+    '— ' + inviterName;
+
+  return addDoc(collection(db, 'mail'), {
+    to: [email],
+    createdAt: serverTimestamp(),
+    metadata: {
+      type:        'nudge',
+      nudgedEmail: email,
+      nudgedBy:    state.user ? state.user.uid : ''
+    },
+    message: {
+      subject: subject,
+      text:    text,
+      html:    html
+    }
+  });
+};
+
+var handleAdminNudge = function(email, btn) {
+  if (!state.isAdmin || !email) return;
+  if (btn && btn.disabled) return;
+
+  var entry = adminState.allowlist.find(function(e) { return e.email === email; });
+  if (!entry) return;
+
+  showNudgeModal(email, entry.name).then(function(result) {
+    if (!result) return;
+    if (!result.sendEmail && !result.sendNotif) {
+      showToast('Pick at least one delivery method.', 'error');
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+    var tasks = [];
+
+    if (result.sendEmail) {
+      tasks.push(queueNudgeEmail(email, entry.name, result.message));
+    }
+
+    if (result.sendNotif && entry.uid) {
+      var actor = (state.user && (state.user.displayName || state.user.email)) || 'Enclave Admin';
+      tasks.push(writeNotification(entry.uid, 'nudge', result.message, {
+        page:   'feed',
+        params: {}
+      }));
+    }
+
+    Promise.all(tasks).then(function() {
+      showToast('Nudge sent.', 'success');
+    }).catch(function(err) {
+      logError('Failed to send nudge', err);
+      showToast('Nudge partially failed. Check console for details.', 'error');
+    }).finally(function() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Nudge'; }
+    });
+  });
 };
 
 var syncUserDocsForAllowlist = function(email, circles) {
