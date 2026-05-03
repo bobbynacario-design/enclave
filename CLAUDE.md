@@ -24,9 +24,32 @@ When changing any file under `src/`, `pages/`, `components/`, `style.css`, or `i
 4. Update both `?v=NNN` query strings in `index.html` (stylesheet link and app.js script tag) to match.
 5. The two locations must always agree. Never roll a version number backward.
 
-## Scope discipline
+## Scope discipline (strict)
 
-Do not modify files outside the explicit task scope. If you discover a bug or improvement opportunity in an adjacent file, surface it as a note at the end of the response — do not edit it without being asked.
+The deploy must contain ONLY the files explicitly required by the user's task. Nothing else ships. This applies whether changes are new or pre-existing.
+
+### Rules
+
+1. **One task, one commit, one deploy.** The commit pushed to main contains only files the task required. Do not bundle unrelated work under any "tidying history" rationale.
+
+2. **Pre-existing uncommitted changes do NOT ship.** If `git status` shows modified or untracked files unrelated to the current task, leave them as-is. Do not commit them. Do not stage them. Do not include them in the merge.
+
+3. **Use selective staging, never `git add .` or `git commit -a`.** Stage only the files the current task touched, by explicit path. After staging, run `git diff --cached --stat` and confirm the file list matches the task before committing.
+
+4. **If pre-existing changes block the workflow** (e.g. a rebase or merge needs a clean tree), use `git stash --include-untracked` to set them aside, complete the deploy, then `git stash pop` to restore them as uncommitted. Do NOT commit unrelated work to make the workflow proceed.
+
+5. **Adjacent improvements are notes, not edits.** If you spot a bug or improvement in a file outside scope, mention it at the end of the response. Do not touch the file. Wait to be asked.
+
+6. **No "while I'm here" edits.** No formatting fixes, lint cleanups, comment additions, or import reordering in files outside the explicit task scope.
+
+### Pre-push verification
+
+Immediately before pushing, run `git diff --cached --stat` and `git log -1 --stat`. Confirm:
+- Every file listed was explicitly part of the task.
+- No unrelated files were swept in.
+- If anything looks out of scope, STOP and report rather than push.
+
+If pre-existing uncommitted changes remain in the working tree after deploy, list them in the acceptance report so the user knows they're still there.
 
 ## Acceptance reporting
 
