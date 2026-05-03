@@ -15,7 +15,8 @@ import { escapeHTML, escapeAttr } from '../util/escape.js';
 import {
   circleLabel,
   renderCircleChecks,
-  getCheckedCircles
+  getCheckedCircles,
+  getInitials
 } from '../util/circles.js';
 import { logError } from '../util/log.js';
 
@@ -41,6 +42,8 @@ export const registerCirclesChangedHandler = function(fn) {
   circlesChangedHandler = fn;
 };
 
+var memberSearchQuery = '';
+
 // ─── Members: init ───────────────────────────────────────────────────────────
 export const initMembersPage = function() {
   loadMembers();
@@ -49,6 +52,23 @@ export const initMembersPage = function() {
   document.querySelectorAll('[data-action="close-profile"]').forEach(function(el) {
     el.addEventListener('click', closeProfile);
   });
+
+  // Close profile modal on Esc
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var modal = document.getElementById('profileModal');
+    if (modal && !modal.hidden) {
+      closeProfile();
+    }
+  });
+
+  var searchInput = document.getElementById('membersSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      memberSearchQuery = searchInput.value.trim().toLowerCase();
+      renderMembersList();
+    });
+  }
 };
 
 // ─── Members: load ───────────────────────────────────────────────────────────
@@ -87,7 +107,19 @@ var renderMembersList = function() {
     return;
   }
 
-  list.innerHTML = membersState.members.map(renderMemberCard).join('');
+  var visible = memberSearchQuery
+    ? membersState.members.filter(function(m) {
+        var hay = ((m.name || '') + ' ' + (m.role || '') + ' ' + (m.email || '')).toLowerCase();
+        return hay.indexOf(memberSearchQuery) !== -1;
+      })
+    : membersState.members;
+
+  if (visible.length === 0 && memberSearchQuery) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No matches</div><p class="empty-state-text">No members match "' + escapeHTML(memberSearchQuery) + '".</p></div>';
+    return;
+  }
+
+  list.innerHTML = visible.map(renderMemberCard).join('');
 
   // Wire card clicks
   list.querySelectorAll('.member-card').forEach(function(card) {
@@ -100,9 +132,9 @@ var renderMembersList = function() {
 // ─── Members: render single card ─────────────────────────────────────────────
 var renderMemberCard = function(m) {
   var nameEsc     = escapeHTML(m.name || 'Unknown');
-  var initialsEsc = escapeHTML(m.initials || '?');
+  var initialsEsc = escapeHTML(getInitials(m.name || m.email || '?'));
   var roleBio     = m.role || m.bio || '';
-  var roleBioEsc  = escapeHTML(roleBio || '—');
+  var roleBioEsc  = escapeHTML(roleBio);
 
   var avatarStyle = m.photoURL
     ? ' style="background-image:url(' + escapeAttr(m.photoURL) + ')"'
@@ -117,11 +149,15 @@ var renderMemberCard = function(m) {
     circleTags = '<span class="circle-tag circle-tag-empty">No circles</span>';
   }
 
+  var roleLineHtml = roleBioEsc
+    ? '<div class="member-role">' + roleBioEsc + '</div>'
+    : '';
+
   return '' +
     '<div class="member-card" data-uid="' + escapeAttr(m.uid) + '">' +
       '<div class="member-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
       '<div class="member-name">' + nameEsc + '</div>' +
-      '<div class="member-role">' + roleBioEsc + '</div>' +
+      roleLineHtml +
       '<div class="member-circles">' + circleTags + '</div>' +
     '</div>';
 };
@@ -136,7 +172,7 @@ var openProfile = function(uid) {
   if (!modal || !body) return;
 
   var nameEsc     = escapeHTML(member.name || 'Unknown');
-  var initialsEsc = escapeHTML(member.initials || '?');
+  var initialsEsc = escapeHTML(getInitials(member.name || member.email || '?'));
   var bioEsc      = escapeHTML(member.bio || 'No bio yet.');
   var roleEsc     = escapeHTML(member.role || 'Member');
 
@@ -252,11 +288,11 @@ var renderEditProfileForm = function(member) {
       '<div class="profile-section-title">Circles</div>' +
       circlesHTML +
     '</div>' +
-    '<div class="profile-section">' +
+    '<div class="profile-section profile-section-divider">' +
       '<div class="profile-section-title">Notifications</div>' +
       '<div class="notifications-control">' +
-        '<button type="button" id="notificationsToggleBtn" class="btn btn-ghost" style="font-size:13px;">Loading...</button>' +
-        '<div class="form-help" style="font-size:12px;color:var(--text-muted);margin-top:6px;">' +
+        '<button type="button" id="notificationsToggleBtn" class="btn btn-ghost notifications-toggle-btn">Loading...</button>' +
+        '<div class="form-help">' +
           'Get pushes for new messages, comments, mentions, and more.' +
         '</div>' +
       '</div>' +
