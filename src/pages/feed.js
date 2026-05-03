@@ -25,8 +25,8 @@ import { state, feedState, driveAttachment } from '../state.js';
 // Utilities
 import { escapeHTML, escapeAttr, linkifyText, extractFirstUrl, highlightMentions } from '../util/escape.js';
 import { relativeTime } from '../util/time.js';
-import { getVisibleCircles, getInitials, renderCircleOptions } from '../util/circles.js';
-import { FEED_PAGE_SIZE } from '../util/constants.js';
+import { getVisibleCircles, getInitials, renderCircleOptions, circleLabel } from '../util/circles.js';
+import { FEED_PAGE_SIZE, ALL_CIRCLES } from '../util/constants.js';
 import { logError } from '../util/log.js';
 
 // UI helpers
@@ -358,6 +358,12 @@ var renderFeedList = function() {
 
   var posts = getRenderedFeedPosts();
 
+  var drafts = {};
+  list.querySelectorAll('[data-comment-input]').forEach(function(input) {
+    var pid = input.dataset.commentInput;
+    if (pid && input.value) drafts[pid] = input.value;
+  });
+
   if (posts.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No posts yet</div><p class="empty-state-text">When someone shares an update, it will appear here.</p></div>';
   } else {
@@ -418,6 +424,11 @@ var renderFeedList = function() {
   }
 
   scrollToTargetPost();
+
+  Object.keys(drafts).forEach(function(pid) {
+    var input = list.querySelector('[data-comment-input="' + pid + '"]');
+    if (input) input.value = drafts[pid];
+  });
 };
 
 // ─── Feed: render single post card ───────────────────────────────────────────
@@ -435,14 +446,18 @@ var renderPostComments = function(postId, comments, authorId) {
       commentTime = relativeTime(comment.createdAt.toDate());
     }
 
+    var commentInitials = comment.authorName ? getInitials(comment.authorName) : '?';
     return '' +
       '<div class="post-comment">' +
-        '<div class="post-comment-meta">' +
-          '<span class="post-comment-author">' + commentAuthor + '</span>' +
-          '<span class="post-dot">&middot;</span>' +
-          '<span class="post-comment-time">' + escapeHTML(commentTime) + '</span>' +
+        '<div class="post-comment-avatar">' + escapeHTML(commentInitials) + '</div>' +
+        '<div class="post-comment-content">' +
+          '<div class="post-comment-meta">' +
+            '<span class="post-comment-author">' + commentAuthor + '</span>' +
+            '<span class="post-dot">&middot;</span>' +
+            '<span class="post-comment-time">' + escapeHTML(commentTime) + '</span>' +
+          '</div>' +
+          '<div class="post-comment-body">' + commentBody + '</div>' +
         '</div>' +
-        '<div class="post-comment-body">' + commentBody + '</div>' +
       '</div>';
   }).join('');
 
@@ -461,13 +476,9 @@ var renderPostComments = function(postId, comments, authorId) {
 };
 
 var renderPostCard = function(p) {
-  var circleLabels = {
-    'all':          'All',
-    'hustle-hub':   'Hustle Hub',
-    'work-network': 'Work Network',
-    'family':       'Family'
-  };
-  var circleLabel = circleLabels[p.circle] || p.circle || 'All';
+  var circleLabelText = p.circle === 'all'
+    ? 'All'
+    : circleLabel(p.circle || 'all');
 
   var time = (p.timestamp && typeof p.timestamp.toDate === 'function')
     ? relativeTime(p.timestamp.toDate())
@@ -488,13 +499,33 @@ var renderPostCard = function(p) {
     : 'post-action post-comment-btn';
   var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid);
   var deleteBtn = canDelete
-    ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">Delete</button>'
+    ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '" aria-label="Delete post">' +
+        '<svg class="post-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M3 6h18"></path>' +
+          '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>' +
+          '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+        '</svg>' +
+      '</button>'
     : '';
   var pinBtn = state.isAdmin
-    ? '<button class="post-action" data-pin-post="' + escapeAttr(p.id) + '">' + (p.isPinned ? 'Unpin' : 'Pin') + '</button>'
+    ? '<button class="post-action" data-pin-post="' + escapeAttr(p.id) + '" aria-label="' + (p.isPinned ? 'Unpin' : 'Pin') + '">' +
+        '<svg class="post-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<line x1="12" y1="17" x2="12" y2="22"></line>' +
+          '<path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>' +
+        '</svg>' +
+        '<span class="post-action-label">' + (p.isPinned ? 'Unpin' : 'Pin') + '</span>' +
+      '</button>'
     : '';
   var pinnedClass = p.isPinned ? ' post-pinned' : '';
-  var pinnedBadge = p.isPinned ? '<span class="post-pinned-badge">Pinned</span>' : '';
+  var pinnedBadge = p.isPinned
+    ? '<span class="post-pinned-badge">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+          '<line x1="12" y1="17" x2="12" y2="22"></line>' +
+          '<path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>' +
+        '</svg>' +
+        'Pinned' +
+      '</span>'
+    : '';
 
   return '' +
     '<div class="post-card' + pinnedClass + (feedState.targetPostId === p.id ? ' post-card-target' : '') + '" data-post-id="' + escapeAttr(p.id) + '">' +
@@ -504,7 +535,7 @@ var renderPostCard = function(p) {
         '<div class="post-meta">' +
           '<div class="post-author">' + nameEsc + '</div>' +
           '<div class="post-submeta">' +
-            '<span class="post-circle">' + circleLabel + '</span>' +
+            '<span class="post-circle">' + circleLabelText + '</span>' +
             '<span class="post-dot">&middot;</span>' +
             '<span class="post-time">' + time + '</span>' +
           '</div>' +
@@ -522,9 +553,27 @@ var renderPostCard = function(p) {
           '</a>'
         : '') +
       '<div class="post-actions">' +
-        '<button class="' + reactBtnClass + '" data-react-post="' + escapeAttr(p.id) + '">&#128077; ' + reacts.length + '</button>' +
-        '<button class="' + commentBtnClass + '" data-toggle-comments-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '">&#128172; ' + comments.length + '</button>' +
-        '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '">&#8599; Share</button>' +
+        '<button class="' + reactBtnClass + '" data-react-post="' + escapeAttr(p.id) + '" aria-label="React">' +
+          '<svg class="post-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M7 10v12"></path>' +
+            '<path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"></path>' +
+          '</svg>' +
+          '<span class="post-action-count">' + reacts.length + '</span>' +
+        '</button>' +
+        '<button class="' + commentBtnClass + '" data-toggle-comments-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '" aria-label="Comments">' +
+          '<svg class="post-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>' +
+          '</svg>' +
+          '<span class="post-action-count">' + comments.length + '</span>' +
+        '</button>' +
+        '<button class="post-action" data-share-post="' + escapeAttr(p.id) + '" aria-label="Share">' +
+          '<svg class="post-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>' +
+            '<polyline points="16 6 12 2 8 6"></polyline>' +
+            '<line x1="12" y1="2" x2="12" y2="15"></line>' +
+          '</svg>' +
+          '<span class="post-action-label">Share</span>' +
+        '</button>' +
         pinBtn +
         deleteBtn +
       '</div>' +
@@ -633,6 +682,14 @@ var handleReactPost = function(postId) {
 
     updateKnownPostReacts(postId, nextReacts);
     renderFeedList();
+
+    var justClickedBtn = document.querySelector('[data-react-post="' + postId + '"]');
+    if (justClickedBtn && justClickedBtn.classList.contains('post-action-active')) {
+      justClickedBtn.classList.add('post-react-just-clicked');
+      setTimeout(function() {
+        justClickedBtn.classList.remove('post-react-just-clicked');
+      }, 400);
+    }
 
     if (authorId && document.getElementById('profilePosts')) {
       loadProfileRecentPosts(authorId);
@@ -800,18 +857,10 @@ export const loadProfileRecentPosts = function(uid) {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-var getCircleDefinitions = function() {
-  return [
-    { id: 'hustle-hub',   label: 'Hustle Hub' },
-    { id: 'work-network', label: 'Work Network' },
-    { id: 'family',       label: 'Family' }
-  ];
-};
-
 var renderCirclePills = function() {
   return '<button class="pill active" data-filter="all">All</button>' +
-    getCircleDefinitions().map(function(circle) {
-      return '<button class="pill" data-filter="' + circle.id + '">' + escapeHTML(circle.label) + '</button>';
+    ALL_CIRCLES.map(function(id) {
+      return '<button class="pill" data-filter="' + escapeAttr(id) + '">' + escapeHTML(circleLabel(id)) + '</button>';
     }).join('');
 };
 

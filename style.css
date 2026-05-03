@@ -917,8 +917,8 @@ label {
 }
 
 .compose-avatar {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background-color: var(--accent);
   background-size: cover;
@@ -927,9 +927,8 @@ label {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  flex-shrink: 0;
 }
 
 .compose-circle {
@@ -1078,6 +1077,14 @@ label {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  position: relative;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.post-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
+  transform: translateY(-1px);
 }
 
 .post-card-target {
@@ -1091,13 +1098,22 @@ label {
 }
 
 .post-pinned-badge {
-  display: inline-block;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--accent);
-  margin-bottom: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  margin-bottom: 0;
 }
 
 .post-header {
@@ -1108,15 +1124,15 @@ label {
 }
 
 .post-avatar {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -1360,6 +1376,24 @@ label {
   border-radius: var(--radius);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.post-action-icon {
+  flex-shrink: 0;
+}
+
+.post-action-count {
+  font-variant-numeric: tabular-nums;
+  min-width: 14px;
+  text-align: left;
+}
+
+.post-action-danger:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .post-action:hover {
@@ -1370,6 +1404,25 @@ label {
 .post-action-active {
   color: var(--accent, #7F77DD);
   font-weight: 500;
+}
+
+.post-react-btn.post-action-active .post-action-icon {
+  color: var(--accent);
+  fill: var(--accent);
+}
+
+.post-react-btn.post-action-active.post-react-just-clicked .post-action-icon {
+  animation: post-react-bounce 0.32s ease;
+}
+
+.post-comment-btn.post-action-active {
+  background: rgba(124, 92, 191, 0.08);
+}
+
+@keyframes post-react-bounce {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
 }
 
 .post-comments {
@@ -1386,10 +1439,33 @@ label {
 }
 
 .post-comment {
+  display: flex;
+  gap: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.post-comment-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.post-comment-content {
+  flex: 1;
+  min-width: 0;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 8px 12px;
 }
 
 .post-comment-meta {
