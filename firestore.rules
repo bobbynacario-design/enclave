@@ -96,8 +96,8 @@ service cloud.firestore {
       allow create: if isAdmin() &&
         request.resource.data.to is list &&
         request.resource.data.message is map;
-      allow get: if isAdmin();
-      allow list, update, delete: if false;
+      allow get, list: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /users/{userId} {
