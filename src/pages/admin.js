@@ -178,7 +178,7 @@ var renderAllowlistMembers = function() {
   });
 
   list.querySelectorAll('[data-resend-email]').forEach(function(btn) {
-    btn.addEventListener('click', function() { handleAdminResend(btn.dataset.resendEmail); });
+    btn.addEventListener('click', function() { handleAdminResend(btn.dataset.resendEmail, btn); });
   });
 };
 
@@ -206,11 +206,6 @@ var handleAdminInvite = function() {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
 
-  var ref = doc(db, 'allowlist', email);
-  var existing = adminState.allowlist.find(function(entry) {
-    return entry.email === email;
-  });
-
   var payload = {
     email:     email,
     circles:   circles,
@@ -218,11 +213,7 @@ var handleAdminInvite = function() {
     updatedAt: serverTimestamp()
   };
 
-  if (!existing) {
-    payload.createdAt = serverTimestamp();
-  }
-
-  setDoc(ref, payload, { merge: true }).then(function() {
+  setDoc(doc(db, 'allowlist', email), payload, { merge: true }).then(function() {
     return syncUserDocsForAllowlist(email, circles);
   }).then(function() {
     return queueInviteEmail(email, circles);
@@ -276,6 +267,9 @@ var handleAdminEdit = function(email) {
   }).then(function(newCircles) {
     if (newCircles === null) return;
 
+    var old = entry.circles;
+    if (newCircles.length === old.length && newCircles.every(function(c) { return old.indexOf(c) !== -1; })) return;
+
     setDoc(doc(db, 'allowlist', email), { circles: newCircles, updatedAt: serverTimestamp() }, { merge: true }).then(function() {
       return syncUserDocsForAllowlist(email, newCircles);
     }).then(function() {
@@ -290,17 +284,22 @@ var handleAdminEdit = function(email) {
 };
 
 // ─── Admin: resend invite ─────────────────────────────────────────────────────
-var handleAdminResend = function(email) {
+var handleAdminResend = function(email, btn) {
   if (!state.isAdmin || !email) return;
+  if (btn && btn.disabled) return;
 
   var entry = adminState.allowlist.find(function(e) { return e.email === email; });
   if (!entry) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
   queueInviteEmail(email, entry.circles).then(function() {
     showToast('Invite email resent.', 'success');
   }).catch(function(err) {
     logError('Failed to resend invite', err);
     showToast('Failed to resend invite. Check console for details.', 'error');
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Resend'; }
   });
 };
 
@@ -351,12 +350,8 @@ var handleAdminBulkInvite = function() {
     if (i >= valid.length) { finish(); return; }
 
     var email = valid[i];
-    var existing = adminState.allowlist.find(function(e) { return e.email === email; });
 
-    var payload = { email: email, circles: circles, invitedBy: state.user.uid, updatedAt: serverTimestamp() };
-    if (!existing) { payload.createdAt = serverTimestamp(); }
-
-    setDoc(doc(db, 'allowlist', email), payload, { merge: true }).then(function() {
+    setDoc(doc(db, 'allowlist', email), { email: email, circles: circles, invitedBy: state.user.uid, updatedAt: serverTimestamp() }, { merge: true }).then(function() {
       return syncUserDocsForAllowlist(email, circles);
     }).then(function() {
       return queueInviteEmail(email, circles);
