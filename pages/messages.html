@@ -33,6 +33,7 @@
 
   <section class="messages-thread card">
     <div class="messages-thread-header">
+      <div class="messages-thread-header-avatar" id="messagesThreadHeaderAvatar"></div>
       <div>
         <div class="messages-thread-title" id="messagesThreadTitle">Select a member</div>
         <div class="messages-thread-subtitle text-muted" id="messagesThreadSubtitle">Choose someone to start chatting.</div>
@@ -47,15 +48,20 @@
     </div>
 
     <form class="messages-compose" id="messagesComposer">
-      <input
-        type="text"
+      <textarea
         class="messages-compose-input"
         id="messagesComposeInput"
-        maxlength="500"
+        maxlength="2000"
+        rows="1"
         placeholder="Write a message..."
         disabled
-      />
-      <button type="submit" class="btn" id="messagesSendBtn" disabled>Send</button>
+      ></textarea>
+      <button type="submit" class="messages-send-btn" id="messagesSendBtn" disabled aria-label="Send">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
     </form>
   </section>
 </div>

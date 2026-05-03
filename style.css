@@ -2063,16 +2063,22 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   width: 100%;
   border: none;
   border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
   background: transparent;
   text-align: left;
-  padding: 14px 16px;
+  padding: 14px 16px 14px 13px;
   cursor: pointer;
   transition: background 0.15s ease;
+  position: relative;
 }
 
-.messages-person:hover,
+.messages-person:hover {
+  background: var(--surface-2);
+}
+
 .messages-person.active {
   background: var(--surface-2);
+  border-left-color: var(--accent);
 }
 
 .messages-person-avatar {
@@ -2176,6 +2182,23 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 .messages-thread-header {
   padding: 20px 22px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.messages-thread-header-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .messages-thread-title {
@@ -2189,7 +2212,6 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   flex: 1;
   overflow-y: auto;
   padding: 18px 20px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent 220px);
 }
 
 .messages-empty-state {
@@ -2201,6 +2223,11 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   margin-bottom: 12px;
 }
 
+.message-bubble-row.grouped {
+  margin-bottom: 4px;
+  margin-top: -8px;
+}
+
 .message-bubble-row.mine {
   justify-content: flex-end;
 }
@@ -2209,13 +2236,22 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   max-width: min(78%, 560px);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 10px 12px;
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px;
 }
 
 .message-bubble-row.mine .message-bubble {
   background: rgba(127, 119, 221, 0.12);
   border-color: rgba(127, 119, 221, 0.28);
+  border-radius: 16px 16px 4px 16px;
+}
+
+.message-time-separator {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 16px 0 8px;
+  letter-spacing: 0.02em;
 }
 
 .message-bubble-body {
@@ -2243,6 +2279,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   gap: 10px;
   padding: 16px 20px 20px;
   border-top: 1px solid var(--border);
+  align-items: flex-end;
 }
 
 .messages-compose-input {
@@ -2255,11 +2292,44 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-family: var(--sans);
   font-size: 14px;
   padding: 11px 14px;
+  resize: none;
+  max-height: 160px;
+  line-height: 1.5;
+  overflow-y: auto;
 }
 
 .messages-compose-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.messages-send-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.08s ease;
+}
+
+.messages-send-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.messages-send-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.messages-send-btn:disabled {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 @media (max-width: 900px) {

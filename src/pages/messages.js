@@ -33,6 +33,23 @@ import { showToast } from '../ui/toast.js';
 import { writeNotification } from './notifications.js';
 
 // ─── Messages ────────────────────────────────────────────────────────────────
+var formatMessageTime = function(date) {
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var yesterday = new Date(today.getTime() - 86400000);
+  var msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var hours = date.getHours();
+  var mins = date.getMinutes();
+  var ampm = hours >= 12 ? 'PM' : 'AM';
+  var h = hours % 12 || 12;
+  var m = (mins < 10 ? '0' : '') + mins;
+  var timeStr = h + ':' + m + ' ' + ampm;
+  if (msgDay.getTime() === today.getTime()) return timeStr;
+  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday ' + timeStr;
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[date.getMonth()] + ' ' + date.getDate() + ', ' + timeStr;
+};
+
 var getConversationId = function(uidA, uidB) {
   return [uidA, uidB].sort().join('__');
 };
@@ -202,6 +219,18 @@ var renderMessagesThread = function() {
   if (!titleEl || !subtitleEl || !listEl || !inputEl || !sendBtn) return;
 
   var peer = findMessageMember(messagesState.activePeerId);
+
+  var headerAvatar = document.getElementById('messagesThreadHeaderAvatar');
+  if (headerAvatar) {
+    if (peer) {
+      headerAvatar.textContent = getInitials(peer.name || peer.email || '?');
+      headerAvatar.style.display = 'flex';
+    } else {
+      headerAvatar.textContent = '';
+      headerAvatar.style.display = 'none';
+    }
+  }
+
   if (!peer) {
     titleEl.textContent = 'Select a member';
     subtitleEl.textContent = 'Choose someone to start chatting.';
@@ -246,30 +275,47 @@ var renderMessagesThread = function() {
       (messagesState.loadingOlder ? 'Loading...' : 'Load older messages') + '</button></div>'
     : '';
 
-  listEl.innerHTML = loadMoreHtml + allMessages.map(function(message) {
+  var html = loadMoreHtml;
+  var previousMessage = null;
+
+  allMessages.forEach(function(message) {
     var mine = message.authorId === (state.user && state.user.uid);
-    var author = escapeHTML(message.authorName || 'Member');
-    var body = highlightMentions(linkifyText(escapeHTML(message.body || '')));
-    var time = 'just now';
+    var isGrouped = !!(previousMessage &&
+      previousMessage.authorId === message.authorId &&
+      (getFirestoreTimeMs(message.createdAt) - getFirestoreTimeMs(previousMessage.createdAt)) <= 300000);
+
     var isLatestOwn = mine && message.id === lastOwnMessageId;
     var seen = isLatestOwn && peerReadAtMs > 0 && getFirestoreTimeMs(message.createdAt) <= peerReadAtMs;
     var statusHtml = isLatestOwn
-      ? '<div class="message-bubble-status' + (seen ? ' seen' : '') + '">' + (seen ? 'Seen' : 'Sent') + '</div>'
+      ? '<div class="message-bubble-status' + (seen ? ' seen' : '') + '">' +
+          (seen ? '✓✓' : '✓') +
+        '</div>'
       : '';
 
-    if (message.createdAt && typeof message.createdAt.toDate === 'function') {
-      time = relativeTime(message.createdAt.toDate());
+    var body = highlightMentions(linkifyText(escapeHTML(message.body || '')));
+
+    var separatorHtml = '';
+    if (!isGrouped) {
+      var msgDate = message.createdAt && typeof message.createdAt.toDate === 'function'
+        ? message.createdAt.toDate()
+        : null;
+      if (msgDate) {
+        separatorHtml = '<div class="message-time-separator">' + escapeHTML(formatMessageTime(msgDate)) + '</div>';
+      }
     }
 
-    return '' +
-      '<div class="message-bubble-row' + (mine ? ' mine' : '') + '">' +
+    html += separatorHtml +
+      '<div class="message-bubble-row' + (mine ? ' mine' : '') + (isGrouped ? ' grouped' : '') + '">' +
         '<div class="message-bubble">' +
-          '<div class="message-bubble-meta">' + author + ' · ' + escapeHTML(time) + '</div>' +
           '<div class="message-bubble-body">' + body + '</div>' +
           statusHtml +
         '</div>' +
       '</div>';
-  }).join('');
+
+    previousMessage = message;
+  });
+
+  listEl.innerHTML = html;
 
   // Wire load older button
   var olderBtn = document.getElementById('loadOlderMessagesBtn');
@@ -540,6 +586,7 @@ var handleSendMessage = function() {
     }
     markConversationRead(conversationId);
     input.value = '';
+    input.style.height = 'auto';
     var actor = state.user.displayName || state.user.email || 'Member';
     try {
       writeNotification(peer.uid, 'message', actor + ' sent you a message', {
@@ -565,6 +612,22 @@ export const initMessagesPage = function() {
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       handleSendMessage();
+    });
+  }
+
+  var input = document.getElementById('messagesComposeInput');
+  if (input) {
+    var autosize = function() {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+    };
+    input.addEventListener('input', autosize);
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
     });
   }
 
