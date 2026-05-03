@@ -43,6 +43,15 @@ import { openDrivePicker, registerPickerHandler } from '../ui/drivePicker.js';
 // Cross-page
 import { writeNotification } from './notifications.js';
 
+var statusLabel = function(status) {
+  var labels = {
+    'active':    'Active',
+    'on-hold':   'On Hold',
+    'completed': 'Completed'
+  };
+  return labels[status] || status || 'Active';
+};
+
 // ─── Drive picker handler ────────────────────────────────────────────────────
 
 registerPickerHandler('project', function(file) {
@@ -189,9 +198,6 @@ var subscribeProjectCollections = function(projectId) {
 
 // ─── Projects: detail view ──────────────────────────────────────────────────
 var renderRecoveryCard = function(detailEl, opts) {
-  // opts: { title: string, message: string, idSuffix: string }
-  // Mounts the card HTML into detailEl and wires up all click handlers.
-  // No return value.
   if (!detailEl) return;
 
   opts = opts || {};
@@ -204,38 +210,40 @@ var renderRecoveryCard = function(detailEl, opts) {
   var recoveryRelinkCancelId = 'recoveryRelinkCancel' + opts.idSuffix;
 
   detailEl.innerHTML =
-    '<div class="card" style="max-width:520px;">' +
-      '<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">' +
-        '<div style="font-size:28px;flex-shrink:0;line-height:1;">⚠️</div>' +
+    '<div class="recovery-card">' +
+      '<div class="recovery-card-header">' +
+        '<svg class="recovery-card-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>' +
+          '<line x1="12" y1="9" x2="12" y2="13"></line>' +
+          '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+        '</svg>' +
         '<div>' +
-          '<h3 style="margin:0 0 5px;font-size:16px;font-weight:600;">' + opts.title + '</h3>' +
-          '<p class="text-muted" style="margin:0;font-size:13px;line-height:1.6;">' +
-            opts.message +
-          '</p>' +
+          '<h3 class="recovery-card-title">' + escapeHTML(opts.title || 'Could not load this project') + '</h3>' +
+          '<p class="recovery-card-message">' + escapeHTML(opts.message || '') + '</p>' +
         '</div>' +
       '</div>' +
-      '<div style="padding:12px 14px;border-radius:8px;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);margin-bottom:18px;font-size:12px;line-height:1.7;" class="text-muted">' +
-        '<strong style="color:#C8A96E;">To reconnect:</strong> Open the Strategy app and use ' +
+      '<div class="recovery-card-tip">' +
+        '<strong>To reconnect:</strong> Open the Strategy app and use ' +
         '<strong>Create Collaboration Space</strong> or <strong>Relink Existing</strong> to re-establish the bridge.' +
       '</div>' +
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
-        '<a href="' + STRATEGY_APP_URL + '" target="forensicBiStrategy" ' +
-           'style="display:inline-block;background:#C8A96E;color:#0D0F14;border-radius:6px;padding:8px 16px;' +
-                  'text-decoration:none;font-size:13px;font-weight:700;flex-shrink:0;">' +
-          '↗ Open Strategy' +
+      '<div class="recovery-card-actions">' +
+        '<a href="' + STRATEGY_APP_URL + '" target="forensicBiStrategy" class="btn btn-primary">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;">' +
+            '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>' +
+            '<polyline points="15 3 21 3 21 9"></polyline>' +
+            '<line x1="10" y1="14" x2="21" y2="3"></line>' +
+          '</svg>' +
+          'Open Strategy' +
         '</a>' +
-        '<button id="' + recoveryBackId + '" class="btn btn-ghost" style="font-size:13px;">Browse Projects</button>' +
-        '<button id="' + recoveryRelinkBtnId + '" class="btn btn-ghost" style="font-size:13px;">↻ Try another ID</button>' +
+        '<button id="' + recoveryBackId + '" class="btn btn-ghost">Browse Projects</button>' +
+        '<button id="' + recoveryRelinkBtnId + '" class="btn btn-ghost">Try another ID</button>' +
       '</div>' +
-      '<div id="' + recoveryRelinkFormId + '" style="display:none;">' +
-        '<p class="text-muted" style="margin:0 0 8px;font-size:12px;">Paste a project ID to load it directly:</p>' +
-        '<div style="display:flex;gap:8px;">' +
-          '<input id="' + recoveryRelinkInputId + '" type="text" placeholder="Project ID (e.g. abc123…)" ' +
-                 'style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
-                        'color:var(--text);padding:8px 12px;font-size:13px;outline:none;" />' +
-          '<button id="' + recoveryRelinkGoId + '" style="background:#C8A96E;border:none;color:#0D0F14;border-radius:6px;' +
-                                               'padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">Go →</button>' +
-          '<button id="' + recoveryRelinkCancelId + '" class="btn btn-ghost" style="font-size:13px;flex-shrink:0;">Cancel</button>' +
+      '<div id="' + recoveryRelinkFormId + '" class="recovery-relink-form" hidden>' +
+        '<p class="text-muted recovery-relink-hint">Paste a project ID to load it directly:</p>' +
+        '<div class="recovery-relink-row">' +
+          '<input id="' + recoveryRelinkInputId + '" type="text" class="edit-input" placeholder="Project ID (e.g. abc123…)" />' +
+          '<button id="' + recoveryRelinkGoId + '" class="btn btn-primary">Go</button>' +
+          '<button id="' + recoveryRelinkCancelId + '" class="btn btn-ghost">Cancel</button>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -257,11 +265,10 @@ var renderRecoveryCard = function(detailEl, opts) {
   var recoveryRelinkBtn = document.getElementById(recoveryRelinkBtnId);
   if (recoveryRelinkBtn) recoveryRelinkBtn.onclick = function() {
     var form = document.getElementById(recoveryRelinkFormId);
-    if (form) {
-      form.style.display = form.style.display === 'none' ? 'block' : 'none';
-      var inp = document.getElementById(recoveryRelinkInputId);
-      if (inp && form.style.display !== 'none') inp.focus();
-    }
+    if (!form) return;
+    form.hidden = !form.hidden;
+    var inp = document.getElementById(recoveryRelinkInputId);
+    if (inp && !form.hidden) inp.focus();
   };
 
   var recoveryRelinkGo = document.getElementById(recoveryRelinkGoId);
@@ -278,12 +285,15 @@ var renderRecoveryCard = function(detailEl, opts) {
   var recoveryRelinkCancel = document.getElementById(recoveryRelinkCancelId);
   if (recoveryRelinkCancel) recoveryRelinkCancel.onclick = function() {
     var form = document.getElementById(recoveryRelinkFormId);
-    if (form) form.style.display = 'none';
+    if (form) form.hidden = true;
   };
 
   var recoveryRelinkInput = document.getElementById(recoveryRelinkInputId);
   if (recoveryRelinkInput) recoveryRelinkInput.onkeydown = function(e) {
-    if (e.key === 'Enter') { var go = document.getElementById(recoveryRelinkGoId); if (go) go.click(); }
+    if (e.key === 'Enter') {
+      var go = document.getElementById(recoveryRelinkGoId);
+      if (go) go.click();
+    }
   };
 };
 
@@ -399,7 +409,9 @@ var renderProjectDetail = function(p) {
     : '';
 
   var tasksHtml = sortedTasks.length === 0
-    ? '<p class="text-muted" style="font-size:13px;">' + (totalTasks === 0 ? 'No tasks yet. Add one to get started.' : 'No tasks match this filter.') + '</p>'
+    ? (totalTasks === 0
+        ? '<div class="empty-state"><div class="empty-state-title">No tasks yet</div><p class="empty-state-text">Add one to get started.</p></div>'
+        : '<div class="empty-state"><div class="empty-state-title">No tasks match this filter</div><p class="empty-state-text">Try a different filter.</p></div>')
     : sortedTasks.map(function(t) {
         var assigneeName = t.assigneeName || 'Unassigned';
         var statusCls = 'task-status task-status-' + (t.status || 'todo');
@@ -426,18 +438,27 @@ var renderProjectDetail = function(p) {
             '<span class="task-assignee">' + escapeHTML(assigneeName) + '</span>' +
           '</div>' +
           dueDateHtml +
-          (canEditTask ? '<button class="task-edit-btn" data-task-edit="' + escapeAttr(t.id) + '" title="Edit task">&#9998;</button>' : '') +
-          (canEditTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task">&times;</button>' : '') +
+          (canEditTask ? '<button class="task-edit-btn" data-task-edit="' + escapeAttr(t.id) + '" title="Edit task" aria-label="Edit task">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>' +
+            '</button>' : '') +
+          (canEditTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task" aria-label="Delete task">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
+            '</button>' : '') +
         '</div>';
       }).join('');
 
   // Files
   var files = getProjectFilesForRender(p);
   var filesHtml = files.length === 0
-    ? '<p class="text-muted" style="font-size:13px;">No files attached yet.</p>'
+    ? '<div class="empty-state"><div class="empty-state-title">No files yet</div><p class="empty-state-text">Attach files from Drive to share with the team.</p></div>'
     : files.map(function(f) {
         return '<div class="project-file-row">' +
-          (f.iconUrl ? '<img src="' + escapeAttr(f.iconUrl) + '" width="18" height="18" alt="" />' : '&#128196;') +
+          (f.iconUrl
+            ? '<img src="' + escapeAttr(f.iconUrl) + '" width="18" height="18" alt="" />'
+            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);flex-shrink:0;">' +
+                '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>' +
+                '<polyline points="14 2 14 8 20 8"></polyline>' +
+              '</svg>') +
           '<a href="' + escapeAttr(f.fileUrl) + '" target="_blank" rel="noopener">' + escapeHTML(f.fileName || 'File') + '</a>' +
           '<span class="project-file-meta">by ' + escapeHTML(f.addedByName || 'Member') + '</span>' +
         '</div>';
@@ -445,7 +466,9 @@ var renderProjectDetail = function(p) {
 
   // Comments / discussion
   var comments = getProjectCommentsForRender(p);
-  var commentsHtml = comments.map(function(c) {
+  var commentsHtml = comments.length === 0
+    ? '<div class="empty-state"><div class="empty-state-title">No discussion yet</div><p class="empty-state-text">Start the conversation below.</p></div>'
+    : comments.map(function(c) {
     var cTime = (c.createdAt && typeof c.createdAt.toDate === 'function')
       ? relativeTime(c.createdAt.toDate())
       : 'just now';
@@ -457,29 +480,41 @@ var renderProjectDetail = function(p) {
         '<div class="project-comment-text">' + highlightMentions(linkifyText(escapeHTML(c.body || ''))) + '</div>' +
       '</div>' +
     '</div>';
-  }).join('');
+    }).join('');
 
   detailEl.innerHTML = '' +
     '<div class="project-detail-header">' +
       '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
-        '<button class="project-detail-back" id="projectBackBtn" style="margin-bottom:0;">&larr; Back to Projects</button>' +
+        '<button class="project-detail-back" id="projectBackBtn">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<line x1="19" y1="12" x2="5" y2="12"></line>' +
+            '<polyline points="12 19 5 12 12 5"></polyline>' +
+          '</svg>' +
+          '<span>Back to Projects</span>' +
+        '</button>' +
         (p.originApp === 'roadmap' ?
           '<a href="' + STRATEGY_APP_URL + '" target="forensicBiStrategy" ' +
              'style="display:inline-flex;align-items:center;gap:4px;background:#C8A96E18;border:1px solid #C8A96E40;' +
                     'color:#C8A96E;border-radius:20px;padding:3px 12px;text-decoration:none;font-size:11px;font-weight:600;">' +
-            '&#x2197; Open Strategy' +
+            'Open Strategy' +
           '</a>'
         : '') +
       '</div>' +
       '<div class="project-detail-title">' + escapeHTML(p.name || 'Untitled') + '</div>' +
-      '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
-      '<span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:11px;font-family:monospace;color:var(--text-muted);background:var(--surface-2,#1e2330);border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;" title="Click to copy project ID" id="projectIdChip">' +
-        'ID: ' + escapeHTML(p.id) +
-        ' <span style="font-size:10px;opacity:0.6;">&#x2398;</span>' +
-      '</span>' +
+      '<span class="' + statusClass + '">' + escapeHTML(statusLabel(p.status)) + '</span>' +
+      '<button type="button" class="project-id-chip" id="projectIdChip" title="Click to copy project ID">' +
+        '<span class="project-id-chip-text">ID: ' + escapeHTML(p.id) + '</span>' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>' +
+          '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' +
+        '</svg>' +
+      '</button>' +
       (p.description ? '<div class="project-detail-desc">' + escapeHTML(p.description) + '</div>' : '') +
       (canEdit ? '<div class="project-detail-actions">' +
-        '<button class="btn btn-ghost" id="projectEditBtn">✏ Edit / Members</button>' +
+        '<button class="btn btn-ghost" id="projectEditBtn">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>' +
+          'Edit / Members' +
+        '</button>' +
         (canDelete ? '<button class="btn btn-ghost post-action-danger" id="projectDeleteBtn">Delete</button>' : '') +
       '</div>' : '') +
     '</div>' +
@@ -503,28 +538,38 @@ var renderProjectDetail = function(p) {
     '</div>' +
 
     '<div class="project-detail-section">' +
-      '<h3>Members' + (canEdit ? ' <button class="btn btn-ghost" id="projectManageMembersBtn" style="font-size:11px;padding:2px 10px;margin-left:8px;vertical-align:middle;">+ Manage</button>' : '') + '</h3>' +
+      '<h3>Members' + (canEdit ? ' <button class="btn btn-ghost project-manage-btn" id="projectManageMembersBtn">+ Manage</button>' : '') + '</h3>' +
       '<div class="project-members-list">' + membersHtml + '</div>' +
     '</div>' +
 
     '<div class="project-detail-section">' +
       '<h3>Files</h3>' +
       '<div class="project-files-list">' + filesHtml + '</div>' +
-      '<button class="btn btn-ghost" id="projectAttachFileBtn" style="margin-top:8px;">&#128193; Attach from Drive</button>' +
+      '<button class="btn btn-ghost project-attach-btn" id="projectAttachFileBtn">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>' +
+        'Attach from Drive' +
+      '</button>' +
     '</div>' +
 
     '<div class="project-detail-section project-activity-section">' +
       '<h3>Activity</h3>' +
       '<div class="project-activity-log">' +
         (projectsState.detailActivity.length === 0
-          ? '<p class="text-muted" style="font-size:13px;">No activity yet.</p>'
+          ? '<div class="empty-state"><div class="empty-state-title">No activity yet</div><p class="empty-state-text">Project actions will show up here as they happen.</p></div>'
           : projectsState.detailActivity.map(function(a) {
               var aTime = (a.createdAt && typeof a.createdAt.toDate === 'function')
                 ? relativeTime(a.createdAt.toDate())
                 : 'just now';
-              var icon = a.action === 'status' ? '&#9654;' : a.action === 'created' ? '&#43;' : '&#9998;';
+              var activityIconSvg;
+              if (a.action === 'status') {
+                activityIconSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+              } else if (a.action === 'created') {
+                activityIconSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+              } else {
+                activityIconSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+              }
               return '<div class="activity-entry">' +
-                '<span class="activity-icon">' + icon + '</span>' +
+                '<span class="activity-icon">' + activityIconSvg + '</span>' +
                 '<span class="activity-text"><strong>' + escapeHTML(a.authorName || 'Member') + '</strong> ' + escapeHTML(a.detail || a.action || '') + '</span>' +
                 '<span class="activity-time">' + escapeHTML(aTime) + '</span>' +
               '</div>';
@@ -545,9 +590,12 @@ var renderProjectDetail = function(p) {
   var idChip = document.getElementById('projectIdChip');
   if (idChip) idChip.onclick = function() {
     navigator.clipboard.writeText(p.id).then(function() {
-      idChip.textContent = 'Copied!';
+      var textSpan = idChip.querySelector('.project-id-chip-text');
+      if (!textSpan) return;
+      var originalText = textSpan.textContent;
+      textSpan.textContent = 'Copied!';
       setTimeout(function() {
-        idChip.innerHTML = 'ID: ' + p.id + ' <span style="font-size:10px;opacity:0.6;">&#x2398;</span>';
+        textSpan.textContent = originalText;
       }, 1500);
     });
   };
@@ -1064,6 +1112,33 @@ var handleAddTask = function(projectId, taskData) {
   });
 };
 
+// ─── Projects: member stack helper ──────────────────────────────────────────
+var renderMemberStack = function(p) {
+  var memberIds = Array.isArray(p.memberIds) ? p.memberIds : [];
+  var memberNames = p.memberNames || {};
+
+  if (memberIds.length === 0) {
+    return '<div class="project-card-members"><span class="text-muted" style="font-size:11px;">No members</span></div>';
+  }
+
+  var visibleIds = memberIds.slice(0, 4);
+  var remaining = memberIds.length - visibleIds.length;
+
+  var avatarsHtml = visibleIds.map(function(uid) {
+    var name = memberNames[uid] || 'Member';
+    var initials = getInitials(name);
+    return '<div class="project-card-member-avatar" title="' + escapeAttr(name) + '">' +
+      escapeHTML(initials) +
+    '</div>';
+  }).join('');
+
+  var moreHtml = remaining > 0
+    ? '<div class="project-card-member-more">+' + remaining + '</div>'
+    : '';
+
+  return '<div class="project-card-members">' + avatarsHtml + moreHtml + '</div>';
+};
+
 // ─── Projects: list subscription ────────────────────────────────────────────
 var subscribeProjectsList = function() {
   if (!state.user) return;
@@ -1104,15 +1179,14 @@ var renderProjectsList = function() {
 
   list.innerHTML = projectsState.projects.map(function(p) {
     var statusClass = 'project-status project-status-' + (p.status || 'active').replace(/\s/g, '-');
-    var memberCount = Array.isArray(p.memberIds) ? p.memberIds.length : 0;
     var desc = escapeHTML((p.description || '').substring(0, 120));
     return '' +
       '<div class="project-card" data-project-card="' + escapeAttr(p.id) + '">' +
         '<div class="project-card-name">' + escapeHTML(p.name || 'Untitled') + '</div>' +
         (desc ? '<div class="project-card-desc">' + desc + '</div>' : '') +
         '<div class="project-card-footer">' +
-          '<span class="' + statusClass + '">' + escapeHTML(p.status || 'active') + '</span>' +
-          '<span>' + memberCount + ' member' + (memberCount !== 1 ? 's' : '') + '</span>' +
+          '<span class="' + statusClass + '">' + escapeHTML(statusLabel(p.status)) + '</span>' +
+          renderMemberStack(p) +
           '<span class="project-card-tasks" data-task-count-for="' + escapeAttr(p.id) + '"></span>' +
         '</div>' +
       '</div>';
