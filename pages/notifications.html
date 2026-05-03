@@ -3,6 +3,31 @@
   <button class="btn btn-ghost" id="markAllReadBtn">Mark all read</button>
 </div>
 
+<div class="filter-pills" id="notifFilterPills">
+  <button class="pill active" data-notif-filter="all">All</button>
+  <button class="pill" data-notif-filter="unread">Unread</button>
+</div>
+
 <div id="notificationsList">
-  <p class="text-muted">Loading...</p>
+  <div class="notif-skeleton" aria-hidden="true">
+    <div class="skeleton skeleton-icon"></div>
+    <div class="skeleton-stack">
+      <div class="skeleton skeleton-line" style="width:70%"></div>
+      <div class="skeleton skeleton-line" style="width:30%"></div>
+    </div>
+  </div>
+  <div class="notif-skeleton" aria-hidden="true">
+    <div class="skeleton skeleton-icon"></div>
+    <div class="skeleton-stack">
+      <div class="skeleton skeleton-line" style="width:55%"></div>
+      <div class="skeleton skeleton-line" style="width:25%"></div>
+    </div>
+  </div>
+  <div class="notif-skeleton" aria-hidden="true">
+    <div class="skeleton skeleton-icon"></div>
+    <div class="skeleton-stack">
+      <div class="skeleton skeleton-line" style="width:65%"></div>
+      <div class="skeleton skeleton-line" style="width:35%"></div>
+    </div>
+  </div>
 </div>

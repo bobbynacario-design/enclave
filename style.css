@@ -3178,6 +3178,53 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-size: 11px;
   color: var(--text-muted);
 }
+.notif-item .notif-mark-read {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  line-height: 1;
+}
+.notif-item:hover .notif-mark-read {
+  opacity: 1;
+}
+.notif-mark-read:hover {
+  color: var(--accent);
+}
+.notif-date-group {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 12px 4px 4px;
+  margin-bottom: 4px;
+}
+.notif-date-group:first-child {
+  padding-top: 0;
+}
+.notif-skeleton {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+.skeleton-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
 
 /* ─── Phase 3.2.2: Mobile typography pass ────────────────────────────────── */
 /* All overrides are mobile-only (≤768px). Desktop styles are untouched.     */
