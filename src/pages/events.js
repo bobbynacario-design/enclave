@@ -85,6 +85,17 @@ const parseDateValue = function(value) {
   return date;
 };
 
+var formatEventDateBlock = function(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    return { month: 'TBD', day: '—', weekday: '' };
+  }
+  return {
+    month:   date.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(),
+    day:     String(date.getDate()),
+    weekday: date.toLocaleDateString(undefined, { weekday: 'short' })
+  };
+};
+
 const formatDateButtonLabel = function(value) {
   var date = parseDateValue(value);
   if (!date) return 'Select a date';
@@ -322,30 +333,7 @@ export const loadPanelEvents = function() {
 // ─── Events: init ────────────────────────────────────────────────────────────
 export const initEventsPage = function() {
   var composer = document.getElementById('eventAdminComposer');
-  var createBtn = document.getElementById('createEventBtn');
-  if (createBtn) {
-    createBtn.hidden = true;
-    createBtn.addEventListener('click', function() {
-      window.enclaveCreateEvent();
-    });
-  }
 
-  var modalCloseBtn = document.querySelector('#eventModal .profile-modal-close');
-  if (modalCloseBtn) {
-    modalCloseBtn.addEventListener('click', function() {
-      window.enclaveCloseEvent();
-    });
-  }
-
-  var modalBackdrop = document.querySelector('#eventModal .profile-modal-backdrop');
-  if (modalBackdrop) {
-    modalBackdrop.addEventListener('click', function() {
-      window.enclaveCloseEvent();
-    });
-  }
-
-  // Always render the composer if user is signed in. Firestore rules enforce
-  // admin-only writes — non-admins will get a clear permission error.
   if (composer) {
     composer.innerHTML = '';
   }
@@ -436,7 +424,7 @@ const bindEventRsvpButtons = function(container) {
       if (!btn) return;
 
       btn.classList.add('rsvped');
-      btn.textContent = rsvpButtonLabel(ev.rsvpCount, true);
+      btn.innerHTML = rsvpButtonLabel(ev.rsvpCount, true);
     }).catch(function() { /* ignore */ });
   });
 };
@@ -495,22 +483,26 @@ const renderEventCard = function(ev, opts) {
   var circleLbl   = escapeHTML(circleLabel(ev.circle || 'all'));
   var descEsc     = escapeHTML(ev.description || '');
 
-  var when = 'TBD';
-  if (ev.date && typeof ev.date.toDate === 'function') {
-    var d = ev.date.toDate();
-    when = d.toLocaleDateString(undefined, {
-      weekday: 'short', month: 'short', day: 'numeric'
-    }) + ' · ' + d.toLocaleTimeString(undefined, {
-      hour: 'numeric', minute: '2-digit'
-    });
-  }
+  var eventDate = (ev.date && typeof ev.date.toDate === 'function') ? ev.date.toDate() : null;
+  var dateBlock = formatEventDateBlock(eventDate);
+  var timeStr   = eventDate
+    ? eventDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : 'TBD';
 
   var rsvpCount = (typeof ev.rsvpCount === 'number') ? ev.rsvpCount : 0;
   var statusHtml = opts.isPast
     ? '<span class="event-status-label">Past Event</span>'
     : '';
   var icsBtn = ev.id
-    ? '<button class="btn btn-ghost" data-ics="' + escapeAttr(ev.id) + '">Add to calendar</button>'
+    ? '<button class="btn btn-ghost event-ics-btn" data-ics="' + escapeAttr(ev.id) + '" aria-label="Add to calendar">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>' +
+          '<line x1="16" y1="2" x2="16" y2="6"></line>' +
+          '<line x1="8" y1="2" x2="8" y2="6"></line>' +
+          '<line x1="3" y1="10" x2="21" y2="10"></line>' +
+        '</svg>' +
+        '<span>Add to calendar</span>' +
+      '</button>'
     : '';
   var actionsHtml = opts.isPast
     ? '<div class="event-actions event-actions-static">' +
@@ -524,19 +516,40 @@ const renderEventCard = function(ev, opts) {
 
   return '' +
     '<div class="event-card' + (opts.isPast ? ' event-card-past' : '') + '">' +
-      '<div class="event-card-header">' +
-        '<div>' +
-          '<div class="event-title">' + titleEsc + '</div>' +
-          statusHtml +
+      '<div class="event-card-body">' +
+        '<div class="event-date-block' + (opts.isPast ? ' event-date-block-past' : '') + '">' +
+          '<div class="event-date-month">' + escapeHTML(dateBlock.month) + '</div>' +
+          '<div class="event-date-day">'   + escapeHTML(dateBlock.day)   + '</div>' +
+          '<div class="event-date-weekday">' + escapeHTML(dateBlock.weekday) + '</div>' +
         '</div>' +
-        '<span class="post-circle">' + circleLbl + '</span>' +
+        '<div class="event-card-content">' +
+          '<div class="event-card-header">' +
+            '<div>' +
+              '<div class="event-title">' + titleEsc + '</div>' +
+              statusHtml +
+            '</div>' +
+            '<span class="event-circle-pill">' + circleLbl + '</span>' +
+          '</div>' +
+          '<div class="event-meta">' +
+            '<div class="event-meta-row">' +
+              '<svg class="event-meta-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<circle cx="12" cy="12" r="10"></circle>' +
+                '<polyline points="12 6 12 12 16 14"></polyline>' +
+              '</svg>' +
+              '<span>' + escapeHTML(timeStr) + '</span>' +
+            '</div>' +
+            '<div class="event-meta-row">' +
+              '<svg class="event-meta-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>' +
+                '<circle cx="12" cy="10" r="3"></circle>' +
+              '</svg>' +
+              '<span>' + locationEsc + '</span>' +
+            '</div>' +
+          '</div>' +
+          (descEsc ? '<div class="event-desc">' + descEsc + '</div>' : '') +
+          actionsHtml +
+        '</div>' +
       '</div>' +
-      '<div class="event-meta">' +
-        '<div class="event-meta-row">&#128197; ' + escapeHTML(when) + '</div>' +
-        '<div class="event-meta-row">&#128205; ' + locationEsc + '</div>' +
-      '</div>' +
-      (descEsc ? '<div class="event-desc">' + descEsc + '</div>' : '') +
-      actionsHtml +
     '</div>';
 };
 
@@ -585,7 +598,7 @@ const handleRsvp = function(eventId, btn) {
   }).then(function(result) {
     setLocalEventRsvpCount(eventId, result.count);
     btn.classList.toggle('rsvped', result.isRsvped);
-    btn.textContent = rsvpButtonLabel(result.count, result.isRsvped);
+    btn.innerHTML = rsvpButtonLabel(result.count, result.isRsvped);
     btn.disabled = false;
 
     // Notify event creator on RSVP (not un-RSVP)
@@ -601,138 +614,6 @@ const handleRsvp = function(eventId, btn) {
     logError('Failed to update RSVP', err);
     showToast('Failed to update RSVP. Check console for details.', 'error');
     btn.disabled = false;
-  });
-};
-
-// ─── Events: create event modal (admin only) ────────────────────────────────
-const openCreateEventModal = function() {
-  if (!state.isAdmin) return;
-  var modal = document.getElementById('eventModal');
-  var body  = document.getElementById('eventModalBody');
-  if (!modal || !body) return;
-
-  // Default to tomorrow 7pm
-  var tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  var defaultDate = tomorrow.toISOString().slice(0, 10);
-
-  body.innerHTML =
-    '<div class="profile-header">' +
-      '<div class="profile-header-meta">' +
-        '<h2 class="profile-name">Create Event</h2>' +
-        '<p class="text-muted">Add a new gathering to the enclave.</p>' +
-      '</div>' +
-    '</div>' +
-    '<div class="profile-section">' +
-      '<label class="profile-section-title" for="evTitle">Title</label>' +
-      '<input type="text" id="evTitle" class="edit-input" maxlength="80" placeholder="e.g. Poker Night" />' +
-    '</div>' +
-    '<div class="profile-section event-date-row">' +
-      '<div style="flex:1;">' +
-        renderDatePickerField('evDate', 'Date', defaultDate) +
-      '</div>' +
-      '<div style="flex:1;">' +
-        '<label class="profile-section-title" for="evTime">Time</label>' +
-        '<select id="evTime" class="edit-input">' +
-          renderTimeOptions('19:00') +
-        '</select>' +
-      '</div>' +
-    '</div>' +
-    '<div class="profile-section">' +
-      '<label class="profile-section-title" for="evLocation">Location</label>' +
-      '<input type="text" id="evLocation" class="edit-input" maxlength="120" placeholder="e.g. Bob\'s place" />' +
-    '</div>' +
-    '<div class="profile-section">' +
-      '<label class="profile-section-title" for="evCircle">Circle</label>' +
-      '<select id="evCircle" class="edit-input">' +
-        '<option value="all">All</option>' +
-        '<option value="hustle-hub">Hustle Hub</option>' +
-        '<option value="work-network">Work Network</option>' +
-        '<option value="family">Family</option>' +
-      '</select>' +
-    '</div>' +
-    '<div class="profile-section">' +
-      '<label class="profile-section-title" for="evDesc">Description</label>' +
-      '<textarea id="evDesc" class="edit-input edit-textarea" rows="3" maxlength="400" placeholder="Optional details..."></textarea>' +
-    '</div>' +
-    '<div class="edit-actions">' +
-      '<button class="btn" id="evCancelBtn">Cancel</button>' +
-      '<button class="btn btn-primary" id="evSaveBtn">Create</button>' +
-    '</div>';
-
-  var cancelBtn = document.getElementById('evCancelBtn');
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', function() {
-      window.enclaveCloseEvent();
-    });
-  }
-
-  var saveBtn = document.getElementById('evSaveBtn');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', function() {
-      window.enclaveSubmitEvent();
-    });
-  }
-
-  bindDatePickerField('evDate');
-
-  modal.hidden = false;
-};
-
-const closeEventModal = function() {
-  var modal = document.getElementById('eventModal');
-  if (modal) modal.hidden = true;
-};
-
-const handleCreateEvent = function() {
-  if (!state.isAdmin || !state.user) return;
-
-  var title    = document.getElementById('evTitle').value.trim();
-  var dateVal  = document.getElementById('evDate').value;
-  var timeVal  = document.getElementById('evTime').value;
-  var location = document.getElementById('evLocation').value.trim();
-  var circle   = document.getElementById('evCircle').value;
-  var desc     = document.getElementById('evDesc').value.trim();
-
-  if (!title)    { showToast('Title is required.', 'error');    return; }
-  if (!dateVal)  { showToast('Date is required.', 'error');     return; }
-  if (!timeVal)  { showToast('Time is required.', 'error');     return; }
-  if (!location) { showToast('Location is required.', 'error'); return; }
-
-  // Combine date + time into a JS Date, then Firestore Timestamp
-  var combined = new Date(dateVal + 'T' + timeVal);
-  if (isNaN(combined.getTime())) {
-    showToast('Invalid date/time.', 'error');
-    return;
-  }
-
-  var saveBtn = document.getElementById('evSaveBtn');
-  if (saveBtn) {
-    saveBtn.disabled    = true;
-    saveBtn.textContent = 'Creating...';
-  }
-
-  var newEvent = {
-    title:       title,
-    date:        Timestamp.fromDate(combined),
-    location:    location,
-    circle:      circle,
-    description: desc,
-    createdBy:   state.user.uid,
-    createdAt:   serverTimestamp(),
-    rsvpCount:   0
-  };
-
-  addDoc(collection(db, 'events'), newEvent).then(function() {
-    closeEventModal();
-    loadEvents();
-  }).catch(function(err) {
-    logError('Failed to create event', err);
-    showToast('Failed to create event. Check console for details.', 'error');
-    if (saveBtn) {
-      saveBtn.disabled    = false;
-      saveBtn.textContent = 'Create';
-    }
   });
 };
 
@@ -757,10 +638,10 @@ const renderInlineEventComposer = function() {
         '<input type="text" id="inlineEvTitle" class="edit-input" maxlength="80" placeholder="e.g. Poker Night" />' +
       '</div>' +
       '<div class="profile-section event-date-row">' +
-        '<div style="flex:1;">' +
+        '<div class="event-date-row-cell">' +
           renderDatePickerField('inlineEvDate', 'Date', defaultDate) +
         '</div>' +
-      '<div style="flex:1;">' +
+      '<div class="event-date-row-cell">' +
         '<label class="profile-section-title" for="inlineEvTime">Time</label>' +
         '<select id="inlineEvTime" class="edit-input">' +
           renderTimeOptions('19:00') +
@@ -874,12 +755,9 @@ const handleInlineCreateEvent = function() {
     logError('Failed to create event', err);
     var msg;
     if (err.code === 'permission-denied') {
-      msg = 'PERMISSION DENIED.\n\n' +
-        'Firestore rejected the write. Two things to check:\n\n' +
-        '1. Firebase Console → Firestore → Rules: paste the full ruleset that includes the /events/{eventId} block (with the /rsvps/{uid} subcollection) and click Publish.\n\n' +
-        '2. Firebase Console → Firestore → users → your uid doc: the "role" field must be exactly the string "admin" (lowercase).';
+      msg = 'You do not have permission to create events. Only admins can do this.';
     } else {
-      msg = 'Failed to create event.\n\n' + (err.code || '') + '\n' + (err.message || '');
+      msg = 'Failed to create event. Please try again or check the browser console for details.';
     }
     showNoticeModal('Create event failed', msg);
     if (saveBtn) {
@@ -958,8 +836,11 @@ const generateIcs = function(ev) {
 
 const rsvpButtonLabel = function(count, isRsvped) {
   var total = typeof count === 'number' ? count : 0;
-  var countLabel = total > 0 ? ' (' + total + ')' : '';
-  return (isRsvped ? 'Going' : 'RSVP') + countLabel;
+  var labelText = isRsvped ? 'Going' : 'RSVP';
+  var countHtml = total > 0
+    ? '<span class="rsvp-count">' + total + '</span>'
+    : '';
+  return labelText + countHtml;
 };
 
 const setLocalEventRsvpCount = function(eventId, count) {
@@ -972,18 +853,3 @@ const setLocalEventRsvpCount = function(eventId, count) {
   });
 };
 
-// Globally-exposed functions for inline onclick handlers in page HTML.
-window.enclaveCreateEvent = function() {
-  if (!state.isAdmin) return;
-  openCreateEventModal();
-};
-
-window.enclaveCloseEvent = function() {
-  closeEventModal();
-};
-
-window.enclaveSubmitEvent = function() { handleCreateEvent(); };
-
-window.enclaveInlineCreate = function() {
-  handleInlineCreateEvent();
-};

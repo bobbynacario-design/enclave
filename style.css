@@ -13,8 +13,10 @@
   --border:       rgba(255,255,255,0.06);
   --border-2:     rgba(255,255,255,0.12);
   --border-3:     rgba(255,255,255,0.2);
-  --accent:       #7c5cbf;
-  --accent-hover: #9370db;
+  --accent:         #7c5cbf;
+  --accent-hover:   #9370db;
+  --success:        #2d5a3d;
+  --success-hover:  #356b48;
   --accent-dim:   rgba(124,92,191,0.12);
   --gold:         #D4AF37;
   --gold-dim:     rgba(212,175,55,0.12);
@@ -42,8 +44,10 @@ body.light {
   --border:       rgba(0,0,0,0.08);
   --border-2:     rgba(0,0,0,0.14);
   --border-3:     rgba(0,0,0,0.22);
-  --accent:       #6A3A9A;
-  --accent-hover: #7c5cbf;
+  --accent:         #6A3A9A;
+  --accent-hover:   #7c5cbf;
+  --success:        #2d5a3d;
+  --success-hover:  #356b48;
   --accent-dim:   rgba(106,58,154,0.1);
   --gold:         #8B6914;
   --gold-dim:     rgba(139,105,20,0.1);
@@ -2052,23 +2056,79 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 .events-list-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .event-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 18px;
-  transition: border-color 0.15s;
+  padding: 0;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .event-card:hover {
-  border-color: #3a3a3a;
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
+  transform: translateY(-1px);
 }
 
 .event-card-past {
   opacity: 0.9;
+}
+
+.event-card-body {
+  display: flex;
+  gap: 16px;
+  padding: 16px 18px;
+  align-items: flex-start;
+}
+
+.event-date-block {
+  flex-shrink: 0;
+  width: 64px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.event-date-month {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.event-date-day {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.event-date-weekday {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.event-date-block-past {
+  opacity: 0.5;
+}
+
+.event-card-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .event-card-header {
@@ -2095,15 +2155,36 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   color: var(--text-muted);
 }
 
+.event-circle-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  flex-shrink: 0;
+}
+
 .event-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 10px;
 }
 
 .event-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
+  color: var(--text-muted);
+}
+
+.event-meta-icon {
+  flex-shrink: 0;
   color: var(--text-muted);
 }
 
@@ -2124,19 +2205,40 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   align-items: center;
 }
 
+.event-ics-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .event-actions .btn.rsvped {
-  background: #2d5a3d;
-  border-color: #2d5a3d;
+  background: var(--success);
+  border-color: var(--success);
 }
 
 .event-actions .btn.rsvped:hover {
-  background: #356b48;
-  border-color: #356b48;
+  background: var(--success-hover);
+  border-color: var(--success-hover);
+}
+
+.rsvp-count {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .event-date-row {
   display: flex;
   gap: 12px;
+}
+
+.event-date-row-cell {
+  flex: 1;
 }
 
 /* ─── Messages ───────────────────────────────────────────────────────────── */
