@@ -144,6 +144,16 @@ export const initResourcesPage = function() {
     });
   }
 
+  // Search input
+  const searchInput = document.getElementById('resourceSearch');
+  if (searchInput) {
+    searchInput.value = resourcesState.searchQuery || '';
+    searchInput.addEventListener('input', function() {
+      resourcesState.searchQuery = searchInput.value;
+      renderResourceList();
+    });
+  }
+
   // Drive picker button
   const driveBtn = document.getElementById('resourceDriveBtn');
   if (driveBtn) {
