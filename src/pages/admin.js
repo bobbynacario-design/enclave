@@ -150,7 +150,7 @@ var renderAllowlistMembers = function() {
     }
 
     var pendingBadge = entry.pending
-      ? '<span class="circle-tag circle-tag-empty">Pending</span>'
+      ? '<span class="circle-tag circle-tag-empty">Not joined</span>'
       : '';
 
     var resendBtn = entry.pending
@@ -220,7 +220,7 @@ var handleAdminInvite = function() {
   }).then(function() {
     emailEl.value = '';
     setCheckedCircles('#adminInviteCircles', []);
-    showToast('Invite saved and email queued.', 'success');
+    showToast('Invite saved. Email queued — delivery may take a minute.', 'success');
     return loadAllowlistMembers();
   }).catch(function(err) {
     logError('Failed to save allowlist entry', err);
@@ -294,7 +294,7 @@ var handleAdminResend = function(email, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
   queueInviteEmail(email, entry.circles).then(function() {
-    showToast('Invite email resent.', 'success');
+    showToast('Invite queued — delivery may take a minute.', 'success');
   }).catch(function(err) {
     logError('Failed to resend invite', err);
     showToast('Failed to resend invite. Check console for details.', 'error');
