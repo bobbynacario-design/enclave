@@ -411,11 +411,61 @@ var queueInviteEmail = function(email, circles) {
   var circleLine = circleNames.length > 0
     ? circleNames.join(', ')
     : 'No circles assigned yet';
-  var htmlList = circleNames.length > 0
-    ? '<ul>' + circleNames.map(function(name) {
-      return '<li>' + escapeHTML(name) + '</li>';
-    }).join('') + '</ul>'
-    : '<p>No circles assigned yet.</p>';
+  var subject = inviterName + ' invited you to Enclave';
+
+  var circlePills = circleNames.length > 0
+    ? '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#1a1a1a;margin:0 0 12px 0;">You\'ll have access to these circles:</p>' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+      circleNames.map(function(name) {
+        return '' +
+          '<td bgcolor="#ffffff" style="border:1px solid #d9c8ff;border-radius:16px;padding:6px 12px;white-space:nowrap;">' +
+            '<span style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#7c5cbf;">' + escapeHTML(name) + '</span>' +
+          '</td><td style="width:8px;"></td>';
+      }).join('') +
+      '</tr></table>'
+    : '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;margin:0;">You\'ll be added to circles soon.</p>';
+
+  var html =
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f5f7">' +
+    '<tr><td align="center" style="padding:24px 16px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">' +
+    '<tr><td bgcolor="#7c5cbf" style="padding:24px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td style="vertical-align:middle;">' +
+    '<img src="https://bobbynacario-design.github.io/enclave/icon-192.png" width="56" height="56" alt="Enclave" style="display:block;border:0;border-radius:12px;">' +
+    '</td>' +
+    '<td style="vertical-align:middle;padding-left:16px;">' +
+    '<span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:600;color:#ffffff;">Enclave</span>' +
+    '</td>' +
+    '</tr></table></td></tr>' +
+    '<tr><td style="padding:40px 32px 24px;">' +
+    '<h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:600;color:#1a1a1a;margin:0 0 8px 0;">You\'re invited to Enclave</h1>' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;font-style:italic;color:#6b6b6b;margin:0;">Your private space for the people who matter.</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 24px;">' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1a1a1a;line-height:1.6;margin:0;">Hey &#8212; <strong>' + escapeHTML(inviterName) + '</strong> invited you to join Enclave. It\'s a private, invite-only space, and you\'re on the list.</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 32px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f0ff" style="border-radius:8px;">' +
+    '<tr><td style="padding:20px;">' +
+    circlePills +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;line-height:1.5;margin:12px 0 0 0;">Each circle is a private space &#8212; you\'ll only see what people share in circles you\'re part of.</p>' +
+    '</td></tr></table>' +
+    '</td></tr>' +
+    '<tr><td style="padding:8px 32px 32px;" align="center">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td bgcolor="#7c5cbf" style="border-radius:8px;">' +
+    '<a href="' + escapeAttr(inviteURL) + '" target="_blank" style="display:inline-block;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Open Enclave</a>' +
+    '</td></tr></table>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 32px;" align="center">' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;margin:0 0 4px 0;text-align:center;">Sign in with this Google account:</p>' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#1a1a1a;margin:0;text-align:center;">' + escapeHTML(email) + '</p>' +
+    '</td></tr>' +
+    '<tr><td style="border-top:1px solid #e5e5e5;padding:24px 32px;">' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6b6b6b;line-height:1.5;text-align:center;margin:0;">Enclave is private and invite-only. If you weren\'t expecting this email, you can ignore it.</p>' +
+    '</td></tr>' +
+    '</table></td></tr></table>';
 
   return addDoc(collection(db, 'mail'), {
     to: [email],
@@ -427,21 +477,21 @@ var queueInviteEmail = function(email, circles) {
       circles: normalizeCircles(circles)
     },
     message: {
-      subject: 'You are invited to Enclave',
+      subject: subject,
       text:
-        'You have been invited to Enclave by ' + inviterName + '.\n\n' +
-        'Assigned circles: ' + circleLine + '\n\n' +
-        'Open Enclave here:\n' + inviteURL + '\n\n' +
-        'Sign in with this same Google account: ' + email + '\n',
-      html:
-        '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">' +
-          '<h2>You are invited to Enclave</h2>' +
-          '<p><strong>' + escapeHTML(inviterName) + '</strong> invited you to join Enclave.</p>' +
-          '<p><strong>Assigned circles:</strong></p>' +
-          htmlList +
-          '<p><a href="' + escapeAttr(inviteURL) + '">Open Enclave</a></p>' +
-          '<p>Sign in with this same Google account: <strong>' + escapeHTML(email) + '</strong></p>' +
-        '</div>'
+        'Hey — ' + inviterName + ' invited you to join Enclave.\n\n' +
+        'Enclave is your private space for the people who matter.\n' +
+        'It\'s invite-only, and you\'re on the list.\n\n' +
+        'You\'ll have access to these circles:\n' +
+        circleLine + '\n\n' +
+        'Each circle is a private space — you\'ll only see what people share\n' +
+        'in circles you\'re part of.\n\n' +
+        'Open Enclave: ' + inviteURL + '\n\n' +
+        'Sign in with this Google account: ' + email + '\n\n' +
+        '—\n\n' +
+        'Enclave is private and invite-only. If you weren\'t expecting this\n' +
+        'email, you can ignore it.',
+      html: html
     }
   });
 };
