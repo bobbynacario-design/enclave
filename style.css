@@ -1678,6 +1678,7 @@ label {
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .admin-nudge-option input[type="checkbox"] {
