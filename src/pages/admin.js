@@ -286,18 +286,22 @@ var handleAdminEdit = function(email) {
 
 // ─── Admin: resend invite ─────────────────────────────────────────────────────
 var handleAdminResend = function(email, btn) {
-  if (!state.isAdmin || !email) return;
-  if (btn && btn.disabled) return;
+  console.log('[resend] called', { email: email });
+  if (!state.isAdmin || !email) { console.log('[resend] guard 1 failed'); return; }
+  if (btn && btn.disabled) { console.log('[resend] guard 2 failed (btn disabled)'); return; }
 
   var entry = adminState.allowlist.find(function(e) { return e.email === email; });
-  if (!entry) return;
+  if (!entry) { console.log('[resend] guard 3 failed (no entry)'); return; }
+  console.log('[resend] entry found', { circles: entry.circles });
 
   if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
   queueInviteEmail(email, entry.circles).then(function(mailRef) {
+    console.log('[resend] queueInviteEmail resolved', { mailRefId: mailRef && mailRef.id });
     showToast('Invite queued. Checking delivery...', 'info');
     return waitForDelivery(mailRef, 30000);
   }).then(function(result) {
+    console.log('[resend] waitForDelivery resolved', result);
     if (result.state === 'SUCCESS') {
       showToast('Invite sent to ' + email + '.', 'success');
     } else if (result.state === 'ERROR') {
@@ -308,9 +312,11 @@ var handleAdminResend = function(email, btn) {
       showToast('Still sending — delivery may take a minute.', 'info');
     }
   }).catch(function(err) {
+    console.log('[resend] CAUGHT ERROR', err);
     logError('Failed to resend invite', err);
     showToast('Failed to resend invite. Check console for details.', 'error');
   }).finally(function() {
+    console.log('[resend] finally block');
     if (btn) { btn.disabled = false; btn.textContent = 'Resend'; }
   });
 };
@@ -512,15 +518,18 @@ var queueInviteEmail = function(email, circles) {
 
 // ─── Wait for email delivery ──────────────────────────────────────────────────
 var waitForDelivery = function(docRef, timeoutMs) {
+  console.log('[waitForDelivery] subscribing to', docRef.id);
   return new Promise(function(resolve) {
     var unsubscribe;
     var timer = setTimeout(function() {
+      console.log('[waitForDelivery] TIMEOUT fired');
       unsubscribe();
       resolve({ state: 'TIMEOUT' });
     }, timeoutMs);
 
     unsubscribe = onSnapshot(docRef, function(snap) {
       var delivery = snap.exists() ? (snap.data().delivery || null) : null;
+      console.log('[waitForDelivery] snapshot', { exists: snap.exists(), delivery: delivery });
       if (!delivery) return;
       var s = delivery.state || '';
       if (s === 'SUCCESS' || s === 'ERROR' || s === 'RETRY') {
@@ -528,6 +537,10 @@ var waitForDelivery = function(docRef, timeoutMs) {
         unsubscribe();
         resolve({ state: s, error: delivery.error || null });
       }
+    }, function(err) {
+      console.log('[waitForDelivery] ERROR callback fired', err);
+      clearTimeout(timer);
+      resolve({ state: 'ERROR', error: 'Listener error: ' + (err.message || err.code || 'unknown') });
     });
   });
 };
