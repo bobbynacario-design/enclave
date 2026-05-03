@@ -8,6 +8,7 @@ import { state } from '../state.js';
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 import { logError } from '../util/log.js';
 import { showToast } from './toast.js';
+import { renderCircleChecks, getCheckedCircles } from '../util/circles.js';
 
 export const showDialogModal = function(opts) {
   opts = opts || {};
@@ -183,4 +184,78 @@ export const openBriefingImportModal = function() {
   backdrop.appendChild(card);
   document.body.appendChild(backdrop);
   textarea.focus();
+};
+
+// ─── Circle picker modal ──────────────────────────────────────────────────────
+export const showCirclePickerModal = function(opts) {
+  opts = opts || {};
+
+  const existing = document.getElementById('dialogBackdrop');
+  if (existing && existing.parentNode) {
+    existing.parentNode.removeChild(existing);
+  }
+
+  return new Promise(function(resolve) {
+    const backdrop = document.createElement('div');
+    const card = document.createElement('div');
+    const title = document.createElement('div');
+    const message = document.createElement('div');
+    const checksContainer = document.createElement('div');
+    const actions = document.createElement('div');
+    const cancelBtn = document.createElement('button');
+    const saveBtn = document.createElement('button');
+
+    backdrop.id = 'dialogBackdrop';
+    backdrop.className = 'dialog-backdrop';
+
+    card.className = 'dialog-card';
+
+    title.className = 'dialog-title';
+    title.textContent = opts.title || 'Select circles';
+
+    message.className = 'dialog-message';
+    message.textContent = opts.message || '';
+
+    checksContainer.id = 'circlePickerChecks';
+    checksContainer.className = 'circle-checks';
+    checksContainer.innerHTML = renderCircleChecks(opts.initialCircles || []);
+
+    actions.className = 'dialog-actions';
+
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.textContent = 'Cancel';
+
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.textContent = opts.confirmLabel || 'Save';
+
+    const close = function(result) {
+      if (backdrop.parentNode) {
+        backdrop.parentNode.removeChild(backdrop);
+      }
+      resolve(result);
+    };
+
+    cancelBtn.addEventListener('click', function() { close(null); });
+
+    saveBtn.addEventListener('click', function() {
+      close(getCheckedCircles('#circlePickerChecks'));
+    });
+
+    backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) { close(null); }
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(saveBtn);
+
+    card.appendChild(title);
+    if (opts.message) { card.appendChild(message); }
+    card.appendChild(checksContainer);
+    card.appendChild(actions);
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    saveBtn.focus();
+  });
 };

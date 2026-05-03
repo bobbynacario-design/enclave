@@ -34,7 +34,8 @@ export const membersState = {
 };
 
 export const adminState = {
-  allowlist: []
+  allowlist: [],
+  usersByEmail: {}
 };
 
 export const messagesState = {

@@ -35,7 +35,7 @@ import { logError } from '../util/log.js';
 
 import { showToast } from '../ui/toast.js';
 
-import { showConfirmModal } from '../ui/modals.js';
+import { showConfirmModal, showCirclePickerModal } from '../ui/modals.js';
 
 import {
   syncSidebarSelection,
@@ -51,13 +51,17 @@ export var initAdminPage = function() {
     return;
   }
 
-  var checks = document.getElementById('adminInviteCircles');
-  if (checks) {
-    checks.innerHTML = renderCircleChecks([]);
-  }
+  var inviteChecks = document.getElementById('adminInviteCircles');
+  if (inviteChecks) { inviteChecks.innerHTML = renderCircleChecks([]); }
+
+  var bulkChecks = document.getElementById('adminBulkCircles');
+  if (bulkChecks) { bulkChecks.innerHTML = renderCircleChecks([]); }
 
   var inviteBtn = document.getElementById('adminInviteBtn');
   if (inviteBtn) inviteBtn.addEventListener('click', handleAdminInvite);
+
+  var bulkBtn = document.getElementById('adminBulkInviteBtn');
+  if (bulkBtn) bulkBtn.addEventListener('click', handleAdminBulkInvite);
 
   loadAllowlistMembers();
 };
@@ -93,21 +97,31 @@ var loadAllowlistMembers = function() {
   var list = document.getElementById('adminMembersList');
   if (!list) return;
 
-  getDocs(collection(db, 'allowlist')).then(function(snap) {
-    var entries = [];
+  Promise.all([
+    getDocs(collection(db, 'allowlist')),
+    getDocs(collection(db, 'users'))
+  ]).then(function(results) {
+    var allowlistSnap = results[0];
+    var usersSnap = results[1];
 
-    snap.forEach(function(d) {
+    adminState.usersByEmail = {};
+    usersSnap.forEach(function(d) {
+      var e = (d.data().email || '').toLowerCase();
+      if (e) { adminState.usersByEmail[e] = d.data(); }
+    });
+
+    var entries = [];
+    allowlistSnap.forEach(function(d) {
       var data = d.data() || {};
+      var email = (data.email || d.id || '').toLowerCase();
       entries.push({
-        email:   (data.email || d.id || '').toLowerCase(),
-        circles: normalizeCircles(data.circles)
+        email:   email,
+        circles: normalizeCircles(data.circles),
+        pending: !adminState.usersByEmail[email]
       });
     });
 
-    entries.sort(function(a, b) {
-      return a.email.localeCompare(b.email);
-    });
-
+    entries.sort(function(a, b) { return a.email.localeCompare(b.email); });
     adminState.allowlist = entries;
     renderAllowlistMembers();
   }).catch(function(err) {
@@ -135,20 +149,36 @@ var renderAllowlistMembers = function() {
       circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
     }
 
+    var pendingBadge = entry.pending
+      ? '<span class="circle-tag circle-tag-empty">Pending</span>'
+      : '';
+
+    var resendBtn = entry.pending
+      ? '<button class="btn btn-ghost" data-resend-email="' + escapeAttr(entry.email) + '">Resend</button>'
+      : '';
+
     return '' +
       '<div class="card admin-member-row">' +
         '<div class="admin-member-meta">' +
           '<div class="admin-member-email">' + escapeHTML(entry.email) + '</div>' +
-          '<div class="member-circles">' + circleTags + '</div>' +
+          '<div class="member-circles">' + circleTags + pendingBadge + '</div>' +
         '</div>' +
+        resendBtn +
+        '<button class="btn btn-ghost" data-edit-email="' + escapeAttr(entry.email) + '">Edit</button>' +
         '<button class="btn btn-ghost admin-remove-btn" data-remove-email="' + escapeAttr(entry.email) + '">Remove</button>' +
       '</div>';
   }).join('');
 
   list.querySelectorAll('[data-remove-email]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      handleAdminRemove(btn.dataset.removeEmail);
-    });
+    btn.addEventListener('click', function() { handleAdminRemove(btn.dataset.removeEmail); });
+  });
+
+  list.querySelectorAll('[data-edit-email]').forEach(function(btn) {
+    btn.addEventListener('click', function() { handleAdminEdit(btn.dataset.editEmail); });
+  });
+
+  list.querySelectorAll('[data-resend-email]').forEach(function(btn) {
+    btn.addEventListener('click', function() { handleAdminResend(btn.dataset.resendEmail); });
   });
 };
 
@@ -231,6 +261,118 @@ var handleAdminRemove = function(email) {
   });
 };
 
+// ─── Admin: edit circles ──────────────────────────────────────────────────────
+var handleAdminEdit = function(email) {
+  if (!state.isAdmin || !email) return;
+
+  var entry = adminState.allowlist.find(function(e) { return e.email === email; });
+  if (!entry) return;
+
+  showCirclePickerModal({
+    title: 'Edit circles',
+    message: email,
+    initialCircles: entry.circles,
+    confirmLabel: 'Save'
+  }).then(function(newCircles) {
+    if (newCircles === null) return;
+
+    setDoc(doc(db, 'allowlist', email), { circles: newCircles, updatedAt: serverTimestamp() }, { merge: true }).then(function() {
+      return syncUserDocsForAllowlist(email, newCircles);
+    }).then(function() {
+      return loadAllowlistMembers();
+    }).then(function() {
+      showToast('Circles updated.', 'success');
+    }).catch(function(err) {
+      logError('Failed to update circles', err);
+      showToast('Failed to update circles. Check console for details.', 'error');
+    });
+  });
+};
+
+// ─── Admin: resend invite ─────────────────────────────────────────────────────
+var handleAdminResend = function(email) {
+  if (!state.isAdmin || !email) return;
+
+  var entry = adminState.allowlist.find(function(e) { return e.email === email; });
+  if (!entry) return;
+
+  queueInviteEmail(email, entry.circles).then(function() {
+    showToast('Invite email resent.', 'success');
+  }).catch(function(err) {
+    logError('Failed to resend invite', err);
+    showToast('Failed to resend invite. Check console for details.', 'error');
+  });
+};
+
+// ─── Admin: bulk invite ───────────────────────────────────────────────────────
+var handleAdminBulkInvite = function() {
+  if (!state.isAdmin || !state.user) return;
+
+  var textarea = document.getElementById('adminBulkEmails');
+  var btn = document.getElementById('adminBulkInviteBtn');
+  var results = document.getElementById('adminBulkResults');
+  if (!textarea || !btn || !results) return;
+
+  var tokens = textarea.value.split(/[\s,;]+/).map(function(t) { return t.trim().toLowerCase(); }).filter(Boolean)
+    .filter(function(e, i, a) { return a.indexOf(e) === i; });
+
+  var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  var valid = [], invalid = [];
+  tokens.forEach(function(t) { (emailRegex.test(t) ? valid : invalid).push(t); });
+
+  var circles = getCheckedCircles('#adminBulkCircles');
+
+  if (valid.length === 0 && invalid.length === 0) {
+    showToast('Enter at least one email address.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  results.innerHTML = '';
+
+  var succeeded = 0;
+  var failed = [];
+
+  var finish = function() {
+    btn.disabled = false;
+    btn.textContent = 'Send Invites';
+    var s = 'Sent ' + succeeded + ' invite' + (succeeded !== 1 ? 's' : '') + '.';
+    if (invalid.length) { s += ' ' + invalid.length + ' invalid email' + (invalid.length !== 1 ? 's' : '') + ' skipped.'; }
+    if (failed.length)  { s += ' ' + failed.length + ' failed.'; }
+    var toList = function(arr) { return '<ul>' + arr.map(function(e) { return '<li>' + escapeHTML(e) + '</li>'; }).join('') + '</ul>'; };
+    results.innerHTML = '<p>' + escapeHTML(s) + '</p>' +
+      (invalid.length ? toList(invalid) : '') +
+      (failed.length  ? toList(failed)  : '');
+    if (succeeded > 0) { textarea.value = ''; setCheckedCircles('#adminBulkCircles', []); loadAllowlistMembers(); }
+  };
+
+  var processNext = function(i) {
+    if (i >= valid.length) { finish(); return; }
+
+    var email = valid[i];
+    var existing = adminState.allowlist.find(function(e) { return e.email === email; });
+
+    var payload = { email: email, circles: circles, invitedBy: state.user.uid, updatedAt: serverTimestamp() };
+    if (!existing) { payload.createdAt = serverTimestamp(); }
+
+    setDoc(doc(db, 'allowlist', email), payload, { merge: true }).then(function() {
+      return syncUserDocsForAllowlist(email, circles);
+    }).then(function() {
+      return queueInviteEmail(email, circles);
+    }).then(function() {
+      succeeded++;
+      processNext(i + 1);
+    }).catch(function(err) {
+      logError('Failed to bulk invite ' + email, err);
+      failed.push(email);
+      processNext(i + 1);
+    });
+  };
+
+  processNext(0);
+};
+
 var syncUserDocsForAllowlist = function(email, circles) {
   var normalized = normalizeCircles(circles);
   var usersQuery = query(collection(db, 'users'), where('email', '==', email));
@@ -308,7 +450,6 @@ var queueInviteEmail = function(email, circles) {
     }
   });
 };
-
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 var setCheckedCircles = function(containerSelector, circles) {

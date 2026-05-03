@@ -25,25 +25,42 @@
 
   <div class="profile-section">
     <div class="profile-section-title">Circles</div>
-    <div class="circle-checks" id="adminInviteCircles">
-      <label class="circle-check">
-        <input type="checkbox" value="hustle-hub" />
-        <span>Hustle Hub</span>
-      </label>
-      <label class="circle-check">
-        <input type="checkbox" value="work-network" />
-        <span>Work Network</span>
-      </label>
-      <label class="circle-check">
-        <input type="checkbox" value="family" />
-        <span>Family</span>
-      </label>
-    </div>
+    <div class="circle-checks" id="adminInviteCircles"></div>
   </div>
 
   <div class="edit-actions">
     <button class="btn btn-primary" id="adminInviteBtn">Save Invite</button>
   </div>
+</div>
+
+<div class="card">
+  <div class="page-header-row">
+    <div>
+      <h2 class="profile-name">Bulk Invite</h2>
+      <p class="text-muted">Paste multiple emails to invite at once.</p>
+    </div>
+  </div>
+
+  <div class="profile-section">
+    <label class="profile-section-title" for="adminBulkEmails">Emails</label>
+    <textarea
+      id="adminBulkEmails"
+      class="edit-input"
+      rows="6"
+      placeholder="Paste emails, one per line or comma-separated"
+    ></textarea>
+  </div>
+
+  <div class="profile-section">
+    <div class="profile-section-title">Circles</div>
+    <div class="circle-checks" id="adminBulkCircles"></div>
+  </div>
+
+  <div class="edit-actions">
+    <button class="btn btn-primary" id="adminBulkInviteBtn">Send Invites</button>
+  </div>
+
+  <div id="adminBulkResults"></div>
 </div>
 
 <div class="card">
