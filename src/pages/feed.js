@@ -23,7 +23,7 @@ import { db } from '../../firebase.js';
 import { state, feedState, driveAttachment } from '../state.js';
 
 // Utilities
-import { escapeHTML, escapeAttr, linkifyText, extractFirstUrl } from '../util/escape.js';
+import { escapeHTML, escapeAttr, linkifyText, extractFirstUrl, highlightMentions } from '../util/escape.js';
 import { relativeTime } from '../util/time.js';
 import { getVisibleCircles, getInitials, renderCircleOptions } from '../util/circles.js';
 import { FEED_PAGE_SIZE } from '../util/constants.js';
@@ -428,7 +428,7 @@ var renderPostComments = function(postId, comments, authorId) {
     }
 
     var commentAuthor = escapeHTML(comment.authorName || 'Member');
-    var commentBody = escapeHTML(comment.body || '');
+    var commentBody = highlightMentions(linkifyText(escapeHTML(comment.body || '')));
     var commentTime = 'just now';
 
     if (comment.createdAt && typeof comment.createdAt.toDate === 'function') {
@@ -475,7 +475,7 @@ var renderPostCard = function(p) {
 
   var nameEsc     = escapeHTML(p.authorName || 'Unknown');
   var initialsEsc = escapeHTML(p.authorInitials || '?');
-  var bodyEsc     = linkifyText(escapeHTML(p.body || ''));
+  var bodyEsc     = highlightMentions(linkifyText(escapeHTML(p.body || '')));
   var reacts = Array.isArray(p.reacts) ? p.reacts : [];
   var comments = Array.isArray(p.comments) ? p.comments : [];
   var reacted = state.user && reacts.indexOf(state.user.uid) !== -1;

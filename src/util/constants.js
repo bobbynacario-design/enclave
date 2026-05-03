@@ -1,4 +1,4 @@
-export const ASSET_VERSION = 'v107';
+export const ASSET_VERSION = 'v113';
 
 export const ALL_CIRCLES = [
   'hustle-hub',
@@ -28,3 +28,5 @@ export const BRIEFING_SECTION_META = {
   markets: { label: 'Markets',      color: '#1D9E75' },
   ev:      { label: 'EV',           color: '#639922' }
 };
+
+export const ENCLAVE_CONTACT_EMAIL = 'bobbynacario@gmail.com';

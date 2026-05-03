@@ -21,7 +21,7 @@ import { db } from '../../firebase.js';
 import { state, messagesState } from '../state.js';
 
 // Utilities
-import { escapeHTML, escapeAttr } from '../util/escape.js';
+import { escapeHTML, escapeAttr, linkifyText, highlightMentions } from '../util/escape.js';
 import { relativeTime, getFirestoreTimeMs } from '../util/time.js';
 import { getInitials } from '../util/circles.js';
 import { logError } from '../util/log.js';
@@ -249,7 +249,7 @@ var renderMessagesThread = function() {
   listEl.innerHTML = loadMoreHtml + allMessages.map(function(message) {
     var mine = message.authorId === (state.user && state.user.uid);
     var author = escapeHTML(message.authorName || 'Member');
-    var body = escapeHTML(message.body || '');
+    var body = highlightMentions(linkifyText(escapeHTML(message.body || '')));
     var time = 'just now';
     var isLatestOwn = mine && message.id === lastOwnMessageId;
     var seen = isLatestOwn && peerReadAtMs > 0 && getFirestoreTimeMs(message.createdAt) <= peerReadAtMs;

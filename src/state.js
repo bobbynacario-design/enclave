@@ -101,6 +101,11 @@ export const resetShellRealtime = function() {
     notificationsState.unsubscribe();
     notificationsState.unsubscribe = null;
   }
+
+  if (briefingsState.unsubscribeNotifier) {
+    briefingsState.unsubscribeNotifier();
+    briefingsState.unsubscribeNotifier = null;
+  }
 };
 
 export const resetProjectDetailState = function() {

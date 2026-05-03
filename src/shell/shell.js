@@ -26,7 +26,7 @@ import {
   normalizeCircles
 } from '../util/circles.js';
 
-import { ALL_CIRCLES, ASSET_VERSION } from '../util/constants.js';
+import { ALL_CIRCLES, ASSET_VERSION, ENCLAVE_CONTACT_EMAIL } from '../util/constants.js';
 
 import { logError } from '../util/log.js';
 
@@ -81,7 +81,7 @@ export var renderLogin = function() {
         '</div>' +
         '<div class="login-error-actions">' +
           '<a class="btn btn-primary" ' +
-             'href="mailto:bobbynacario@gmail.com?subject=Enclave%20access%20request">' +
+             'href="mailto:' + ENCLAVE_CONTACT_EMAIL + '?subject=Enclave%20access%20request">' +
             'Request access' +
           '</a>' +
           '<button id="loginRetryBtn" class="btn btn-ghost">Try a different account</button>' +
