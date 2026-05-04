@@ -184,6 +184,7 @@ export var getAppURL = function() {
 
 // ─── Page loader ──────────────────────────────────────────────────────────────
 export var loadPage = function(page) {
+  teardownProjectsPage();
   state.currentPage = page;
   syncURLState();
   syncResponsivePanels();
@@ -193,7 +194,6 @@ export var loadPage = function(page) {
     feedState.unsubscribe();
     feedState.unsubscribe = null;
   }
-  teardownProjectsPage();
   resetProjectDetailState();
   if (page !== 'projects') {
     projectsState.activeProjectId = null;
