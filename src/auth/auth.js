@@ -184,7 +184,7 @@ var upsertUserDoc = function(user, allowlistEntry) {
 
     if (snap.exists()) {
       var existing = snap.data() || {};
-      state.isAdmin = existing.role === 'admin';
+      state.isAdmin = existing.isAdmin === true;
       state.circles = state.isAdmin
         ? normalizeCircles(existing.circles)
         : allowedCircles.slice();
@@ -203,6 +203,12 @@ var upsertUserDoc = function(user, allowlistEntry) {
       base.bio      = '';
       base.role     = '';
       base.circles  = allowedCircles.slice();
+      // The owner admin can set isAdmin during create (rule allows this).
+      // Non-owners must omit the field — they get isAdmin set later via
+      // the role-change update path by an existing admin.
+      if (user.email === 'bobbynacario@gmail.com') {
+        base.isAdmin = true;
+      }
       return setDoc(ref, base).catch(function(err) {
         logError('User doc create failed', err);
       });
