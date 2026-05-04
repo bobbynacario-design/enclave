@@ -218,7 +218,11 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow get, list: if isAdmin() || isProjectMember(resource.data);
+      allow get, list: if isAdmin() || isProjectMember(resource.data) || (
+        signedIn() &&
+        resource.data.pendingInvites is list &&
+        request.auth.token.email in resource.data.pendingInvites
+      );
 
       allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
@@ -235,6 +239,7 @@ service cloud.firestore {
         // claimPendingInvites self-claim: invited user adds ONLY themselves
         // as a member and removes ONLY their own email from pendingInvites.
         signedIn() &&
+        resource.data.pendingInvites is list &&
         request.auth.token.email in resource.data.pendingInvites &&
         request.resource.data.diff(resource.data)
           .affectedKeys().hasOnly(['memberIds', 'memberNames', 'pendingInvites', 'updatedAt']) &&

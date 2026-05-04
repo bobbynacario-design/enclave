@@ -52,6 +52,33 @@ var statusLabel = function(status) {
   return labels[status] || status || 'Active';
 };
 
+// ─── Modal pending-invites state ────────────────────────────────────────────
+var modalPendingInvites = [];
+
+var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+var renderModalPendingInvitesList = function() {
+  var listEl = document.getElementById('projectPendingInvitesList');
+  if (!listEl) return;
+  if (modalPendingInvites.length === 0) {
+    listEl.innerHTML = '<span class="text-muted" style="font-size:11px;">No pending invites yet.</span>';
+    return;
+  }
+  listEl.innerHTML = modalPendingInvites.map(function(email, idx) {
+    return '<span class="pending-invite-chip">' +
+      escapeHTML(email) +
+      '<button type="button" class="pending-invite-chip-remove" data-remove-pending="' + idx + '" aria-label="Remove">\xd7</button>' +
+    '</span>';
+  }).join('');
+  listEl.querySelectorAll('[data-remove-pending]').forEach(function(btn) {
+    btn.onclick = function() {
+      var idx = parseInt(btn.dataset.removePending, 10);
+      modalPendingInvites.splice(idx, 1);
+      renderModalPendingInvitesList();
+    };
+  });
+};
+
 // ─── Drive picker handler ────────────────────────────────────────────────────
 
 registerPickerHandler('project', function(file) {
@@ -482,6 +509,22 @@ var renderProjectDetail = function(p) {
     '</div>';
     }).join('');
 
+  var pendingList = Array.isArray(p.pendingInvites) ? p.pendingInvites : [];
+  var canManageInvites = state.user && (state.isAdmin || p.createdBy === state.user.uid);
+  var pendingSectionHtml = (pendingList.length > 0 && canManageInvites)
+    ? '<div class="project-detail-section">' +
+        '<h3>Pending Invitations <span class="task-count">' + pendingList.length + '</span></h3>' +
+        '<div class="project-members-list">' +
+          pendingList.map(function(email) {
+            return '<span class="project-member-chip" style="font-family:var(--mono);font-size:12px;">' +
+              escapeHTML(email) +
+              ' <button class="pending-invite-chip-remove" data-revoke-invite="' + escapeAttr(email) + '" aria-label="Revoke">\xd7</button>' +
+            '</span>';
+          }).join('') +
+        '</div>' +
+      '</div>'
+    : '';
+
   detailEl.innerHTML = '' +
     '<div class="project-detail-header">' +
       '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
@@ -541,6 +584,8 @@ var renderProjectDetail = function(p) {
       '<h3>Members' + (canEdit ? ' <button class="btn btn-ghost project-manage-btn" id="projectManageMembersBtn">+ Manage</button>' : '') + '</h3>' +
       '<div class="project-members-list">' + membersHtml + '</div>' +
     '</div>' +
+
+    pendingSectionHtml +
 
     '<div class="project-detail-section">' +
       '<h3>Files</h3>' +
@@ -632,6 +677,26 @@ var renderProjectDetail = function(p) {
     projectsState.editingProjectId = p.id;
     openProjectModal(p);
   };
+
+  // Wire invite revoke buttons
+  document.querySelectorAll('[data-revoke-invite]').forEach(function(btn) {
+    btn.onclick = function() {
+      var email = btn.dataset.revokeInvite;
+      showConfirmModal('Revoke invitation', 'Revoke the invitation for ' + email + '?', 'Revoke').then(function(ok) {
+        if (!ok) return;
+        var newPending = (p.pendingInvites || []).filter(function(e) { return e !== email; });
+        updateDoc(doc(db, 'projects', p.id), {
+          pendingInvites: newPending,
+          updatedAt: serverTimestamp()
+        }).then(function() {
+          showToast('Invitation revoked.', 'info');
+        }).catch(function(err) {
+          logError('Revoke invite error', err);
+          showToast('Failed to revoke.', 'error');
+        });
+      });
+    };
+  });
 
   // Wire delete
   var deleteBtn = document.getElementById('projectDeleteBtn');
@@ -926,6 +991,34 @@ var openProjectModal = function(existingProject) {
   // Load member checkboxes
   loadProjectMemberChecks(existingProject);
 
+  // Init pending-invites editor
+  modalPendingInvites = (existingProject && Array.isArray(existingProject.pendingInvites))
+    ? existingProject.pendingInvites.slice()
+    : [];
+  renderModalPendingInvitesList();
+
+  var addInviteBtn = document.getElementById('projectPendingInviteAddBtn');
+  var inviteInput = document.getElementById('projectPendingInviteInput');
+  if (addInviteBtn) addInviteBtn.onclick = function() {
+    if (!inviteInput) return;
+    var email = (inviteInput.value || '').trim().toLowerCase();
+    if (!email) return;
+    if (!EMAIL_RE.test(email)) {
+      showToast('Enter a valid email address.', 'error');
+      return;
+    }
+    if (modalPendingInvites.indexOf(email) !== -1) {
+      showToast('Already in the invite list.', 'error');
+      return;
+    }
+    modalPendingInvites.push(email);
+    inviteInput.value = '';
+    renderModalPendingInvitesList();
+  };
+  if (inviteInput) inviteInput.onkeydown = function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); if (addInviteBtn) addInviteBtn.click(); }
+  };
+
   // Wire cancel button
   var cancelBtn = document.getElementById('projectModalCancel');
   if (cancelBtn) cancelBtn.onclick = closeProjectModal;
@@ -1014,6 +1107,7 @@ var handleSaveProject = function() {
       status: status,
       memberIds: memberIds,
       memberNames: memberNames,
+      pendingInvites: modalPendingInvites.slice(),
       updatedAt: serverTimestamp()
     }).then(function() {
       closeProjectModal();
@@ -1036,6 +1130,7 @@ var handleSaveProject = function() {
       updatedAt: serverTimestamp(),
       memberIds: memberIds,
       memberNames: memberNames,
+      pendingInvites: modalPendingInvites.slice(),
       taskTotal: 0,
       taskDone: 0
     }).then(function(docRef) {
@@ -1304,6 +1399,138 @@ export var loadSidebarProjects = function() {
   });
 };
 
+// ─── Projects: pending invitations banner ───────────────────────────────────
+var pendingInvitationsUnsubscribe = null;
+
+var loadPendingInvitations = function() {
+  if (pendingInvitationsUnsubscribe) {
+    pendingInvitationsUnsubscribe();
+    pendingInvitationsUnsubscribe = null;
+  }
+  if (!state.user || !state.user.email) return;
+
+  var myEmail = state.user.email.toLowerCase();
+  var q = query(
+    collection(db, 'projects'),
+    where('pendingInvites', 'array-contains', myEmail)
+  );
+
+  pendingInvitationsUnsubscribe = onSnapshot(q, function(snap) {
+    var banner = document.getElementById('pendingInvitationsBanner');
+
+    // Filter out session-dismissed projects
+    var dismissed = [];
+    try { dismissed = JSON.parse(sessionStorage.getItem('enclaveDismissedInvites') || '[]'); } catch (e) {}
+
+    var rows = [];
+    snap.forEach(function(d) {
+      if (dismissed.indexOf(d.id) !== -1) return;
+      var p = d.data();
+      p.id = d.id;
+      rows.push(p);
+    });
+
+    if (rows.length === 0) {
+      if (banner) banner.remove();
+      return;
+    }
+
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'pendingInvitationsBanner';
+      banner.className = 'pending-invitations-banner';
+      var listEl = document.getElementById('projectsList');
+      if (listEl && listEl.parentNode) {
+        listEl.parentNode.insertBefore(banner, listEl);
+      } else {
+        return;
+      }
+    }
+
+    banner.innerHTML = '<h4>You\'ve been invited</h4>' +
+      rows.map(function(p) {
+        return '<div class="pending-invitation-row">' +
+          '<div class="pending-invitation-info">' +
+            '<div class="pending-invitation-name">' + escapeHTML(p.name || 'Untitled') + '</div>' +
+            '<div class="pending-invitation-meta">Invited by ' + escapeHTML(p.createdByName || 'a member') + '</div>' +
+          '</div>' +
+          '<button class="btn btn-primary" data-accept-invite="' + escapeAttr(p.id) + '">Accept</button>' +
+          '<button class="btn btn-ghost" data-decline-invite="' + escapeAttr(p.id) + '">Dismiss</button>' +
+        '</div>';
+      }).join('');
+
+    banner.querySelectorAll('[data-accept-invite]').forEach(function(btn) {
+      btn.onclick = function() { acceptProjectInvitation(btn.dataset.acceptInvite); };
+    });
+    banner.querySelectorAll('[data-decline-invite]').forEach(function(btn) {
+      btn.onclick = function() { declineProjectInvitation(btn.dataset.declineInvite); };
+    });
+  }, function(err) {
+    logError('Pending invitations error', err);
+  });
+};
+
+var acceptProjectInvitation = function(projectId) {
+  if (!state.user || !state.user.email) return;
+  var myEmail = state.user.email.toLowerCase();
+  var myUid = state.user.uid;
+  var myName = state.user.displayName || state.user.email || 'Member';
+
+  getDocs(query(collection(db, 'projects'), where('pendingInvites', 'array-contains', myEmail))).then(function(snap) {
+    var match = null;
+    snap.forEach(function(d) { if (d.id === projectId) match = d; });
+    if (!match) {
+      showToast('Invitation no longer available.', 'error');
+      return;
+    }
+    var data = match.data();
+    var newMemberIds = (data.memberIds || []).slice();
+    if (newMemberIds.indexOf(myUid) === -1) newMemberIds.push(myUid);
+    var newMemberNames = Object.assign({}, data.memberNames || {});
+    newMemberNames[myUid] = myName;
+    var newPending = (data.pendingInvites || []).filter(function(e) { return e !== myEmail; });
+
+    updateDoc(doc(db, 'projects', projectId), {
+      memberIds: newMemberIds,
+      memberNames: newMemberNames,
+      pendingInvites: newPending,
+      updatedAt: serverTimestamp()
+    }).then(function() {
+      showToast('Joined ' + (data.name || 'project') + '.', 'info');
+      if (data.createdBy && data.createdBy !== myUid) {
+        writeNotification(data.createdBy, 'project-joined',
+          myName + ' joined ' + (data.name || 'a project'),
+          { page: 'projects', params: { projectId: projectId } });
+      }
+    }).catch(function(err) {
+      logError('Accept invite error', err);
+      showToast('Failed to accept invitation.', 'error');
+    });
+  }).catch(function(err) {
+    logError('Accept invite lookup error', err);
+    showToast('Failed to accept invitation.', 'error');
+  });
+};
+
+var declineProjectInvitation = function(projectId) {
+  try {
+    var key = 'enclaveDismissedInvites';
+    var dismissed = JSON.parse(sessionStorage.getItem(key) || '[]');
+    if (dismissed.indexOf(projectId) === -1) dismissed.push(projectId);
+    sessionStorage.setItem(key, JSON.stringify(dismissed));
+  } catch (e) {}
+  var row = document.querySelector('[data-accept-invite="' + projectId + '"]');
+  if (row) {
+    var parent = row.closest('.pending-invitation-row');
+    if (parent) parent.remove();
+  }
+  // If banner is now empty, remove it
+  var banner = document.getElementById('pendingInvitationsBanner');
+  if (banner && !banner.querySelector('.pending-invitation-row')) {
+    banner.remove();
+  }
+};
+
 // ─── Projects: teardown ─────────────────────────────────────────────────────
 export var teardownProjectsPage = function() {
   var keys = ['unsubscribe', 'detailUnsubscribe', 'commentsUnsubscribe', 'filesUnsubscribe', 'tasksUnsubscribe', 'activityUnsubscribe'];
@@ -1313,6 +1540,10 @@ export var teardownProjectsPage = function() {
     }
     projectsState[k] = null;
   });
+  if (pendingInvitationsUnsubscribe) {
+    pendingInvitationsUnsubscribe();
+    pendingInvitationsUnsubscribe = null;
+  }
 };
 
 // ─── Projects: page init ────────────────────────────────────────────────────
@@ -1333,6 +1564,8 @@ export var initProjectsPage = function() {
     projectsState.openModalOnLoad = false;
     openProjectModal();
   }
+
+  loadPendingInvitations();
 
   if (projectsState.activeProjectId) {
     loadProjectDetail(projectsState.activeProjectId);

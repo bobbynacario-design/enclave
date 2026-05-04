@@ -3032,6 +3032,71 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   border-color: var(--accent);
 }
 
+/* ── Pending invite UI (modal + banner) ─────────────────────────────────────── */
+.pending-invites-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.pending-invites-input-row .form-input { flex: 1; }
+
+.pending-invites-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 4px;
+}
+
+.pending-invite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px 4px 12px;
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+.pending-invite-chip-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.pending-invite-chip-remove:hover { color: var(--danger); }
+
+.pending-invitations-banner {
+  background: rgba(124, 92, 191, 0.08);
+  border: 1px solid rgba(124, 92, 191, 0.25);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.pending-invitations-banner h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+.pending-invitation-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(124, 92, 191, 0.15);
+}
+.pending-invitation-row:first-of-type { border-top: 0; }
+.pending-invitation-info { flex: 1; min-width: 0; }
+.pending-invitation-name { font-weight: 600; font-size: 14px; }
+.pending-invitation-meta { color: var(--text-muted); font-size: 12px; }
+
 /* ── Project Tasks ───────────────────────────────────────────────────────────── */
 .task-count {
   font-family: var(--mono);
