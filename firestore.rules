@@ -245,6 +245,12 @@ service cloud.firestore {
         // Must remove self from pendingInvites (and only self)
         !(request.auth.token.email in request.resource.data.pendingInvites) &&
         request.resource.data.pendingInvites.size() == resource.data.pendingInvites.size() - 1
+      ) || (
+        signedIn() &&
+        isProjectMember(resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['taskTotal', 'taskDone', 'updatedAt']) &&
+        request.resource.data.taskTotal is int &&
+        request.resource.data.taskDone is int
       );
 
       allow delete: if isAdmin() || (

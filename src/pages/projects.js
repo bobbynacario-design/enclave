@@ -65,7 +65,7 @@ registerPickerHandler('project', function(file) {
     addedByName: state.user.displayName || state.user.email || 'Member',
     addedAt:     Timestamp.now()
   });
-  pickerState.context = 'feed';
+  pickerState.context = null;
   pickerState.projectId = null;
   return true;
 });
@@ -328,7 +328,7 @@ var loadProjectDetail = function(projectId) {
     var p = snap.data();
     p.id = snap.id;
     projectsState.detailProject = p;
-    renderProjectDetail(p);
+    refreshProjectDetailView();
   }, function(err) {
     logError('Project detail error', err);
     renderRecoveryCard(detailEl, {
@@ -476,7 +476,7 @@ var renderProjectDetail = function(p) {
       '<div class="project-comment-avatar">' + escapeHTML(getInitials(c.authorName || '?')) + '</div>' +
       '<div class="project-comment-body">' +
         '<span class="project-comment-author">' + escapeHTML(c.authorName || 'Member') + '</span>' +
-        '<span class="project-comment-time">' + cTime + '</span>' +
+        '<span class="project-comment-time">' + escapeHTML(cTime) + '</span>' +
         '<div class="project-comment-text">' + highlightMentions(linkifyText(escapeHTML(c.body || ''))) + '</div>' +
       '</div>' +
     '</div>';
@@ -774,6 +774,14 @@ var renderProjectDetail = function(p) {
           var actor = state.user.displayName || state.user.email || 'Member';
           writeNotification(task.assigneeId, 'task-status', actor + ' moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus], { page: 'projects', params: { projectId: p.id } });
         }
+        // Recompute taskDone
+        var doneCount = projectsState.detailTasks.filter(function(t) {
+          return t.id === taskId ? nextStatus === 'done' : t.status === 'done';
+        }).length;
+        updateDoc(doc(db, 'projects', p.id), {
+          taskDone: doneCount,
+          updatedAt: serverTimestamp()
+        });
       }).catch(function(err) {
         logError('Task status update error', err);
         showToast('Failed to update task.', 'error');
@@ -787,7 +795,16 @@ var renderProjectDetail = function(p) {
       var taskId = btn.dataset.taskDelete;
       showConfirmModal('Delete task', 'Delete this task?', 'Delete').then(function(ok) {
         if (!ok) return;
-        deleteDoc(doc(db, 'projects', p.id, 'tasks', taskId)).catch(function(err) {
+        var taskToDelete = projectsState.detailTasks.find(function(t) { return t.id === taskId; });
+        deleteDoc(doc(db, 'projects', p.id, 'tasks', taskId)).then(function() {
+          var newTotal = Math.max(0, (projectsState.detailProject && projectsState.detailProject.taskTotal || 0) - 1);
+          var newDone = Math.max(0, (projectsState.detailProject && projectsState.detailProject.taskDone || 0) - (taskToDelete && taskToDelete.status === 'done' ? 1 : 0));
+          updateDoc(doc(db, 'projects', p.id), {
+            taskTotal: newTotal,
+            taskDone: newDone,
+            updatedAt: serverTimestamp()
+          });
+        }).catch(function(err) {
           logError('Delete task error', err);
           showToast('Failed to delete task.', 'error');
         });
@@ -855,6 +872,14 @@ var renderProjectDetail = function(p) {
             var actor = state.user.displayName || state.user.email || 'Member';
             writeNotification(newAssigneeId, 'task-assigned', actor + ' assigned you "' + newTitle + '" in ' + projName, { page: 'projects', params: { projectId: p.id } });
           }
+          // Recompute taskDone (status is preserved in inline edit)
+          var doneCount = projectsState.detailTasks.filter(function(t) {
+            return t.status === 'done';
+          }).length;
+          updateDoc(doc(db, 'projects', p.id), {
+            taskDone: doneCount,
+            updatedAt: serverTimestamp()
+          });
           if (projectsState.detailProject) {
             renderProjectDetail(projectsState.detailProject);
           }
@@ -1010,7 +1035,9 @@ var handleSaveProject = function() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       memberIds: memberIds,
-      memberNames: memberNames
+      memberNames: memberNames,
+      taskTotal: 0,
+      taskDone: 0
     }).then(function(docRef) {
       closeProjectModal();
       showToast('Project created!', 'info');
@@ -1037,16 +1064,15 @@ var handleProjectComment = function(projectId, body) {
     createdAt: serverTimestamp()
   }).then(function() {
     // Notify @mentioned users
-    var mentionRe = /@(\w[\w\s]{0,30}\w)/g;
-    var match;
-    while ((match = mentionRe.exec(body)) !== null) {
-      var mentionName = match[1].toLowerCase();
-      (membersState.members || []).forEach(function(m) {
-        if ((m.name || '').toLowerCase() === mentionName && m.uid !== state.user.uid) {
-          writeNotification(m.uid, 'mention', actorName + ' mentioned you in ' + projectName, { page: 'projects', params: { projectId: projectId } });
-        }
-      });
-    }
+    var bodyLower = body.toLowerCase();
+    (membersState.members || []).forEach(function(m) {
+      if (m.uid === state.user.uid) return;
+      var name = (m.name || '').toLowerCase();
+      if (!name) return;
+      if (bodyLower.indexOf('@' + name) !== -1) {
+        writeNotification(m.uid, 'mention', actorName + ' mentioned you in ' + projectName, { page: 'projects', params: { projectId: projectId } });
+      }
+    });
     // Notify project owner
     if (projectsState.detailProject && projectsState.detailProject.createdBy && projectsState.detailProject.createdBy !== state.user.uid) {
       writeNotification(projectsState.detailProject.createdBy, 'project-comment', actorName + ' commented in ' + projectName, { page: 'projects', params: { projectId: projectId } });
@@ -1106,6 +1132,10 @@ var handleAddTask = function(projectId, taskData) {
       var actor = state.user.displayName || state.user.email || 'Member';
       writeNotification(taskData.assigneeId, 'task-assigned', actor + ' assigned you "' + taskData.title + '" in ' + projName, { page: 'projects', params: { projectId: projectId } });
     }
+    updateDoc(doc(db, 'projects', projectId), {
+      taskTotal: (projectsState.detailProject && projectsState.detailProject.taskTotal || 0) + 1,
+      updatedAt: serverTimestamp()
+    });
   }).catch(function(err) {
     logError('Add task error', err);
     showToast('Failed to add task.', 'error');
@@ -1141,6 +1171,10 @@ var renderMemberStack = function(p) {
 
 // ─── Projects: list subscription ────────────────────────────────────────────
 var subscribeProjectsList = function() {
+  if (projectsState.unsubscribe) {
+    projectsState.unsubscribe();
+    projectsState.unsubscribe = null;
+  }
   if (!state.user) return;
 
   var q = query(
@@ -1192,19 +1226,17 @@ var renderProjectsList = function() {
       '</div>';
   }).join('');
 
-  // Fetch task counts per project and render mini progress
+  // Render task counts from denormalized counters on the project doc
   projectsState.projects.forEach(function(p) {
-    getDocs(query(collection(db, 'projects', p.id, 'tasks'))).then(function(snap) {
-      var total = snap.size;
-      var done = 0;
-      snap.forEach(function(d) { if (d.data().status === 'done') done++; });
-      var el = document.querySelector('[data-task-count-for="' + p.id + '"]');
-      if (el && total > 0) {
-        var pct = Math.round((done / total) * 100);
-        el.innerHTML = '<span class="project-card-tasks-label">' + done + '/' + total + ' tasks</span>' +
-          '<div class="project-card-progress"><div class="project-card-progress-fill" style="width:' + pct + '%"></div></div>';
-      }
-    }).catch(function() {});
+    var el = document.querySelector('[data-task-count-for="' + p.id + '"]');
+    if (!el) return;
+    var total = typeof p.taskTotal === 'number' ? p.taskTotal : 0;
+    var done = typeof p.taskDone === 'number' ? p.taskDone : 0;
+    if (total > 0) {
+      var pct = Math.round((done / total) * 100);
+      el.innerHTML = '<span class="project-card-tasks-label">' + done + '/' + total + ' tasks</span>' +
+        '<div class="project-card-progress"><div class="project-card-progress-fill" style="width:' + pct + '%"></div></div>';
+    }
   });
 
   list.querySelectorAll('[data-project-card]').forEach(function(card) {
@@ -1269,6 +1301,17 @@ export var loadSidebarProjects = function() {
     if (container) {
       container.innerHTML = '<span class="text-muted" style="padding:0 12px;font-size:13px;">Projects unavailable</span>';
     }
+  });
+};
+
+// ─── Projects: teardown ─────────────────────────────────────────────────────
+export var teardownProjectsPage = function() {
+  var keys = ['unsubscribe', 'detailUnsubscribe', 'commentsUnsubscribe', 'filesUnsubscribe', 'tasksUnsubscribe', 'activityUnsubscribe'];
+  keys.forEach(function(k) {
+    if (typeof projectsState[k] === 'function') {
+      projectsState[k]();
+    }
+    projectsState[k] = null;
   });
 };
 

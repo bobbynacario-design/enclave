@@ -37,7 +37,7 @@ import { initMembersPage }       from '../pages/members.js';
 import { initEventsPage }        from '../pages/events.js';
 import { initAdminPage }         from '../pages/admin.js';
 import { initMessagesPage }      from '../pages/messages.js';
-import { initProjectsPage }      from '../pages/projects.js';
+import { initProjectsPage, teardownProjectsPage } from '../pages/projects.js';
 import { initResourcesPage }     from '../pages/resources.js';
 import { initNotificationsPage } from '../pages/notifications.js';
 
@@ -193,10 +193,7 @@ export var loadPage = function(page) {
     feedState.unsubscribe();
     feedState.unsubscribe = null;
   }
-  if (projectsState.unsubscribe) {
-    projectsState.unsubscribe();
-    projectsState.unsubscribe = null;
-  }
+  teardownProjectsPage();
   resetProjectDetailState();
   if (page !== 'projects') {
     projectsState.activeProjectId = null;
