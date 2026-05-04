@@ -62,6 +62,20 @@ export var initAdminPage = function() {
   var bulkChecks = document.getElementById('adminBulkCircles');
   if (bulkChecks) { bulkChecks.innerHTML = renderCircleChecks([]); }
 
+  var testInviteBtn = document.getElementById('adminTestInviteBtn');
+  if (testInviteBtn) {
+    testInviteBtn.addEventListener('click', function() {
+      handleAdminTestInvite(testInviteBtn);
+    });
+  }
+
+  var testNudgeBtn = document.getElementById('adminTestNudgeBtn');
+  if (testNudgeBtn) {
+    testNudgeBtn.addEventListener('click', function() {
+      handleAdminTestNudge(testNudgeBtn);
+    });
+  }
+
   var inviteBtn = document.getElementById('adminInviteBtn');
   if (inviteBtn) inviteBtn.addEventListener('click', handleAdminInvite);
 
@@ -665,6 +679,72 @@ var handleAdminNudge = function(email, btn) {
     }).finally(function() {
       if (btn) { btn.disabled = false; btn.textContent = 'Nudge'; }
     });
+  });
+};
+
+// ─── Admin: test emails ───────────────────────────────────────────────────────
+var handleAdminTestInvite = function(btn) {
+  if (!state.isAdmin || !state.user || !state.user.email) return;
+  if (btn && btn.disabled) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+  var testCircles = state.circles && state.circles.length > 0
+    ? state.circles
+    : ['all'];
+
+  var personalNote = 'TEST MESSAGE: This is a test of the invite email template. ' +
+    'No action required — disregard this message.';
+
+  queueInviteEmail(state.user.email, testCircles, personalNote).then(function(mailRef) {
+    showToast('Test invite queued. Checking delivery...', 'info');
+    return waitForDelivery(mailRef, 30000);
+  }).then(function(result) {
+    if (result.state === 'SUCCESS') {
+      showToast('Test invite sent to ' + state.user.email + '.', 'success');
+    } else if (result.state === 'ERROR') {
+      showToast('Delivery failed: ' + (result.error || 'unknown error'), 'error');
+    } else if (result.state === 'RETRY') {
+      showToast('Delivery is retrying. Check back in a few minutes.', 'info');
+    } else {
+      showToast('Still sending — delivery may take a minute.', 'info');
+    }
+  }).catch(function(err) {
+    logError('Failed to send test invite', err);
+    showToast('Failed to send test invite. Check console for details.', 'error');
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send test invite to me'; }
+  });
+};
+
+var handleAdminTestNudge = function(btn) {
+  if (!state.isAdmin || !state.user || !state.user.email) return;
+  if (btn && btn.disabled) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+  var displayName = state.user.displayName || state.user.email.split('@')[0] || 'there';
+  var testMessage = 'TEST MESSAGE: This is a test of the nudge email template. ' +
+    'No action required — disregard this message.';
+
+  queueNudgeEmail(state.user.email, displayName, testMessage).then(function(mailRef) {
+    showToast('Test nudge queued. Checking delivery...', 'info');
+    return waitForDelivery(mailRef, 30000);
+  }).then(function(result) {
+    if (result.state === 'SUCCESS') {
+      showToast('Test nudge sent to ' + state.user.email + '.', 'success');
+    } else if (result.state === 'ERROR') {
+      showToast('Delivery failed: ' + (result.error || 'unknown error'), 'error');
+    } else if (result.state === 'RETRY') {
+      showToast('Delivery is retrying. Check back in a few minutes.', 'info');
+    } else {
+      showToast('Still sending — delivery may take a minute.', 'info');
+    }
+  }).catch(function(err) {
+    logError('Failed to send test nudge', err);
+    showToast('Failed to send test nudge. Check console for details.', 'error');
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send test nudge to me'; }
   });
 };
 
