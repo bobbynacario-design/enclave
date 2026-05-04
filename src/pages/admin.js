@@ -10,6 +10,8 @@ import {
   serverTimestamp,
   query,
   where,
+  orderBy,
+  limit,
   setDoc,
   onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
@@ -39,6 +41,8 @@ import { showToast } from '../ui/toast.js';
 import { showConfirmModal, showCirclePickerModal } from '../ui/modals.js';
 
 import { writeNotification } from './notifications.js';
+
+import { relativeTime } from '../util/time.js';
 
 import {
   syncSidebarSelection,
@@ -83,6 +87,7 @@ export var initAdminPage = function() {
   if (bulkBtn) bulkBtn.addEventListener('click', handleAdminBulkInvite);
 
   loadAllowlistMembers();
+  loadAuditLog();
 };
 
 var renderAdminAccessDenied = function() {
@@ -109,6 +114,45 @@ var renderAdminAccessDenied = function() {
       loadPage('feed');
     });
   }
+};
+
+// ─── Admin: audit log ────────────────────────────────────────────────────────
+var loadAuditLog = function() {
+  var list = document.getElementById('auditLogList');
+  if (!list) return;
+
+  var q = query(
+    collection(db, 'auditLog'),
+    orderBy('createdAt', 'desc'),
+    limit(20)
+  );
+
+  getDocs(q).then(function(snap) {
+    if (snap.empty) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No role changes yet</div><p class="empty-state-text">When you promote or remove admins, the change will appear here.</p></div>';
+      return;
+    }
+
+    var rows = [];
+    snap.forEach(function(d) {
+      var entry = d.data();
+      var when = entry.createdAt && typeof entry.createdAt.toDate === 'function'
+        ? relativeTime(entry.createdAt.toDate())
+        : 'just now';
+      var actionText = entry.toIsAdmin
+        ? '<strong>' + escapeHTML(entry.actorEmail || 'Admin') + '</strong> promoted <strong>' + escapeHTML(entry.targetEmail || '?') + '</strong> to admin'
+        : '<strong>' + escapeHTML(entry.actorEmail || 'Admin') + '</strong> removed admin from <strong>' + escapeHTML(entry.targetEmail || '?') + '</strong>';
+      rows.push('' +
+        '<div class="audit-log-entry">' +
+          '<div class="audit-log-text">' + actionText + '</div>' +
+          '<div class="audit-log-time">' + escapeHTML(when) + '</div>' +
+        '</div>');
+    });
+    list.innerHTML = rows.join('');
+  }).catch(function(err) {
+    logError('Failed to load audit log', err);
+    list.innerHTML = '<p class="text-muted">Failed to load audit log.</p>';
+  });
 };
 
 // ─── Admin: load allowlist ────────────────────────────────────────────────────

@@ -2,8 +2,10 @@
 import {
   doc,
   collection,
+  addDoc,
   getDocs,
-  updateDoc
+  updateDoc,
+  serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { db } from '../../firebase.js';
 
@@ -22,6 +24,7 @@ import { logError } from '../util/log.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
+import { showConfirmModal } from '../ui/modals.js';
 
 // Push notifications
 import {
@@ -127,6 +130,14 @@ var renderMembersList = function() {
       openProfile(card.dataset.uid);
     });
   });
+
+  // Wire promotion buttons — stopPropagation so card click doesn't fire
+  list.querySelectorAll('.member-promote-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      handleMemberPromote(btn);
+    });
+  });
 };
 
 // ─── Members: render single card ─────────────────────────────────────────────
@@ -153,13 +164,87 @@ var renderMemberCard = function(m) {
     ? '<div class="member-role">' + roleBioEsc + '</div>'
     : '';
 
+  var adminBadge = m.isAdmin === true
+    ? '<span class="member-admin-badge" title="Admin">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px;">' +
+          '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>' +
+        '</svg>' +
+        'Admin' +
+      '</span>'
+    : '';
+
+  var promoteBtn = '';
+  if (state.isAdmin && state.user && m.uid !== state.user.uid) {
+    var btnLabel = m.isAdmin === true ? 'Remove admin' : 'Make admin';
+    var btnDataAction = m.isAdmin === true ? 'demote' : 'promote';
+    promoteBtn = '<button class="btn btn-ghost member-promote-btn" ' +
+      'data-promote-uid="' + escapeAttr(m.uid) + '" ' +
+      'data-promote-action="' + btnDataAction + '" ' +
+      'data-promote-name="' + escapeAttr(m.name || m.email || 'this member') + '" ' +
+      'data-promote-email="' + escapeAttr(m.email || '') + '" ' +
+      '>' + btnLabel + '</button>';
+  }
+
   return '' +
     '<div class="member-card" data-uid="' + escapeAttr(m.uid) + '">' +
       '<div class="member-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
       '<div class="member-name">' + nameEsc + '</div>' +
       roleLineHtml +
-      '<div class="member-circles">' + circleTags + '</div>' +
+      '<div class="member-circles">' + circleTags + adminBadge + '</div>' +
+      promoteBtn +
     '</div>';
+};
+
+// ─── Members: admin promotion ────────────────────────────────────────────────
+var handleMemberPromote = function(btn) {
+  if (!state.isAdmin || !state.user) return;
+  if (btn.disabled) return;
+
+  var uid    = btn.dataset.promoteUid;
+  var action = btn.dataset.promoteAction;
+  var name   = btn.dataset.promoteName;
+  var email  = btn.dataset.promoteEmail;
+
+  if (!uid || !action) return;
+
+  var verb = action === 'promote' ? 'Make admin' : 'Remove admin';
+  var question = action === 'promote'
+    ? 'Make ' + name + ' an admin? They will gain full admin powers including the ability to promote/remove other admins.'
+    : 'Remove admin powers from ' + name + '? They will lose all admin abilities.';
+
+  showConfirmModal(verb, question, verb).then(function(confirmed) {
+    if (!confirmed) return;
+
+    btn.disabled = true;
+    btn.textContent = action === 'promote' ? 'Promoting...' : 'Removing...';
+
+    var fromIsAdmin = action === 'promote' ? false : true;
+    var toIsAdmin   = action === 'promote' ? true  : false;
+
+    updateDoc(doc(db, 'users', uid), { isAdmin: toIsAdmin }).then(function() {
+      return addDoc(collection(db, 'auditLog'), {
+        type:        'role-change',
+        targetUid:   uid,
+        targetEmail: email,
+        fromIsAdmin: fromIsAdmin,
+        toIsAdmin:   toIsAdmin,
+        actorUid:    state.user.uid,
+        actorEmail:  state.user.email || '',
+        createdAt:   serverTimestamp()
+      });
+    }).then(function() {
+      var msg = action === 'promote'
+        ? name + ' is now an admin.'
+        : 'Admin powers removed from ' + name + '.';
+      showToast(msg, 'success');
+      loadMembers();
+    }).catch(function(err) {
+      logError('Failed to change admin status', err);
+      showToast('Failed to change admin status. Check console for details.', 'error');
+      btn.disabled = false;
+      btn.textContent = action === 'promote' ? 'Make admin' : 'Remove admin';
+    });
+  });
 };
 
 // ─── Members: profile modal open/close ──────────────────────────────────────

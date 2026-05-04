@@ -92,6 +92,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /auditLog/{auditId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin() &&
+        request.resource.data.type == 'role-change' &&
+        request.resource.data.targetUid is string &&
+        request.resource.data.targetEmail is string &&
+        request.resource.data.fromIsAdmin is bool &&
+        request.resource.data.toIsAdmin is bool &&
+        request.resource.data.actorUid == request.auth.uid &&
+        request.resource.data.actorEmail is string &&
+        request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
+    }
+
     match /mail/{mailId} {
       allow create: if isAdmin() &&
         request.resource.data.to is list &&
