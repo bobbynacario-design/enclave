@@ -330,26 +330,30 @@ var handleAdminResend = function(email, btn) {
   var entry = adminState.allowlist.find(function(e) { return e.email === email; });
   if (!entry) return;
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+  showActionModal('resend', email, entry.name).then(function(result) {
+    if (!result) return;
 
-  queueInviteEmail(email, entry.circles).then(function(mailRef) {
-    showToast('Invite queued. Checking delivery...', 'info');
-    return waitForDelivery(mailRef, 30000);
-  }).then(function(result) {
-    if (result.state === 'SUCCESS') {
-      showToast('Invite sent to ' + email + '.', 'success');
-    } else if (result.state === 'ERROR') {
-      showToast('Delivery failed: ' + (result.error || 'unknown error'), 'error');
-    } else if (result.state === 'RETRY') {
-      showToast('Delivery is retrying. Check back in a few minutes.', 'info');
-    } else {
-      showToast('Still sending — delivery may take a minute.', 'info');
-    }
-  }).catch(function(err) {
-    logError('Failed to resend invite', err);
-    showToast('Failed to resend invite. Check console for details.', 'error');
-  }).finally(function() {
-    if (btn) { btn.disabled = false; btn.textContent = 'Resend'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+    queueInviteEmail(email, entry.circles, result.message).then(function(mailRef) {
+      showToast('Invite queued. Checking delivery...', 'info');
+      return waitForDelivery(mailRef, 30000);
+    }).then(function(deliveryResult) {
+      if (deliveryResult.state === 'SUCCESS') {
+        showToast('Invite sent to ' + email + '.', 'success');
+      } else if (deliveryResult.state === 'ERROR') {
+        showToast('Delivery failed: ' + (deliveryResult.error || 'unknown error'), 'error');
+      } else if (deliveryResult.state === 'RETRY') {
+        showToast('Delivery is retrying. Check back in a few minutes.', 'info');
+      } else {
+        showToast('Still sending — delivery may take a minute.', 'info');
+      }
+    }).catch(function(err) {
+      logError('Failed to resend invite', err);
+      showToast('Failed to resend invite. Check console for details.', 'error');
+    }).finally(function() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Resend'; }
+    });
   });
 };
 
@@ -418,8 +422,9 @@ var handleAdminBulkInvite = function() {
   processNext(0);
 };
 
-// ─── Admin: nudge ─────────────────────────────────────────────────────────────
-var showNudgeModal = function(email, name) {
+// ─── Admin: action modal (nudge + resend) ─────────────────────────────────────
+var showActionModal = function(mode, email, name) {
+  // mode: 'nudge' or 'resend'
   return new Promise(function(resolve) {
     var existing = document.getElementById('dialogBackdrop');
     if (existing && existing.parentNode) {
@@ -427,25 +432,38 @@ var showNudgeModal = function(email, name) {
     }
 
     var displayName = name || email.split('@')[0] || 'there';
-    var defaultMessage = 'Hi ' + displayName + ', it\'s been a while! ' +
-      'There\'s been activity in Enclave — come check it out.';
+    var titleText, subtitleText, defaultMessage, sendBtnLabel, showNotifOption, lockEmail;
 
-    var backdrop    = document.createElement('div');
-    var card        = document.createElement('div');
-    var title       = document.createElement('div');
-    var subtitle    = document.createElement('div');
-    var label       = document.createElement('label');
-    var textarea    = document.createElement('textarea');
-    var optionsRow  = document.createElement('div');
-    var emailLabel  = document.createElement('label');
-    var emailCheck  = document.createElement('input');
-    var emailText   = document.createElement('span');
-    var notifLabel  = document.createElement('label');
-    var notifCheck  = document.createElement('input');
-    var notifText   = document.createElement('span');
-    var actions     = document.createElement('div');
-    var cancelBtn   = document.createElement('button');
-    var sendBtn     = document.createElement('button');
+    if (mode === 'resend') {
+      titleText      = 'Resend invite to ' + (name || email);
+      subtitleText   = 'Re-send the invite email. Add a personal message if you want.';
+      defaultMessage = 'Hi ' + displayName + ', here\'s your Enclave invite again — looking forward to having you!';
+      sendBtnLabel   = 'Resend Invite';
+      showNotifOption = false;
+      lockEmail      = true;
+    } else {
+      titleText      = 'Nudge ' + (name || email);
+      subtitleText   = 'Send a friendly reminder by email and in-app notification.';
+      defaultMessage = 'Hi ' + displayName + ', it\'s been a while! ' +
+        'There\'s been activity in Enclave — come check it out.';
+      sendBtnLabel   = 'Send Nudge';
+      showNotifOption = true;
+      lockEmail      = false;
+    }
+
+    var backdrop   = document.createElement('div');
+    var card       = document.createElement('div');
+    var title      = document.createElement('div');
+    var subtitle   = document.createElement('div');
+    var label      = document.createElement('label');
+    var textarea   = document.createElement('textarea');
+    var optionsRow = document.createElement('div');
+    var emailLabel = document.createElement('label');
+    var emailCheck = document.createElement('input');
+    var emailText  = document.createElement('span');
+    var actions    = document.createElement('div');
+    var cancelBtn  = document.createElement('button');
+    var sendBtn    = document.createElement('button');
 
     backdrop.id        = 'dialogBackdrop';
     backdrop.className = 'dialog-backdrop';
@@ -453,16 +471,16 @@ var showNudgeModal = function(email, name) {
     card.className = 'dialog-card';
 
     title.className   = 'dialog-title';
-    title.textContent = 'Nudge ' + (name || email);
+    title.textContent = titleText;
 
     subtitle.className   = 'dialog-message';
-    subtitle.textContent = 'Send a friendly reminder by email and in-app notification.';
+    subtitle.textContent = subtitleText;
 
     label.className   = 'profile-section-title';
-    label.textContent = 'Message';
-    label.htmlFor     = 'nudgeMessage';
+    label.textContent = 'Personal message';
+    label.htmlFor     = 'actionMessage';
 
-    textarea.id        = 'nudgeMessage';
+    textarea.id        = 'actionMessage';
     textarea.className = 'edit-input edit-textarea';
     textarea.rows      = 4;
     textarea.maxLength = 500;
@@ -471,23 +489,30 @@ var showNudgeModal = function(email, name) {
     optionsRow.className = 'admin-nudge-options';
 
     emailCheck.type    = 'checkbox';
-    emailCheck.id      = 'nudgeSendEmail';
+    emailCheck.id      = 'actionSendEmail';
     emailCheck.checked = true;
+    if (lockEmail) { emailCheck.disabled = true; }
     emailText.textContent = 'Send email';
     emailLabel.appendChild(emailCheck);
     emailLabel.appendChild(emailText);
     emailLabel.className = 'admin-nudge-option';
-
-    notifCheck.type    = 'checkbox';
-    notifCheck.id      = 'nudgeSendNotif';
-    notifCheck.checked = true;
-    notifText.textContent = 'Send in-app notification';
-    notifLabel.appendChild(notifCheck);
-    notifLabel.appendChild(notifText);
-    notifLabel.className = 'admin-nudge-option';
-
     optionsRow.appendChild(emailLabel);
-    optionsRow.appendChild(notifLabel);
+
+    var notifCheck = null;
+    if (showNotifOption) {
+      var notifLabel = document.createElement('label');
+      notifCheck     = document.createElement('input');
+      var notifText  = document.createElement('span');
+
+      notifCheck.type    = 'checkbox';
+      notifCheck.id      = 'actionSendNotif';
+      notifCheck.checked = true;
+      notifText.textContent = 'Send in-app notification';
+      notifLabel.appendChild(notifCheck);
+      notifLabel.appendChild(notifText);
+      notifLabel.className = 'admin-nudge-option';
+      optionsRow.appendChild(notifLabel);
+    }
 
     actions.className = 'dialog-actions';
 
@@ -497,7 +522,7 @@ var showNudgeModal = function(email, name) {
 
     sendBtn.type      = 'button';
     sendBtn.className = 'btn btn-primary';
-    sendBtn.textContent = 'Send Nudge';
+    sendBtn.textContent = sendBtnLabel;
 
     var close = function(result) {
       if (backdrop.parentNode) {
@@ -517,7 +542,7 @@ var showNudgeModal = function(email, name) {
       close({
         message:   message,
         sendEmail: emailCheck.checked,
-        sendNotif: notifCheck.checked
+        sendNotif: notifCheck ? notifCheck.checked : false
       });
     });
 
@@ -567,6 +592,7 @@ var queueNudgeEmail = function(email, name, message) {
     '<tr><td style="padding:0 32px 24px;">' +
     '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1a1a1a;line-height:1.6;margin:0;white-space:pre-wrap;">' + escapeHTML(message) + '</p>' +
     '</td></tr>' +
+    renderEmailInstallBlock() +
     '<tr><td style="padding:8px 32px 32px;" align="center">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
     '<td bgcolor="#7c5cbf" style="border-radius:8px;">' +
@@ -583,6 +609,7 @@ var queueNudgeEmail = function(email, name, message) {
     message + '\n\n' +
     'Open Enclave: ' + inviteURL + '\n\n' +
     '— ' + inviterName;
+  text += renderTextInstallBlock();
 
   return addDoc(collection(db, 'mail'), {
     to: [email],
@@ -607,7 +634,7 @@ var handleAdminNudge = function(email, btn) {
   var entry = adminState.allowlist.find(function(e) { return e.email === email; });
   if (!entry) return;
 
-  showNudgeModal(email, entry.name).then(function(result) {
+  showActionModal('nudge', email, entry.name).then(function(result) {
     if (!result) return;
     if (!result.sendEmail && !result.sendNotif) {
       showToast('Pick at least one delivery method.', 'error');
@@ -677,7 +704,93 @@ var syncUserDocsForAllowlist = function(email, circles) {
   });
 };
 
-var queueInviteEmail = function(email, circles) {
+var renderEmailInstallBlock = function() {
+  return '' +
+    '<tr><td style="padding:0 32px 8px;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#1a1a1a;margin:0 0 8px 0;">' +
+        'Install Enclave for quick access' +
+      '</p>' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;margin:0 0 18px 0;line-height:1.55;">' +
+        'Once installed, Enclave opens like a real app — no browser tabs, full-screen, faster to come back to.' +
+      '</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 14px;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#7c5cbf;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
+        'iPhone / iPad (Safari)' +
+      '</p>' +
+      '<ol style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.6;">' +
+        '<li>Tap the Share button (square with an up-arrow)</li>' +
+        '<li>Tap "Add to Home Screen"</li>' +
+        '<li>Tap "Add"</li>' +
+      '</ol>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 14px;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#7c5cbf;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
+        'Android (Chrome)' +
+      '</p>' +
+      '<ol style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.6;">' +
+        '<li>Tap the three-dot menu</li>' +
+        '<li>Tap "Install app" or "Add to Home screen"</li>' +
+        '<li>Tap "Install"</li>' +
+      '</ol>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 32px 24px;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#7c5cbf;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
+        'Desktop (Chrome / Edge)' +
+      '</p>' +
+      '<ol style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.6;">' +
+        '<li>Click the install icon in the address bar (small monitor with arrow)</li>' +
+        '<li>Or open the three-dot menu and choose "Install Enclave"</li>' +
+        '<li>Click "Install"</li>' +
+      '</ol>' +
+    '</td></tr>';
+};
+
+var renderTextInstallBlock = function() {
+  return '\n\n' +
+    'INSTALL ENCLAVE FOR QUICK ACCESS\n' +
+    '--------------------------------\n' +
+    'Once installed, Enclave opens like a real app — no browser tabs, full-screen.\n\n' +
+    'iPhone / iPad (Safari):\n' +
+    '  1. Tap the Share button\n' +
+    '  2. Tap "Add to Home Screen"\n' +
+    '  3. Tap "Add"\n\n' +
+    'Android (Chrome):\n' +
+    '  1. Tap the three-dot menu\n' +
+    '  2. Tap "Install app" or "Add to Home screen"\n' +
+    '  3. Tap "Install"\n\n' +
+    'Desktop (Chrome / Edge):\n' +
+    '  1. Click the install icon in the address bar\n' +
+    '  2. Or three-dot menu → "Install Enclave"\n' +
+    '  3. Click "Install"';
+};
+
+var renderEmailFeaturesBlock = function() {
+  return '' +
+    '<tr><td style="padding:0 32px 24px;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#1a1a1a;margin:0 0 12px 0;">' +
+        'What\'s inside' +
+      '</p>' +
+      '<ul style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.7;">' +
+        '<li><strong>Private feed</strong> in your circles — only invited members see your posts</li>' +
+        '<li><strong>Real-time messaging</strong> with anyone in your circles</li>' +
+        '<li><strong>Project workspaces</strong> with tasks, files, and comments</li>' +
+        '<li><strong>Notifications</strong> when something happens that involves you</li>' +
+      '</ul>' +
+    '</td></tr>';
+};
+
+var renderTextFeaturesBlock = function() {
+  return '\n\n' +
+    'WHAT\'S INSIDE\n' +
+    '-------------\n' +
+    '• Private feed in your circles — only invited members see your posts\n' +
+    '• Real-time messaging with anyone in your circles\n' +
+    '• Project workspaces with tasks, files, and comments\n' +
+    '• Notifications when something happens that involves you';
+};
+
+var queueInviteEmail = function(email, circles, personalMessage) {
   var inviteURL = getAppURL();
   var inviterName = (state.user && (state.user.displayName || state.user.email)) || 'Enclave Admin';
   var circleNames = normalizeCircles(circles).map(circleLabel);
@@ -718,6 +831,15 @@ var queueInviteEmail = function(email, circles) {
     '<tr><td style="padding:0 32px 24px;">' +
     '<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#1a1a1a;line-height:1.6;margin:0;">Hey &#8212; <strong>' + escapeHTML(inviterName) + '</strong> invited you to join Enclave. It\'s a private, invite-only space, and you\'re on the list.</p>' +
     '</td></tr>' +
+    (personalMessage
+      ? '<tr><td style="padding:0 32px 16px;">' +
+          '<div style="background:#f5f0ff;border-left:3px solid #7c5cbf;border-radius:4px;padding:14px 16px;">' +
+            '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;line-height:1.6;white-space:pre-wrap;">' +
+              escapeHTML(personalMessage) +
+            '</p>' +
+          '</div>' +
+        '</td></tr>'
+      : '') +
     '<tr><td style="padding:0 32px 32px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f0ff" style="border-radius:8px;">' +
     '<tr><td style="padding:20px;">' +
@@ -725,6 +847,8 @@ var queueInviteEmail = function(email, circles) {
     '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;line-height:1.5;margin:12px 0 0 0;">Each circle is a private space &#8212; you\'ll only see what people share in circles you\'re part of.</p>' +
     '</td></tr></table>' +
     '</td></tr>' +
+    renderEmailFeaturesBlock() +
+    renderEmailInstallBlock() +
     '<tr><td style="padding:8px 32px 32px;" align="center">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
     '<td bgcolor="#7c5cbf" style="border-radius:8px;">' +
@@ -751,19 +875,28 @@ var queueInviteEmail = function(email, circles) {
     },
     message: {
       subject: subject,
-      text:
-        'Hey — ' + inviterName + ' invited you to join Enclave.\n\n' +
-        'Enclave is your private space for the people who matter.\n' +
-        'It\'s invite-only, and you\'re on the list.\n\n' +
-        'You\'ll have access to these circles:\n' +
-        circleLine + '\n\n' +
-        'Each circle is a private space — you\'ll only see what people share\n' +
-        'in circles you\'re part of.\n\n' +
-        'Open Enclave: ' + inviteURL + '\n\n' +
-        'Sign in with this Google account: ' + email + '\n\n' +
-        '—\n\n' +
-        'Enclave is private and invite-only. If you weren\'t expecting this\n' +
-        'email, you can ignore it.',
+      text: (function() {
+        var personalNote = personalMessage ? '\n\n' + personalMessage + '\n' : '';
+        var t =
+          'Hey — ' + inviterName + ' invited you to join Enclave.\n\n' +
+          'Enclave is your private space for the people who matter.\n' +
+          'It\'s invite-only, and you\'re on the list.' +
+          personalNote + '\n\n' +
+          'You\'ll have access to these circles:\n' +
+          circleLine + '\n\n' +
+          'Each circle is a private space — you\'ll only see what people share\n' +
+          'in circles you\'re part of.';
+        t += renderTextFeaturesBlock();
+        t += renderTextInstallBlock();
+        t +=
+          '\n\n' +
+          'Open Enclave: ' + inviteURL + '\n\n' +
+          'Sign in with this Google account: ' + email + '\n\n' +
+          '—\n\n' +
+          'Enclave is private and invite-only. If you weren\'t expecting this\n' +
+          'email, you can ignore it.';
+        return t;
+      }()),
       html: html
     }
   }).then(function(ref) {
