@@ -22,7 +22,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return ownerAdmin() ||
-        (userDocExists() && userData().role == 'admin');
+        (userDocExists() && userData().isAdmin == true);
     }
 
     function canAccessCircle(circle) {
@@ -114,23 +114,35 @@ service cloud.firestore {
         request.auth.uid == userId &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.email == request.auth.token.email &&
+        request.resource.data.circles is list &&
         (
-          request.resource.data.role == '' ||
-          (ownerAdmin() && request.resource.data.role == 'admin')
-        ) &&
-        request.resource.data.circles is list;
+          !request.resource.data.keys().hasAny(['isAdmin']) ||
+          (ownerAdmin() && request.resource.data.isAdmin is bool)
+        );
 
-      allow update: if (isAdmin() &&
-        request.resource.data.uid == resource.data.uid &&
-        request.resource.data.email == resource.data.email
-      ) || (
+      allow update: if
+        // Admin updates: any field EXCEPT isAdmin can change
+        (isAdmin() &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false)
+        ) || (
+        // Self-updates: cannot change uid, email, circles, or isAdmin
         signedIn() &&
-        request.auth.uid == userId &&
-        request.resource.data.uid == resource.data.uid &&
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.circles == resource.data.circles &&
-        request.resource.data.role != 'admin'
-      );
+          request.auth.uid == userId &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.circles == resource.data.circles &&
+          request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false)
+        ) || (
+        // Role-change updates: ONLY admins can change isAdmin, and the
+        // diff must affect ONLY isAdmin
+        isAdmin() &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAdmin']) &&
+          request.resource.data.isAdmin is bool
+        );
 
       allow delete: if isAdmin();
     }
