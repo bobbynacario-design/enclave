@@ -149,6 +149,15 @@ const buildDigest = (user, week) => {
         " were added to the library."));
   }
 
+  if (week.briefingCount > 0) {
+    const was = week.briefingCount === 1 ? " was" : " were";
+    sections += sectionHtml("Briefings",
+        rowHtml(escapeHtml(plural(week.briefingCount, "daily briefing")) +
+        was + ` published this week &mdash; ` +
+        `<a href="${APP_URL}?page=briefings" target="_blank" ` +
+        `style="color:#7c5cbf;">catch up in the app</a>.`));
+  }
+
   const html =
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0"` +
     ` width="100%" bgcolor="#f5f5f7">` +
@@ -214,6 +223,12 @@ const buildDigest = (user, week) => {
   if (week.newMembers.length > 0) {
     const names = week.newMembers.map((m) => m.name || m.email || "Member");
     textLines.push("New members: " + names.join(", "));
+    textLines.push("");
+  }
+  if (week.briefingCount > 0) {
+    const was = week.briefingCount === 1 ? " was" : " were";
+    textLines.push(plural(week.briefingCount, "daily briefing") + was +
+      " published this week.");
     textLines.push("");
   }
   textLines.push("Open Enclave: " + APP_URL);
