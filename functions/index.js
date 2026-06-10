@@ -1,10 +1,12 @@
 "use strict";
 
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {logger} = require("firebase-functions/v2");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
+const {buildDigest} = require("./digest");
 
 initializeApp();
 
@@ -12,6 +14,95 @@ const db = getFirestore();
 const messaging = getMessaging();
 
 const APP_URL = "https://bobbynacario-design.github.io/enclave/";
+
+// Every Monday 8:00 AM Manila time, queue one digest email per member
+// summarizing the past week (posts/events filtered to their circles).
+// Emails are delivered by the Trigger Email extension watching `mail`.
+// Members with digestOptOut == true on their user doc are skipped.
+exports.weeklyDigest = onSchedule(
+    {
+      schedule: "0 8 * * 1",
+      timeZone: "Asia/Manila",
+      region: "asia-southeast1",
+    },
+    async () => {
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      const [postsSnap, eventsSnap, usersSnap, resSnap, briefSnap] =
+        await Promise.all([
+          db.collection("posts")
+              .where("timestamp", ">=", weekAgo)
+              .orderBy("timestamp", "desc")
+              .get(),
+          db.collection("events")
+              .where("date", ">=", now)
+              .orderBy("date", "asc")
+              .limit(10)
+              .get(),
+          db.collection("users").get(),
+          db.collection("resources")
+              .where("createdAt", ">=", weekAgo)
+              .get(),
+          db.collection("briefings")
+              .where("publishedAt", ">=", weekAgo)
+              .get(),
+        ]);
+
+      const week = {
+        posts: postsSnap.docs.map((d) => d.data()),
+        events: eventsSnap.docs.map((d) => d.data()),
+        newMembers: usersSnap.docs
+            .map((d) => d.data())
+            .filter((u) => u.joinedAt &&
+              typeof u.joinedAt.toMillis === "function" &&
+              u.joinedAt.toMillis() >= weekAgo.getTime()),
+        resources: resSnap.docs.map((d) => d.data()),
+        briefingCount: briefSnap.size,
+      };
+
+      const batch = db.batch();
+      let queued = 0;
+      let skipped = 0;
+      usersSnap.docs.forEach((userDoc) => {
+        const user = userDoc.data();
+        if (!user.email || user.digestOptOut === true) {
+          skipped++;
+          return;
+        }
+        const digest = buildDigest(user, week);
+        if (!digest) {
+          skipped++;
+          return;
+        }
+        const ref = db.collection("mail").doc();
+        batch.set(ref, {
+          to: [user.email],
+          createdAt: FieldValue.serverTimestamp(),
+          metadata: {
+            type: "weekly-digest",
+            recipientUid: userDoc.id,
+          },
+          message: digest,
+        });
+        queued++;
+      });
+
+      if (queued > 0) {
+        await batch.commit();
+      }
+
+      logger.info("Weekly digest queued", {
+        recipients: queued,
+        skipped: skipped,
+        posts: week.posts.length,
+        events: week.events.length,
+        newMembers: week.newMembers.length,
+        resources: week.resources.length,
+        briefings: week.briefingCount,
+      });
+    },
+);
 
 // When a briefing is published, fan out one in-app notification per member.
 // Each notification doc then triggers sendNotificationPush below, so members
