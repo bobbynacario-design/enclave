@@ -6,7 +6,12 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  deleteDoc
+  deleteDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteField,
+  serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { db } from '../../firebase.js';
 
@@ -20,7 +25,7 @@ import { logError } from '../util/log.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
-import { showConfirmModal, openBriefingImportModal } from '../ui/modals.js';
+import { showConfirmModal, openBriefingImportModal, openBriefingDiscussModal } from '../ui/modals.js';
 
 const BRIEFING_READ_KEY = 'enclave_last_briefing_ts';
 
@@ -29,7 +34,109 @@ export const resetBriefingsState = function() {
     briefingsState.unsubscribe();
     briefingsState.unsubscribe = null;
   }
+  Object.keys(briefingsState.reactionUnsubs).forEach(function(bid) {
+    briefingsState.reactionUnsubs[bid]();
+  });
+  briefingsState.reactionUnsubs = {};
+  briefingsState.reactions = {};
   briefingsState.briefings = [];
+};
+
+// Normalize sections: accept array [{id, stories}] or object {global: [...]}
+const normalizeSections = function(b) {
+  if (Array.isArray(b.sections)) return b.sections;
+  const sectionList = [];
+  if (b.sections && typeof b.sections === 'object') {
+    Object.keys(b.sections).forEach(function(key) {
+      sectionList.push({ id: key, stories: b.sections[key] });
+    });
+  }
+  return sectionList;
+};
+
+// ─── Per-story reactions ─────────────────────────────────────────────────────
+// Stored as briefings/{bid}/reactions/{uid} = { stories: { 'global_0': true } }
+// where the key is '<sectionId>_<raw story index>'.
+
+const getReactionState = function(bid) {
+  return briefingsState.reactions[bid] || { counts: {}, mine: {} };
+};
+
+const updateReactionButtons = function(bid) {
+  const rs = getReactionState(bid);
+  document.querySelectorAll('[data-briefing-react="' + bid + '"]').forEach(function(btn) {
+    const key = btn.getAttribute('data-story-key');
+    const count = rs.counts[key] || 0;
+    const countEl = btn.querySelector('.briefing-story-action-count');
+    if (countEl) countEl.textContent = count > 0 ? String(count) : '';
+    btn.classList.toggle('active', !!rs.mine[key]);
+  });
+};
+
+const syncReactionSubscriptions = function() {
+  const liveIds = {};
+  briefingsState.briefings.forEach(function(b) { liveIds[b.id] = true; });
+
+  Object.keys(briefingsState.reactionUnsubs).forEach(function(bid) {
+    if (liveIds[bid]) return;
+    briefingsState.reactionUnsubs[bid]();
+    delete briefingsState.reactionUnsubs[bid];
+    delete briefingsState.reactions[bid];
+  });
+
+  briefingsState.briefings.forEach(function(b) {
+    if (briefingsState.reactionUnsubs[b.id]) return;
+    briefingsState.reactionUnsubs[b.id] = onSnapshot(
+      collection(db, 'briefings', b.id, 'reactions'),
+      function(snap) {
+        const counts = {};
+        const mine = {};
+        snap.forEach(function(d) {
+          const stories = (d.data() || {}).stories || {};
+          Object.keys(stories).forEach(function(key) {
+            if (stories[key] !== true) return;
+            counts[key] = (counts[key] || 0) + 1;
+            if (state.user && d.id === state.user.uid) mine[key] = true;
+          });
+        });
+        briefingsState.reactions[b.id] = { counts: counts, mine: mine };
+        updateReactionButtons(b.id);
+      },
+      function(err) {
+        logError('Briefing reactions subscribe error', err);
+      }
+    );
+  });
+};
+
+const toggleStoryReact = function(bid, key) {
+  if (!state.user) return;
+  const ref = doc(db, 'briefings', bid, 'reactions', state.user.uid);
+  let op;
+  if (getReactionState(bid).mine[key]) {
+    const patch = { updatedAt: serverTimestamp() };
+    patch['stories.' + key] = deleteField();
+    op = updateDoc(ref, patch);
+  } else {
+    const storiesPatch = {};
+    storiesPatch[key] = true;
+    op = setDoc(ref, { stories: storiesPatch, updatedAt: serverTimestamp() }, { merge: true });
+  }
+  op.catch(function(err) {
+    logError('Briefing react failed', err);
+    showToast('Could not save reaction. Try again.', 'error');
+  });
+};
+
+const findBriefingStory = function(bid, key) {
+  const briefing = briefingsState.briefings.find(function(b) { return b.id === bid; });
+  if (!briefing) return null;
+  const sep = key.lastIndexOf('_');
+  const secId = key.slice(0, sep);
+  const idx = parseInt(key.slice(sep + 1), 10);
+  const sec = normalizeSections(briefing).find(function(s) { return s.id === secId; });
+  const story = sec && Array.isArray(sec.stories) ? sec.stories[idx] : null;
+  return story ? { briefing: briefing, story: story } : null;
 };
 
 const getBriefingPublishedMs = function(b) {
@@ -96,28 +203,37 @@ const renderBriefingCard = function(b) {
       '</div>' +
     '</div>';
 
-  // Normalize sections: accept array [{id, stories}] or object {global: [...]}
-  let sectionList = [];
-  if (Array.isArray(b.sections)) {
-    sectionList = b.sections;
-  } else if (b.sections && typeof b.sections === 'object') {
-    Object.keys(b.sections).forEach(function(key) {
-      sectionList.push({ id: key, stories: b.sections[key] });
-    });
-  }
+  const sectionList = normalizeSections(b);
+  const reactionState = getReactionState(b.id);
 
   let sections = '';
   sectionList.forEach(function(sec) {
     const stories = sec.stories || [];
-    // If stories have a 'relevant' boolean field, filter by it; otherwise show all
+    // If stories have a 'relevant' boolean field, filter by it; otherwise show all.
+    // Reaction keys use the raw index so they stay stable regardless of filtering.
     const hasRelevantField = stories.length > 0 && typeof stories[0].relevant === 'boolean';
-    const relevant = hasRelevantField ? stories.filter(function(s) { return s.relevant === true; }) : stories;
+    const relevant = [];
+    stories.forEach(function(s, idx) {
+      if (hasRelevantField && s.relevant !== true) return;
+      relevant.push({ story: s, key: sec.id + '_' + idx });
+    });
     if (!relevant.length) return;
     const meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id, color: '#888' };
-    const storiesHtml = relevant.map(function(s) {
+    const storiesHtml = relevant.map(function(it) {
+      const s = it.story;
+      const count = reactionState.counts[it.key] || 0;
+      const activeClass = reactionState.mine[it.key] ? ' active' : '';
       return '<div class="briefing-story" style="border-left-color:' + meta.color + '">' +
         '<div class="briefing-story-head">' + escapeHTML(s.headline) + '</div>' +
         '<div class="briefing-story-body">' + escapeHTML(s.body) + '</div>' +
+        '<div class="briefing-story-actions">' +
+          '<button class="briefing-story-action briefing-react-btn' + activeClass + '" data-briefing-react="' + escapeAttr(b.id) + '" data-story-key="' + escapeAttr(it.key) + '" aria-label="Like story">' +
+            '&#128077; <span class="briefing-story-action-count">' + (count > 0 ? count : '') + '</span>' +
+          '</button>' +
+          '<button class="briefing-story-action" data-briefing-discuss="' + escapeAttr(b.id) + '" data-story-key="' + escapeAttr(it.key) + '" aria-label="Discuss story in the feed">' +
+            '&#128172; Discuss' +
+          '</button>' +
+        '</div>' +
       '</div>';
     }).join('');
     sections +=
@@ -183,12 +299,31 @@ const renderBriefingList = function() {
       const bid = btn.getAttribute('data-briefing-delete');
       showConfirmModal('Delete briefing', 'Delete this briefing?', 'Delete').then(function(confirmed) {
         if (!confirmed) return;
-        deleteDoc(doc(db, 'briefings', bid)).then(function() {
+        // Reactions live in a subcollection and would be orphaned by the
+        // doc delete, so clear them first.
+        getDocs(collection(db, 'briefings', bid, 'reactions')).then(function(snap) {
+          return Promise.all(snap.docs.map(function(d) { return deleteDoc(d.ref); }));
+        }).then(function() {
+          return deleteDoc(doc(db, 'briefings', bid));
+        }).then(function() {
           showToast('Briefing deleted.', 'success');
         }).catch(function(err) {
           showToast('Delete failed: ' + err.message, 'error');
         });
       });
+    });
+  });
+
+  listEl.querySelectorAll('[data-briefing-react]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      toggleStoryReact(btn.getAttribute('data-briefing-react'), btn.getAttribute('data-story-key'));
+    });
+  });
+
+  listEl.querySelectorAll('[data-briefing-discuss]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const found = findBriefingStory(btn.getAttribute('data-briefing-discuss'), btn.getAttribute('data-story-key'));
+      if (found) openBriefingDiscussModal(found.briefing, found.story);
     });
   });
 };
@@ -203,6 +338,7 @@ const subscribeBriefings = function() {
       data.id = d.id;
       return data;
     });
+    syncReactionSubscriptions();
     renderBriefingList();
     markBriefingsRead();
   }, function(err) {

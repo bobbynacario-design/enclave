@@ -147,7 +147,10 @@ export const briefingsState = {
   briefings:   [],
   unsubscribe: null,
   unsubscribeNotifier: null,
-  hasUnread: false
+  hasUnread: false,
+  // Per-briefing story reactions: { [briefingId]: { counts: {storyKey: n}, mine: {storyKey: true} } }
+  reactions: {},
+  reactionUnsubs: {}
 };
 
 export const projectsState = {

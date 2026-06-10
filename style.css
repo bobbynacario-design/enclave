@@ -3647,6 +3647,36 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   color: var(--text-muted);
   line-height: 1.6;
 }
+.briefing-story-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.briefing-story-action {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.briefing-story-action:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.briefing-story-action.active {
+  color: var(--accent, #7F77DD);
+  font-weight: 500;
+}
+.briefing-story-action-count {
+  font-variant-numeric: tabular-nums;
+}
 .briefing-watch {
   margin: 0 20px 16px;
   background: var(--surface-2);

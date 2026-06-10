@@ -8,7 +8,7 @@ import { state } from '../state.js';
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 import { logError } from '../util/log.js';
 import { showToast } from './toast.js';
-import { renderCircleChecks, getCheckedCircles } from '../util/circles.js';
+import { renderCircleChecks, getCheckedCircles, getInitials } from '../util/circles.js';
 
 export const showDialogModal = function(opts) {
   opts = opts || {};
@@ -179,6 +179,105 @@ export const openBriefingImportModal = function() {
   actions.appendChild(publishBtn);
   card.appendChild(title);
   card.appendChild(label);
+  card.appendChild(textarea);
+  card.appendChild(actions);
+  backdrop.appendChild(card);
+  document.body.appendChild(backdrop);
+  textarea.focus();
+};
+
+// ─── Briefing discuss modal ───────────────────────────────────────────────────
+// Quotes a briefing story headline and posts the member's take to the feed.
+export const openBriefingDiscussModal = function(briefing, story) {
+  const existing = document.getElementById('dialogBackdrop');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'dialogBackdrop';
+  backdrop.className = 'dialog-backdrop';
+
+  const card = document.createElement('div');
+  card.className = 'dialog-card';
+
+  const title = document.createElement('div');
+  title.className = 'dialog-title';
+  title.textContent = 'Discuss in the feed';
+
+  const quote = document.createElement('div');
+  quote.textContent = story.headline || '';
+  quote.style.cssText = 'font-size:13px;font-weight:500;line-height:1.4;background:var(--surface-2);border-left:2px solid var(--accent, #7F77DD);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px';
+
+  const textarea = document.createElement('textarea');
+  textarea.rows = 4;
+  textarea.placeholder = 'Share your take...';
+  textarea.maxLength = 2000;
+  textarea.style.cssText = 'width:100%;font-family:var(--sans);font-size:13px;background:var(--surface-2);color:var(--text);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px;resize:vertical';
+
+  const actions = document.createElement('div');
+  actions.className = 'dialog-actions';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.textContent = 'Cancel';
+
+  const postBtn = document.createElement('button');
+  postBtn.type = 'button';
+  postBtn.className = 'btn btn-primary';
+  postBtn.textContent = 'Post';
+
+  const close = function() {
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+  };
+
+  cancelBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', function(e) {
+    if (e.target === backdrop) close();
+  });
+
+  postBtn.addEventListener('click', function() {
+    if (!state.user) return;
+    const take = textarea.value.trim();
+    if (!take) {
+      showToast('Write something first.', 'error');
+      return;
+    }
+
+    // Post into the briefing's circle when the member belongs to it;
+    // otherwise fall back to 'all' so the post rules still allow it.
+    const inCircle = state.isAdmin ||
+      (Array.isArray(state.circles) && state.circles.indexOf(briefing.circle) !== -1);
+    const circle = inCircle ? (briefing.circle || 'all') : 'all';
+    const displayName = state.user.displayName || state.user.email;
+    const headline = String(story.headline || '').trim();
+
+    postBtn.disabled = true;
+    postBtn.textContent = 'Posting...';
+
+    addDoc(collection(db, 'posts'), {
+      authorId:       state.user.uid,
+      authorName:     displayName,
+      authorInitials: getInitials(displayName),
+      circle:         circle,
+      body:           '📰 ' + headline + '\n\n' + take,
+      timestamp:      serverTimestamp(),
+      reacts:         [],
+      comments:       []
+    }).then(function() {
+      close();
+      showToast('Posted to the feed.', 'success');
+    }).catch(function(err) {
+      logError('Briefing discuss post failed', err);
+      postBtn.disabled = false;
+      postBtn.textContent = 'Post';
+      showToast('Post failed: ' + err.message, 'error');
+    });
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(postBtn);
+  card.appendChild(title);
+  card.appendChild(quote);
   card.appendChild(textarea);
   card.appendChild(actions);
   backdrop.appendChild(card);

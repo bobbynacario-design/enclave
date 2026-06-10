@@ -388,6 +388,19 @@ service cloud.firestore {
       allow read: if userDocExists();
       allow create: if isAdmin();
       allow delete: if isAdmin();
+
+      // Per-story reactions: one doc per member, keyed by uid, holding a map
+      // of storyKey -> true. Members manage only their own doc; admins may
+      // delete any (subcollection cleanup when a briefing is deleted).
+      match /reactions/{userId} {
+        allow get, list: if userDocExists();
+        allow create, update: if userDocExists() &&
+          request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(['stories', 'updatedAt']) &&
+          request.resource.data.stories is map;
+        allow delete: if signedIn() &&
+          (request.auth.uid == userId || isAdmin());
+      }
     }
 
     match /resources/{resourceId} {

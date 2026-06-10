@@ -13,6 +13,52 @@ const messaging = getMessaging();
 
 const APP_URL = "https://bobbynacario-design.github.io/enclave/";
 
+// When a briefing is published, fan out one in-app notification per member.
+// Each notification doc then triggers sendNotificationPush below, so members
+// with FCM tokens also get a web push.
+exports.announceBriefing = onDocumentCreated(
+    {
+      document: "briefings/{briefingId}",
+      region: "asia-southeast1",
+    },
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
+
+      const briefing = snap.data() || {};
+      const publishedBy = briefing.publishedBy || "";
+      const dateLabel = briefing.date ? String(briefing.date) : "Today";
+
+      const usersSnap = await db.collection("users").get();
+      const batch = db.batch();
+      let recipients = 0;
+      usersSnap.forEach((userDoc) => {
+        if (userDoc.id === publishedBy) return;
+        const ref = db.collection("notifications").doc();
+        batch.set(ref, {
+          recipientId: userDoc.id,
+          type: "briefing",
+          message: "☕ " + dateLabel + " briefing is up — tap to read.",
+          link: {page: "briefings", params: {}},
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+          actorId: publishedBy || "system",
+          actorName: "Daily Briefing",
+        });
+        recipients++;
+      });
+
+      if (recipients > 0) {
+        await batch.commit();
+      }
+
+      logger.info("Briefing announced", {
+        briefingId: event.params.briefingId,
+        recipients: recipients,
+      });
+    },
+);
+
 exports.sendNotificationPush = onDocumentCreated(
     {
       document: "notifications/{notificationId}",

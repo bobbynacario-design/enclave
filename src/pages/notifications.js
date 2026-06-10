@@ -108,7 +108,8 @@ const NOTIF_TYPE_ICONS = {
   'task-status':     '🔄',
   'post-comment':    '💬',
   'project-comment': '💬',
-  'event-rsvp':      '📅'
+  'event-rsvp':      '📅',
+  'briefing':        '📰'
 };
 
 let notifFilter = 'all';
