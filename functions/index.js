@@ -15,6 +15,46 @@ const messaging = getMessaging();
 
 const APP_URL = "https://bobbynacario-design.github.io/enclave/";
 
+// Collects the past week's activity used to build digest emails.
+// Returns {week, usersSnap}; usersSnap doubles as the recipient list.
+const gatherWeekData = async (now) => {
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const [postsSnap, eventsSnap, usersSnap, resSnap, briefSnap] =
+    await Promise.all([
+      db.collection("posts")
+          .where("timestamp", ">=", weekAgo)
+          .orderBy("timestamp", "desc")
+          .get(),
+      db.collection("events")
+          .where("date", ">=", now)
+          .orderBy("date", "asc")
+          .limit(10)
+          .get(),
+      db.collection("users").get(),
+      db.collection("resources")
+          .where("createdAt", ">=", weekAgo)
+          .get(),
+      db.collection("briefings")
+          .where("publishedAt", ">=", weekAgo)
+          .get(),
+    ]);
+
+  const week = {
+    posts: postsSnap.docs.map((d) => d.data()),
+    events: eventsSnap.docs.map((d) => d.data()),
+    newMembers: usersSnap.docs
+        .map((d) => d.data())
+        .filter((u) => u.joinedAt &&
+          typeof u.joinedAt.toMillis === "function" &&
+          u.joinedAt.toMillis() >= weekAgo.getTime()),
+    resources: resSnap.docs.map((d) => d.data()),
+    briefingCount: briefSnap.size,
+  };
+
+  return {week: week, usersSnap: usersSnap};
+};
+
 // Every Monday 8:00 AM Manila time, queue one digest email per member
 // summarizing the past week (posts/events filtered to their circles).
 // Emails are delivered by the Trigger Email extension watching `mail`.
@@ -26,40 +66,7 @@ exports.weeklyDigest = onSchedule(
       region: "asia-southeast1",
     },
     async () => {
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-      const [postsSnap, eventsSnap, usersSnap, resSnap, briefSnap] =
-        await Promise.all([
-          db.collection("posts")
-              .where("timestamp", ">=", weekAgo)
-              .orderBy("timestamp", "desc")
-              .get(),
-          db.collection("events")
-              .where("date", ">=", now)
-              .orderBy("date", "asc")
-              .limit(10)
-              .get(),
-          db.collection("users").get(),
-          db.collection("resources")
-              .where("createdAt", ">=", weekAgo)
-              .get(),
-          db.collection("briefings")
-              .where("publishedAt", ">=", weekAgo)
-              .get(),
-        ]);
-
-      const week = {
-        posts: postsSnap.docs.map((d) => d.data()),
-        events: eventsSnap.docs.map((d) => d.data()),
-        newMembers: usersSnap.docs
-            .map((d) => d.data())
-            .filter((u) => u.joinedAt &&
-              typeof u.joinedAt.toMillis === "function" &&
-              u.joinedAt.toMillis() >= weekAgo.getTime()),
-        resources: resSnap.docs.map((d) => d.data()),
-        briefingCount: briefSnap.size,
-      };
+      const {week, usersSnap} = await gatherWeekData(new Date());
 
       const batch = db.batch();
       let queued = 0;
@@ -100,6 +107,82 @@ exports.weeklyDigest = onSchedule(
         newMembers: week.newMembers.length,
         resources: week.resources.length,
         briefings: week.briefingCount,
+      });
+    },
+);
+
+// Admin-requested test digest: the Admin page writes a digestRequests doc
+// (rules restrict creation to admins); this builds the current week's
+// digest for the requester only, queues the email, and reports back by
+// updating the request doc with status/mailId for the UI to observe.
+exports.sendTestDigest = onDocumentCreated(
+    {
+      document: "digestRequests/{requestId}",
+      region: "asia-southeast1",
+    },
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
+
+      const requestedBy = (snap.data() || {}).requestedBy;
+      const fail = (error) => snap.ref.update({
+        status: "error",
+        error: error,
+        processedAt: FieldValue.serverTimestamp(),
+      });
+
+      if (!requestedBy || typeof requestedBy !== "string") {
+        await fail("Request is missing requestedBy.");
+        return;
+      }
+
+      const userSnap = await db.doc("users/" + requestedBy).get();
+      if (!userSnap.exists) {
+        await fail("Requesting user not found.");
+        return;
+      }
+
+      const user = userSnap.data();
+      // Rules already restrict creation to admins; re-check here because
+      // this function runs with admin privileges.
+      if (user.isAdmin !== true || !user.email) {
+        await fail("Requester is not an admin with an email address.");
+        return;
+      }
+
+      const {week} = await gatherWeekData(new Date());
+      const digest = buildDigest(user, week);
+      if (!digest) {
+        await snap.ref.update({
+          status: "empty",
+          processedAt: FieldValue.serverTimestamp(),
+        });
+        logger.info("Test digest skipped — empty week", {
+          requestedBy: requestedBy,
+        });
+        return;
+      }
+
+      digest.subject = "[Test] " + digest.subject;
+      const mailRef = await db.collection("mail").add({
+        to: [user.email],
+        createdAt: FieldValue.serverTimestamp(),
+        metadata: {
+          type: "weekly-digest-test",
+          recipientUid: requestedBy,
+        },
+        message: digest,
+      });
+
+      await snap.ref.update({
+        status: "queued",
+        mailId: mailRef.id,
+        processedAt: FieldValue.serverTimestamp(),
+      });
+
+      logger.info("Test digest queued", {
+        requestedBy: requestedBy,
+        mailId: mailRef.id,
       });
     },
 );

@@ -417,6 +417,19 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /digestRequests/{requestId} {
+      // Admins request a test of the weekly digest email; the
+      // sendTestDigest Cloud Function processes the doc and writes
+      // status/mailId back (via admin SDK, bypassing these rules).
+      allow create: if isAdmin() &&
+        request.resource.data.keys().hasOnly(['requestedBy', 'requestedAt']) &&
+        request.resource.data.requestedBy == request.auth.uid;
+      allow get: if isAdmin() &&
+        resource.data.requestedBy == request.auth.uid;
+      allow list: if false;
+      allow update, delete: if false;
+    }
+
     match /notifications/{notificationId} {
       allow get, list: if signedIn() &&
         resource.data.recipientId == request.auth.uid;

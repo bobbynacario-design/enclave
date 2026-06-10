@@ -382,6 +382,16 @@ var renderEditProfileForm = function(member) {
         '</div>' +
       '</div>' +
     '</div>' +
+    '<div class="profile-section">' +
+      '<div class="profile-section-title">Email</div>' +
+      '<label class="digest-toggle">' +
+        '<input type="checkbox" id="editDigestOptIn"' + (member.digestOptOut === true ? '' : ' checked') + ' />' +
+        '<span>Weekly digest email</span>' +
+      '</label>' +
+      '<div class="form-help">' +
+        'A Monday morning summary of new posts, events, and members.' +
+      '</div>' +
+    '</div>' +
     '<div class="edit-actions">' +
       '<button class="btn" id="editCancelBtn">Cancel</button>' +
       '<button class="btn btn-primary" id="editSaveBtn">Save</button>' +
@@ -452,6 +462,8 @@ var handleSaveProfile = function(uid) {
   var newCircles = state.isAdmin
     ? getCheckedCircles('#editCircles')
     : null;
+  var digestEl = document.getElementById('editDigestOptIn');
+  var newDigestOptOut = digestEl ? !digestEl.checked : null;
 
   if (saveBtn) {
     saveBtn.disabled    = true;
@@ -468,6 +480,10 @@ var handleSaveProfile = function(uid) {
     updates.circles = newCircles;
   }
 
+  if (newDigestOptOut !== null) {
+    updates.digestOptOut = newDigestOptOut;
+  }
+
   updateDoc(ref, updates).then(function() {
     // Update local cache so UI reflects change without a full reload
     var member = membersState.members.find(function(m) { return m.uid === uid; });
@@ -476,6 +492,9 @@ var handleSaveProfile = function(uid) {
       member.bio     = newBio;
       if (newCircles) {
         member.circles = newCircles.slice();
+      }
+      if (newDigestOptOut !== null) {
+        member.digestOptOut = newDigestOptOut;
       }
     }
     if (newCircles && state.user && state.user.uid === uid) {

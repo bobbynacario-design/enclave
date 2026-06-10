@@ -3647,6 +3647,18 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   color: var(--text-muted);
   line-height: 1.6;
 }
+.digest-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.digest-toggle input[type="checkbox"] {
+  accent-color: var(--accent, #7F77DD);
+  cursor: pointer;
+}
 .briefing-story-actions {
   display: flex;
   gap: 4px;

@@ -80,6 +80,13 @@ export var initAdminPage = function() {
     });
   }
 
+  var testDigestBtn = document.getElementById('adminTestDigestBtn');
+  if (testDigestBtn) {
+    testDigestBtn.addEventListener('click', function() {
+      handleAdminTestDigest(testDigestBtn);
+    });
+  }
+
   var inviteBtn = document.getElementById('adminInviteBtn');
   if (inviteBtn) inviteBtn.addEventListener('click', handleAdminInvite);
 
@@ -789,6 +796,75 @@ var handleAdminTestNudge = function(btn) {
     showToast('Failed to send test nudge. Check console for details.', 'error');
   }).finally(function() {
     if (btn) { btn.disabled = false; btn.textContent = 'Send test nudge to me'; }
+  });
+};
+
+// The digest itself is built server-side (it needs to read all circles'
+// activity): write a digestRequests doc, wait for the sendTestDigest
+// function to report back, then track the queued email's delivery.
+var handleAdminTestDigest = function(btn) {
+  if (!state.isAdmin || !state.user || !state.user.email) return;
+  if (btn && btn.disabled) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Building digest...'; }
+
+  var restore = function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send test digest to me'; }
+  };
+
+  addDoc(collection(db, 'digestRequests'), {
+    requestedBy: state.user.uid,
+    requestedAt: serverTimestamp()
+  }).then(function(reqRef) {
+    showToast('Digest requested. Building...', 'info');
+    return waitForDigestRequest(reqRef, 30000);
+  }).then(function(result) {
+    if (result.status === 'queued' && result.mailId) {
+      showToast('Test digest queued. Checking delivery...', 'info');
+      return waitForDelivery(doc(db, 'mail', result.mailId), 30000).then(function(d) {
+        if (d.state === 'SUCCESS') {
+          showToast('Test digest sent to ' + state.user.email + '.', 'success');
+        } else if (d.state === 'ERROR') {
+          showToast('Delivery failed: ' + (d.error || 'unknown error'), 'error');
+        } else if (d.state === 'RETRY') {
+          showToast('Delivery is retrying. Check back in a few minutes.', 'info');
+        } else {
+          showToast('Still sending — delivery may take a minute.', 'info');
+        }
+      });
+    } else if (result.status === 'empty') {
+      showToast('Nothing to digest — no activity in the past week.', 'info');
+    } else if (result.status === 'error') {
+      showToast('Digest failed: ' + (result.error || 'unknown error'), 'error');
+    } else {
+      showToast('Digest is still building — check your inbox shortly.', 'info');
+    }
+  }).catch(function(err) {
+    logError('Failed to send test digest', err);
+    showToast('Failed to send test digest. Check console for details.', 'error');
+  }).finally(restore);
+};
+
+// Resolves once the sendTestDigest function writes a status onto the
+// request doc, or with { status: 'timeout' } after timeoutMs.
+var waitForDigestRequest = function(docRef, timeoutMs) {
+  return new Promise(function(resolve) {
+    var unsubscribe;
+    var timer = setTimeout(function() {
+      unsubscribe();
+      resolve({ status: 'timeout' });
+    }, timeoutMs);
+
+    unsubscribe = onSnapshot(docRef, function(snap) {
+      var data = snap.exists() ? snap.data() : null;
+      if (!data || !data.status) return;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(data);
+    }, function(err) {
+      clearTimeout(timer);
+      resolve({ status: 'error', error: 'Listener error: ' + (err.message || err.code || 'unknown') });
+    });
   });
 };
 
