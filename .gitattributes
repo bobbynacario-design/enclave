@@ -1,0 +1,3 @@
+# Cloud Functions sources must stay LF on disk: the functions ESLint config
+# enforces linebreak-style, and CRLF checkouts fail the predeploy lint.
+functions/*.js text eol=lf
