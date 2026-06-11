@@ -50,15 +50,28 @@ const rowHtml = (inner) =>
   `<p style="${FONT}font-size:14px;color:#1a1a1a;line-height:1.5;` +
   `margin:0 0 10px 0;">` + inner + `</p>`;
 
+// Formats a "YYYY-MM-DD" due date as e.g. "Jun 15"; empty input passes
+// through.
+const dueLabel = (dueDate) => {
+  if (!dueDate) return "";
+  const parsed = new Date(dueDate + "T00:00:00");
+  if (isNaN(parsed.getTime())) return dueDate;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(parsed);
+};
+
 /**
  * Builds the digest email for one member, or null when there is nothing
  * visible to them this week.
  *
- * @param {Object} user User doc data (name, email, circles, isAdmin,
+ * @param {Object} user User doc data (uid, name, email, circles, isAdmin,
  *     digestOptOut).
  * @param {Object} week Weekly activity: {posts, events, newMembers,
- *     resources, briefingCount}. Posts/events are filtered per member
- *     by circle; the rest are community-wide.
+ *     resources, briefingCount, tasksByUser}. Posts/events are filtered
+ *     per member by circle; tasksByUser is keyed by uid; the rest are
+ *     community-wide.
  * @return {?{subject: string, html: string, text: string}} Email message.
  */
 const buildDigest = (user, week) => {
@@ -72,6 +85,9 @@ const buildDigest = (user, week) => {
   const posts = week.posts.filter((p) => visible[p.circle || "all"] === true);
   const events = week.events.filter(
       (e) => visible[e.circle || "all"] === true);
+  const myTasks = (week.tasksByUser && user.uid &&
+    week.tasksByUser[user.uid]) || [];
+  const overdueCount = myTasks.filter((t) => t.overdue).length;
 
   const counts = {
     posts: posts.length,
@@ -79,12 +95,18 @@ const buildDigest = (user, week) => {
     members: week.newMembers.length,
     resources: week.resources.length,
     briefings: week.briefingCount,
+    tasks: myTasks.length,
   };
   const total = counts.posts + counts.events + counts.members +
-    counts.resources + counts.briefings;
+    counts.resources + counts.briefings + counts.tasks;
   if (total === 0) return null;
 
   const summaryParts = [];
+  if (overdueCount > 0) {
+    summaryParts.push(plural(overdueCount, "overdue task"));
+  } else if (counts.tasks > 0) {
+    summaryParts.push(plural(counts.tasks, "open task"));
+  }
   if (counts.posts > 0) summaryParts.push(plural(counts.posts, "new post"));
   if (counts.events > 0) {
     summaryParts.push(plural(counts.events, "upcoming event"));
@@ -108,6 +130,22 @@ const buildDigest = (user, week) => {
       .slice(0, 3);
 
   let sections = "";
+
+  if (myTasks.length > 0) {
+    sections += sectionHtml("Your tasks", myTasks.slice(0, 4).map((t) => {
+      const due = t.overdue ?
+        ` <span style="color:#c0392b;font-weight:600;">Overdue &mdash; ` +
+        `due ` + escapeHtml(dueLabel(t.dueDate)) + `</span>` :
+        (t.dueDate ?
+          ` <span style="color:#6b6b6b;">&middot; due ` +
+          escapeHtml(dueLabel(t.dueDate)) + `</span>` : "");
+      return rowHtml(
+          `<strong>` + escapeHtml(t.title) + `</strong> &mdash; ` +
+          escapeHtml(t.projectName) + due);
+    }).join("") + (myTasks.length > 4 ?
+      rowHtml(`<span style="color:#6b6b6b;">and ` +
+        (myTasks.length - 4) + ` more in the app.</span>`) : ""));
+  }
 
   if (topPosts.length > 0) {
     sections += sectionHtml("Top posts", topPosts.map((p) => {
@@ -202,6 +240,19 @@ const buildDigest = (user, week) => {
     "Your week in Enclave: " + summaryParts.join(" / "),
     "",
   ];
+  if (myTasks.length > 0) {
+    textLines.push("Your tasks:");
+    myTasks.slice(0, 4).forEach((t) => {
+      const due = t.overdue ?
+        " — OVERDUE (due " + dueLabel(t.dueDate) + ")" :
+        (t.dueDate ? " — due " + dueLabel(t.dueDate) : "");
+      textLines.push("- " + t.title + " (" + t.projectName + ")" + due);
+    });
+    if (myTasks.length > 4) {
+      textLines.push("...and " + (myTasks.length - 4) + " more in the app.");
+    }
+    textLines.push("");
+  }
   if (topPosts.length > 0) {
     textLines.push("Top posts:");
     topPosts.forEach((p) => {

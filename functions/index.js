@@ -3,6 +3,7 @@
 const {
   onDocumentCreated,
   onDocumentDeleted,
+  onDocumentWritten,
 } = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {logger} = require("firebase-functions/v2");
@@ -11,6 +12,7 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 const {getStorage} = require("firebase-admin/storage");
 const {buildDigest} = require("./digest");
+const {buildProjectInviteEmail} = require("./emails");
 
 initializeApp();
 
@@ -56,12 +58,160 @@ exports.cleanupPostImages = onDocumentDeleted(
     },
 );
 
+// When an email is newly added to a project's pendingInvites, send the
+// invitee an email (the in-app banner alone is invisible to anyone who
+// doesn't open the app). If the email belongs to an existing member,
+// also write an in-app notification so they get a push.
+exports.sendProjectInviteEmails = onDocumentWritten(
+    {
+      document: "projects/{projectId}",
+      region: "asia-southeast1",
+    },
+    async (event) => {
+      const after = event.data.after.exists ? event.data.after.data() : null;
+      if (!after) return;
+      const before = event.data.before.exists ?
+        event.data.before.data() : null;
+
+      const beforeInvites = before && Array.isArray(before.pendingInvites) ?
+        before.pendingInvites : [];
+      const afterInvites = Array.isArray(after.pendingInvites) ?
+        after.pendingInvites : [];
+      const newEmails = afterInvites.filter(
+          (e) => typeof e === "string" && e && beforeInvites.indexOf(e) < 0);
+      if (newEmails.length === 0) return;
+
+      const projectName = String(after.name || "a project");
+      const inviterName = (after.memberNames &&
+        after.memberNames[after.createdBy]) || "An Enclave member";
+
+      const batch = db.batch();
+      const message = buildProjectInviteEmail({
+        projectName: projectName,
+        inviterName: inviterName,
+      });
+
+      newEmails.forEach((email) => {
+        const mailRef = db.collection("mail").doc();
+        batch.set(mailRef, {
+          to: [email],
+          createdAt: FieldValue.serverTimestamp(),
+          metadata: {
+            type: "project-invite",
+            projectId: event.params.projectId,
+            invitedEmail: email,
+          },
+          message: message,
+        });
+      });
+
+      // In-app notification for invitees who are already members.
+      // "in" supports up to 30 values; invites arrive one or two at a time.
+      const usersSnap = await db.collection("users")
+          .where("email", "in", newEmails.slice(0, 30))
+          .get();
+      usersSnap.forEach((userDoc) => {
+        const notifRef = db.collection("notifications").doc();
+        batch.set(notifRef, {
+          recipientId: userDoc.id,
+          type: "project-invite",
+          message: inviterName + " invited you to \"" + projectName +
+            "\" — open Projects to accept.",
+          link: {page: "projects", params: {}},
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+          actorId: after.createdBy || "system",
+          actorName: inviterName,
+        });
+      });
+
+      await batch.commit();
+      logger.info("Project invites sent", {
+        projectId: event.params.projectId,
+        emails: newEmails.length,
+        notified: usersSnap.size,
+      });
+    },
+);
+
+// Fetches every project's tasks: [{projectId, project, tasks: [...]}].
+// Fine at this community's scale; revisit with a collection-group index
+// if projects grow into the hundreds.
+const fetchAllProjectTasks = async () => {
+  const projectsSnap = await db.collection("projects").get();
+  const taskSnaps = await Promise.all(
+      projectsSnap.docs.map((p) => p.ref.collection("tasks").get()));
+  return projectsSnap.docs.map((p, i) => ({
+    projectId: p.id,
+    project: p.data(),
+    tasks: taskSnaps[i].docs.map((t) => t.data()),
+  }));
+};
+
+const manilaDateString = (ms) => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Manila",
+}).format(new Date(ms));
+
+// Daily 8:00 AM Manila: remind assignees about tasks due tomorrow, due
+// today, or newly overdue (due yesterday). Older overdue tasks are left
+// to the weekly digest, so nobody gets nagged daily.
+exports.taskReminders = onSchedule(
+    {
+      schedule: "0 8 * * *",
+      timeZone: "Asia/Manila",
+      region: "asia-southeast1",
+    },
+    async () => {
+      const dayMs = 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      const today = manilaDateString(nowMs);
+      const tomorrow = manilaDateString(nowMs + dayMs);
+      const yesterday = manilaDateString(nowMs - dayMs);
+
+      const projects = await fetchAllProjectTasks();
+      const batch = db.batch();
+      let count = 0;
+
+      projects.forEach((entry) => {
+        const projectName = String(entry.project.name || "a project");
+        entry.tasks.forEach((t) => {
+          if (t.status === "done" || !t.dueDate) return;
+          let phrase = null;
+          if (t.dueDate === tomorrow) phrase = "is due tomorrow";
+          else if (t.dueDate === today) phrase = "is due today";
+          else if (t.dueDate === yesterday) phrase = "is now overdue";
+          if (!phrase) return;
+
+          const recipient = t.assigneeId || t.createdBy;
+          if (!recipient) return;
+
+          const notifRef = db.collection("notifications").doc();
+          batch.set(notifRef, {
+            recipientId: recipient,
+            type: "task-due",
+            message: "⏰ \"" + String(t.title || "Task") + "\" in " +
+              projectName + " " + phrase + ".",
+            link: {page: "projects", params: {projectId: entry.projectId}},
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+            actorId: "system",
+            actorName: "Task reminder",
+          });
+          count++;
+        });
+      });
+
+      if (count > 0) await batch.commit();
+      logger.info("Task reminders queued", {reminders: count});
+    },
+);
+
 // Collects the past week's activity used to build digest emails.
 // Returns {week, usersSnap}; usersSnap doubles as the recipient list.
 const gatherWeekData = async (now) => {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [postsSnap, eventsSnap, usersSnap, resSnap, briefSnap] =
+  const [postsSnap, eventsSnap, usersSnap, resSnap, briefSnap, projects] =
     await Promise.all([
       db.collection("posts")
           .where("timestamp", ">=", weekAgo)
@@ -79,7 +229,34 @@ const gatherWeekData = async (now) => {
       db.collection("briefings")
           .where("publishedAt", ">=", weekAgo)
           .get(),
+      fetchAllProjectTasks(),
     ]);
+
+  // Open tasks bucketed per member (assignee, falling back to creator),
+  // overdue first then by due date, for the digest's "Your tasks" section.
+  const today = manilaDateString(now.getTime());
+  const tasksByUser = {};
+  projects.forEach((entry) => {
+    const projectName = String(entry.project.name || "a project");
+    entry.tasks.forEach((t) => {
+      if (t.status === "done") return;
+      const uid = t.assigneeId || t.createdBy;
+      if (!uid) return;
+      if (!tasksByUser[uid]) tasksByUser[uid] = [];
+      tasksByUser[uid].push({
+        title: String(t.title || "Task"),
+        projectName: projectName,
+        dueDate: t.dueDate || "",
+        overdue: Boolean(t.dueDate && t.dueDate < today),
+      });
+    });
+  });
+  Object.keys(tasksByUser).forEach((uid) => {
+    tasksByUser[uid].sort((a, b) => {
+      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      return (a.dueDate || "9999").localeCompare(b.dueDate || "9999");
+    });
+  });
 
   const week = {
     posts: postsSnap.docs.map((d) => d.data()),
@@ -91,6 +268,7 @@ const gatherWeekData = async (now) => {
           u.joinedAt.toMillis() >= weekAgo.getTime()),
     resources: resSnap.docs.map((d) => d.data()),
     briefingCount: briefSnap.size,
+    tasksByUser: tasksByUser,
   };
 
   return {week: week, usersSnap: usersSnap};

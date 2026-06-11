@@ -109,7 +109,9 @@ const NOTIF_TYPE_ICONS = {
   'post-comment':    '💬',
   'project-comment': '💬',
   'event-rsvp':      '📅',
-  'briefing':        '📰'
+  'briefing':        '📰',
+  'task-due':        '⏰',
+  'project-invite':  '📁'
 };
 
 let notifFilter = 'all';
