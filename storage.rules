@@ -15,6 +15,19 @@ service firebase.storage {
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Project files uploaded from device. Same owner-folder model as
+    // post images (Storage rules can't check Firestore project
+    // membership); orphan cleanup runs in the cleanupProjectFiles
+    // Cloud Function when a file doc is deleted.
+    match /project-files/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.auth.uid == userId &&
+        request.resource.size < 15 * 1024 * 1024;
+      allow update: if false;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

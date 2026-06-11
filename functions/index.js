@@ -58,6 +58,34 @@ exports.cleanupPostImages = onDocumentDeleted(
     },
 );
 
+// Deletes an uploaded project file from Storage when its file doc is
+// deleted (single delete or project teardown, which deletes file docs
+// one by one). Drive attachments have no storagePath and are skipped.
+exports.cleanupProjectFiles = onDocumentDeleted(
+    {
+      document: "projects/{projectId}/files/{fileId}",
+      region: "asia-southeast1",
+    },
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
+
+      const storagePath = (snap.data() || {}).storagePath;
+      if (typeof storagePath !== "string" ||
+        storagePath.indexOf("project-files/") !== 0) return;
+
+      try {
+        await getStorage().bucket().file(storagePath).delete();
+        logger.info("Cleaned up project file", {path: storagePath});
+      } catch (err) {
+        logger.warn("Failed to delete project file", {
+          path: storagePath,
+          error: err.message,
+        });
+      }
+    },
+);
+
 // When an email is newly added to a project's pendingInvites, send the
 // invitee an email (the in-app banner alone is invisible to anyone who
 // doesn't open the app). If the email belongs to an existing member,

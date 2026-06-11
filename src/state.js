@@ -168,6 +168,7 @@ export const projectsState = {
   detailTasks:        [],
   tasksUnsubscribe:   null,
   taskFilter:         'all',
+  taskView:           null,
   detailActivity:     [],
   activityUnsubscribe: null
 };

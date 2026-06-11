@@ -14,7 +14,12 @@ import {
   serverTimestamp,
   Timestamp
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
-import { db } from '../../firebase.js';
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL
+} from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
+import { db, storage } from '../../firebase.js';
 
 // App state
 import {
@@ -50,6 +55,43 @@ var statusLabel = function(status) {
     'completed': 'Completed'
   };
   return labels[status] || status || 'Active';
+};
+
+// ─── Task helpers ────────────────────────────────────────────────────────────
+var TASK_VIEW_KEY = 'enclave_task_view';
+
+var PRIORITY_RANK = { high: 0, normal: 1, low: 2 };
+
+var taskPriority = function(t) {
+  return PRIORITY_RANK[t.priority] === undefined ? 'normal' : t.priority;
+};
+
+var renderPriorityBadge = function(t) {
+  var pr = taskPriority(t);
+  if (pr === 'normal') return '';
+  return '<span class="task-priority task-priority-' + pr + '">' +
+    (pr === 'high' ? 'High' : 'Low') + '</span>';
+};
+
+// High priority first, then nearest due date (no date last); stable for ties.
+var sortTasksForDisplay = function(tasks) {
+  return tasks.slice().sort(function(a, b) {
+    var pa = PRIORITY_RANK[taskPriority(a)];
+    var pb = PRIORITY_RANK[taskPriority(b)];
+    if (pa !== pb) return pa - pb;
+    var da = a.dueDate || '9999-99-99';
+    var db2 = b.dueDate || '9999-99-99';
+    if (da !== db2) return da < db2 ? -1 : 1;
+    return 0;
+  });
+};
+
+var getTaskView = function() {
+  if (projectsState.taskView !== 'list' && projectsState.taskView !== 'board') {
+    var saved = localStorage.getItem(TASK_VIEW_KEY);
+    projectsState.taskView = saved === 'board' ? 'board' : 'list';
+  }
+  return projectsState.taskView;
 };
 
 // ─── Modal pending-invites state ────────────────────────────────────────────
@@ -407,9 +449,10 @@ var renderProjectDetail = function(p) {
       return new Date(t.dueDate + 'T00:00:00') < now;
     });
   }
-  var filteredOpen = filteredTasks.filter(function(t) { return t.status !== 'done'; });
+  var filteredOpen = sortTasksForDisplay(filteredTasks.filter(function(t) { return t.status !== 'done'; }));
   var filteredDone = filteredTasks.filter(function(t) { return t.status === 'done'; });
   var sortedTasks = filteredOpen.concat(filteredDone);
+  var taskView = getTaskView();
 
   // Overdue count for filter badge
   var overdueCount = allTasks.filter(function(t) {
@@ -426,53 +469,103 @@ var renderProjectDetail = function(p) {
       '</div>'
     : '';
 
-  // Filter pills
+  // Filter pills + view toggle
   var filterHtml = totalTasks > 0
     ? '<div class="task-filters">' +
         '<button class="task-filter-pill' + (tf === 'all' ? ' active' : '') + '" data-task-filter="all">All (' + totalTasks + ')</button>' +
         '<button class="task-filter-pill' + (tf === 'mine' ? ' active' : '') + '" data-task-filter="mine">My Tasks (' + myTaskCount + ')</button>' +
         '<button class="task-filter-pill' + (tf === 'overdue' ? ' active' : '') + '" data-task-filter="overdue">Overdue' + (overdueCount > 0 ? ' (' + overdueCount + ')' : '') + '</button>' +
+        '<span class="task-view-toggle">' +
+          '<button class="task-filter-pill' + (taskView === 'list' ? ' active' : '') + '" data-task-view="list" title="List view">List</button>' +
+          '<button class="task-filter-pill' + (taskView === 'board' ? ' active' : '') + '" data-task-view="board" title="Board view">Board</button>' +
+        '</span>' +
       '</div>'
     : '';
 
-  var tasksHtml = sortedTasks.length === 0
-    ? (totalTasks === 0
-        ? '<div class="empty-state"><div class="empty-state-title">No tasks yet</div><p class="empty-state-text">Add one to get started.</p></div>'
-        : '<div class="empty-state"><div class="empty-state-title">No tasks match this filter</div><p class="empty-state-text">Try a different filter.</p></div>')
-    : sortedTasks.map(function(t) {
-        var assigneeName = t.assigneeName || 'Unassigned';
-        var statusCls = 'task-status task-status-' + (t.status || 'todo');
-        var statusLabel = t.status === 'doing' ? 'Doing' : t.status === 'done' ? 'Done' : 'To Do';
-        var dueDateHtml = '';
-        if (t.dueDate) {
-          var now = new Date();
-          now.setHours(0, 0, 0, 0);
-          var due = new Date(t.dueDate + 'T00:00:00');
-          var diffDays = Math.round((due - now) / 86400000);
-          var dueCls = 'task-due';
-          if (t.status !== 'done') {
-            if (diffDays < 0) dueCls += ' task-overdue';
-            else if (diffDays === 0) dueCls += ' task-due-today';
-          }
-          dueDateHtml = '<span class="' + dueCls + '">' + escapeHTML(t.dueDate) + '</span>';
-        }
-        var isDone = t.status === 'done';
-        var canEditTask = state.isAdmin || (state.user && t.createdBy === state.user.uid);
-        return '<div class="task-row' + (isDone ? ' task-done' : '') + '" data-task-id="' + escapeAttr(t.id) + '">' +
-          '<button class="task-status-btn ' + statusCls + '" data-task-cycle="' + escapeAttr(t.id) + '" title="Cycle status">' + statusLabel + '</button>' +
-          '<div class="task-info">' +
-            '<span class="task-title">' + escapeHTML(t.title || 'Untitled') + '</span>' +
-            '<span class="task-assignee">' + escapeHTML(assigneeName) + '</span>' +
-          '</div>' +
-          dueDateHtml +
-          (canEditTask ? '<button class="task-edit-btn" data-task-edit="' + escapeAttr(t.id) + '" title="Edit task" aria-label="Edit task">' +
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>' +
-            '</button>' : '') +
-          (canEditTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task" aria-label="Delete task">' +
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
-            '</button>' : '') +
+  var renderTaskDue = function(t) {
+    if (!t.dueDate) return '';
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var due = new Date(t.dueDate + 'T00:00:00');
+    var diffDays = Math.round((due - today) / 86400000);
+    var dueCls = 'task-due';
+    if (t.status !== 'done') {
+      if (diffDays < 0) dueCls += ' task-overdue';
+      else if (diffDays === 0) dueCls += ' task-due-today';
+    }
+    return '<span class="' + dueCls + '">' + escapeHTML(t.dueDate) + '</span>';
+  };
+
+  var renderTaskRow = function(t) {
+    var assigneeName = t.assigneeName || 'Unassigned';
+    var statusCls = 'task-status task-status-' + (t.status || 'todo');
+    var statusLabel = t.status === 'doing' ? 'Doing' : t.status === 'done' ? 'Done' : 'To Do';
+    var isDone = t.status === 'done';
+    var canEditTask = state.isAdmin || (state.user && t.createdBy === state.user.uid);
+    return '<div class="task-row' + (isDone ? ' task-done' : '') + '" data-task-id="' + escapeAttr(t.id) + '">' +
+      '<button class="task-status-btn ' + statusCls + '" data-task-cycle="' + escapeAttr(t.id) + '" title="Cycle status">' + statusLabel + '</button>' +
+      '<div class="task-info">' +
+        '<span class="task-title">' + renderPriorityBadge(t) + escapeHTML(t.title || 'Untitled') + '</span>' +
+        (t.description ? '<span class="task-desc">' + escapeHTML(t.description) + '</span>' : '') +
+        '<span class="task-assignee">' + escapeHTML(assigneeName) + '</span>' +
+      '</div>' +
+      renderTaskDue(t) +
+      (canEditTask ? '<button class="task-edit-btn" data-task-edit="' + escapeAttr(t.id) + '" title="Edit task" aria-label="Edit task">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>' +
+        '</button>' : '') +
+      (canEditTask ? '<button class="task-delete-btn" data-task-delete="' + escapeAttr(t.id) + '" title="Delete task" aria-label="Delete task">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
+        '</button>' : '') +
+    '</div>';
+  };
+
+  var renderBoardCard = function(t) {
+    var canLeft = t.status !== 'todo';
+    var canRight = t.status !== 'done';
+    return '<div class="task-card' + (t.status === 'done' ? ' task-done' : '') + '" data-task-id="' + escapeAttr(t.id) + '">' +
+      '<div class="task-card-title">' + renderPriorityBadge(t) + escapeHTML(t.title || 'Untitled') + '</div>' +
+      (t.description ? '<div class="task-card-desc">' + escapeHTML(t.description) + '</div>' : '') +
+      '<div class="task-card-meta">' +
+        '<span class="task-assignee">' + escapeHTML(t.assigneeName || 'Unassigned') + '</span>' +
+        renderTaskDue(t) +
+      '</div>' +
+      '<div class="task-card-actions">' +
+        '<button class="task-card-move" data-task-move-left="' + escapeAttr(t.id) + '" aria-label="Move left"' + (canLeft ? '' : ' disabled') + '>&#8592;</button>' +
+        '<button class="task-card-move" data-task-move-right="' + escapeAttr(t.id) + '" aria-label="Move right"' + (canRight ? '' : ' disabled') + '>&#8594;</button>' +
+      '</div>' +
+    '</div>';
+  };
+
+  var emptyTasksHtml = totalTasks === 0
+    ? '<div class="empty-state"><div class="empty-state-title">No tasks yet</div><p class="empty-state-text">Add one to get started.</p></div>'
+    : '<div class="empty-state"><div class="empty-state-title">No tasks match this filter</div><p class="empty-state-text">Try a different filter.</p></div>';
+
+  var tasksHtml;
+  if (sortedTasks.length === 0) {
+    tasksHtml = emptyTasksHtml;
+  } else if (taskView === 'board') {
+    var columns = [
+      { id: 'todo',  label: 'To Do' },
+      { id: 'doing', label: 'Doing' },
+      { id: 'done',  label: 'Done' }
+    ];
+    tasksHtml = '<div class="task-board-wrap"><div class="task-board">' +
+      columns.map(function(col) {
+        var colTasks = sortTasksForDisplay(filteredTasks.filter(function(t) {
+          return (t.status || 'todo') === col.id;
+        }));
+        return '<div class="task-board-col">' +
+          '<div class="task-board-col-head">' + col.label +
+            ' <span class="task-count">' + colTasks.length + '</span></div>' +
+          (colTasks.length === 0
+            ? '<div class="task-board-empty">—</div>'
+            : colTasks.map(renderBoardCard).join('')) +
         '</div>';
-      }).join('');
+      }).join('') +
+    '</div></div>';
+  } else {
+    tasksHtml = sortedTasks.map(renderTaskRow).join('');
+  }
 
   // Files
   var files = getProjectFilesForRender(p);
@@ -575,6 +668,11 @@ var renderProjectDetail = function(p) {
             return '<option value="' + escapeAttr(uid) + '">' + escapeHTML(memberNames[uid] || 'Member') + '</option>';
           }).join('') +
         '</select>' +
+        '<select class="form-input task-add-priority" id="taskPriorityInput" aria-label="Priority">' +
+          '<option value="normal" selected>Normal</option>' +
+          '<option value="high">High</option>' +
+          '<option value="low">Low</option>' +
+        '</select>' +
         '<input type="date" class="form-input task-add-date" id="taskDueDateInput" />' +
         '<button class="btn btn-primary" type="submit">Add</button>' +
       '</form>' +
@@ -590,10 +688,17 @@ var renderProjectDetail = function(p) {
     '<div class="project-detail-section">' +
       '<h3>Files</h3>' +
       '<div class="project-files-list">' + filesHtml + '</div>' +
-      '<button class="btn btn-ghost project-attach-btn" id="projectAttachFileBtn">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>' +
-        'Attach from Drive' +
-      '</button>' +
+      '<div class="project-file-actions">' +
+        '<button class="btn btn-ghost project-attach-btn" id="projectUploadFileBtn">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>' +
+          'Upload file' +
+        '</button>' +
+        '<button class="btn btn-ghost project-attach-btn" id="projectAttachFileBtn">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>' +
+          'Attach from Drive' +
+        '</button>' +
+        '<input type="file" id="projectFileInput" hidden />' +
+      '</div>' +
     '</div>' +
 
     '<div class="project-detail-section project-activity-section">' +
@@ -802,6 +907,7 @@ var renderProjectDetail = function(p) {
     e.preventDefault();
     var titleInput = document.getElementById('taskTitleInput');
     var assigneeInput = document.getElementById('taskAssigneeInput');
+    var priorityInput = document.getElementById('taskPriorityInput');
     var dueDateInput = document.getElementById('taskDueDateInput');
     var title = (titleInput ? titleInput.value : '').trim();
     if (!title) return;
@@ -811,48 +917,126 @@ var renderProjectDetail = function(p) {
       var sel = assigneeInput.options[assigneeInput.selectedIndex];
       assigneeName = sel ? sel.textContent : '';
     }
+    var priority = priorityInput ? priorityInput.value : 'normal';
+    if (['low', 'normal', 'high'].indexOf(priority) === -1) priority = 'normal';
     handleAddTask(p.id, {
       title: title,
       assigneeId: assigneeId,
       assigneeName: assigneeName,
-      dueDate: dueDateInput ? dueDateInput.value : ''
+      dueDate: dueDateInput ? dueDateInput.value : '',
+      priority: priority
     });
     if (titleInput) titleInput.value = '';
     if (assigneeInput) assigneeInput.value = '';
+    if (priorityInput) priorityInput.value = 'normal';
     if (dueDateInput) dueDateInput.value = '';
   };
 
-  // Wire task status cycling
+  // Shared status change (list cycle button + board move arrows)
+  var changeTaskStatus = function(taskId, nextStatus) {
+    var task = projectsState.detailTasks.find(function(t) { return t.id === taskId; });
+    if (!task || !nextStatus || task.status === nextStatus) return;
+    updateDoc(doc(db, 'projects', p.id, 'tasks', taskId), {
+      status: nextStatus
+    }).then(function() {
+      var statusLabels = { todo: 'To Do', doing: 'Doing', done: 'Done' };
+      logProjectActivity(p.id, 'status', 'moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus]);
+      // Notify assignee about status change
+      if (task.assigneeId && task.assigneeId !== state.user.uid) {
+        var actor = state.user.displayName || state.user.email || 'Member';
+        writeNotification(task.assigneeId, 'task-status', actor + ' moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus], { page: 'projects', params: { projectId: p.id } });
+      }
+      // Recompute taskDone
+      var doneCount = projectsState.detailTasks.filter(function(t) {
+        return t.id === taskId ? nextStatus === 'done' : t.status === 'done';
+      }).length;
+      updateDoc(doc(db, 'projects', p.id), {
+        taskDone: doneCount,
+        updatedAt: serverTimestamp()
+      });
+    }).catch(function(err) {
+      logError('Task status update error', err);
+      showToast('Failed to update task.', 'error');
+    });
+  };
+
+  // Wire task status cycling (list view)
   document.querySelectorAll('[data-task-cycle]').forEach(function(btn) {
     btn.onclick = function() {
-      var taskId = btn.dataset.taskCycle;
-      var task = projectsState.detailTasks.find(function(t) { return t.id === taskId; });
+      var task = projectsState.detailTasks.find(function(t) { return t.id === btn.dataset.taskCycle; });
       if (!task) return;
       var nextStatus = task.status === 'todo' ? 'doing' : task.status === 'doing' ? 'done' : 'todo';
-      updateDoc(doc(db, 'projects', p.id, 'tasks', taskId), {
-        status: nextStatus
-      }).then(function() {
-        var statusLabels = { todo: 'To Do', doing: 'Doing', done: 'Done' };
-        logProjectActivity(p.id, 'status', 'moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus]);
-        // Notify assignee about status change
-        if (task.assigneeId && task.assigneeId !== state.user.uid) {
-          var actor = state.user.displayName || state.user.email || 'Member';
-          writeNotification(task.assigneeId, 'task-status', actor + ' moved "' + (task.title || 'Untitled') + '" to ' + statusLabels[nextStatus], { page: 'projects', params: { projectId: p.id } });
-        }
-        // Recompute taskDone
-        var doneCount = projectsState.detailTasks.filter(function(t) {
-          return t.id === taskId ? nextStatus === 'done' : t.status === 'done';
-        }).length;
-        updateDoc(doc(db, 'projects', p.id), {
-          taskDone: doneCount,
-          updatedAt: serverTimestamp()
-        });
-      }).catch(function(err) {
-        logError('Task status update error', err);
-        showToast('Failed to update task.', 'error');
-      });
+      changeTaskStatus(btn.dataset.taskCycle, nextStatus);
     };
   });
+
+  // Wire board move arrows
+  var BOARD_ORDER = ['todo', 'doing', 'done'];
+  var wireBoardMove = function(attr, delta) {
+    document.querySelectorAll('[' + attr + ']').forEach(function(btn) {
+      btn.onclick = function() {
+        var taskId = btn.getAttribute(attr);
+        var task = projectsState.detailTasks.find(function(t) { return t.id === taskId; });
+        if (!task) return;
+        var idx = BOARD_ORDER.indexOf(task.status || 'todo') + delta;
+        if (idx < 0 || idx >= BOARD_ORDER.length) return;
+        changeTaskStatus(taskId, BOARD_ORDER[idx]);
+      };
+    });
+  };
+  wireBoardMove('data-task-move-left', -1);
+  wireBoardMove('data-task-move-right', 1);
+
+  // Wire view toggle
+  document.querySelectorAll('[data-task-view]').forEach(function(btn) {
+    btn.onclick = function() {
+      projectsState.taskView = btn.dataset.taskView === 'board' ? 'board' : 'list';
+      localStorage.setItem(TASK_VIEW_KEY, projectsState.taskView);
+      if (projectsState.detailProject) {
+        renderProjectDetail(projectsState.detailProject);
+      }
+    };
+  });
+
+  // Wire native file upload
+  var uploadBtn = document.getElementById('projectUploadFileBtn');
+  var uploadInput = document.getElementById('projectFileInput');
+  if (uploadBtn && uploadInput) {
+    uploadBtn.onclick = function() { uploadInput.click(); };
+    uploadInput.onchange = function() {
+      var file = uploadInput.files && uploadInput.files[0];
+      uploadInput.value = '';
+      if (!file || !state.user) return;
+      if (file.size >= 15 * 1024 * 1024) {
+        showToast('Files must be under 15 MB.', 'error');
+        return;
+      }
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      var safeName = String(file.name || 'file').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+      var path = 'project-files/' + state.user.uid + '/' + Date.now() + '-' + safeName;
+      var fileRef = storageRef(storage, path);
+      uploadBytes(fileRef, file, { contentType: file.type || 'application/octet-stream' }).then(function() {
+        return getDownloadURL(fileRef);
+      }).then(function(url) {
+        return handleProjectFileAttach(p.id, {
+          fileUrl: url,
+          fileName: file.name || 'File',
+          iconUrl: '',
+          storagePath: path
+        });
+      }).catch(function(err) {
+        logError('Project file upload error', err);
+        showToast('Upload failed. Try again.', 'error');
+      }).finally(function() {
+        var btn = document.getElementById('projectUploadFileBtn');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>Upload file';
+        }
+      });
+    };
+  }
 
   // Wire task delete
   document.querySelectorAll('[data-task-delete]').forEach(function(btn) {
@@ -892,11 +1076,19 @@ var renderProjectDetail = function(p) {
           return '<option value="' + escapeAttr(uid) + '"' + sel + '>' + escapeHTML(memberNames[uid] || 'Member') + '</option>';
         }).join('');
 
+      var currentPriority = taskPriority(task);
+      var priorityOptions = ['normal', 'high', 'low'].map(function(pr) {
+        var label = pr === 'high' ? 'High' : pr === 'low' ? 'Low' : 'Normal';
+        return '<option value="' + pr + '"' + (pr === currentPriority ? ' selected' : '') + '>' + label + '</option>';
+      }).join('');
+
       row.innerHTML = '' +
         '<form class="task-edit-form" data-task-save="' + escapeAttr(taskId) + '">' +
           '<input type="text" class="form-input" value="' + escapeAttr(task.title || '') + '" data-edit-title maxlength="200" />' +
           '<select class="form-input task-add-assignee" data-edit-assignee aria-label="Assignee">' + assigneeOptions + '</select>' +
+          '<select class="form-input task-add-priority" data-edit-priority aria-label="Priority">' + priorityOptions + '</select>' +
           '<input type="date" class="form-input task-add-date" value="' + escapeAttr(task.dueDate || '') + '" data-edit-due />' +
+          '<textarea class="form-input task-edit-desc" data-edit-desc rows="2" maxlength="1000" placeholder="Description (optional)...">' + escapeHTML(task.description || '') + '</textarea>' +
           '<button class="btn btn-primary" type="submit">Save</button>' +
           '<button class="btn btn-ghost" type="button" data-edit-cancel>Cancel</button>' +
         '</form>';
@@ -916,18 +1108,25 @@ var renderProjectDetail = function(p) {
           newAssigneeName = opt ? opt.textContent : '';
         }
         var newDueDate = form.querySelector('[data-edit-due]').value;
+        var newPriority = form.querySelector('[data-edit-priority]').value;
+        if (['low', 'normal', 'high'].indexOf(newPriority) === -1) newPriority = 'normal';
+        var newDescription = form.querySelector('[data-edit-desc]').value.trim().slice(0, 1000);
         updateDoc(doc(db, 'projects', p.id, 'tasks', taskId), {
           title: newTitle,
           assigneeId: newAssigneeId,
           assigneeName: newAssigneeName,
           dueDate: newDueDate,
-          status: task.status
+          status: task.status,
+          priority: newPriority,
+          description: newDescription
         }).then(function() {
           showToast('Task updated.', 'info');
           var changes = [];
           if (newTitle !== task.title) changes.push('renamed to "' + newTitle + '"');
           if (newAssigneeId !== task.assigneeId) changes.push('reassigned to ' + (newAssigneeName || 'Unassigned'));
           if (newDueDate !== (task.dueDate || '')) changes.push('due date set to ' + (newDueDate || 'none'));
+          if (newPriority !== taskPriority(task)) changes.push('priority set to ' + newPriority);
+          if (newDescription !== (task.description || '')) changes.push('description updated');
           if (changes.length > 0) {
             logProjectActivity(p.id, 'edited', '"' + (task.title || 'Untitled') + '": ' + changes.join(', '));
           }
@@ -1180,10 +1379,11 @@ var handleProjectComment = function(projectId, body) {
 
 // ─── Projects: attach file ──────────────────────────────────────────────────
 var handleProjectFileAttach = function(projectId, fileData) {
-  addDoc(collection(db, 'projects', projectId, 'files'), {
+  return addDoc(collection(db, 'projects', projectId, 'files'), {
     fileUrl: fileData.fileUrl || '',
     fileName: fileData.fileName || 'File',
     iconUrl: fileData.iconUrl || '',
+    storagePath: fileData.storagePath || '',
     addedBy: state.user.uid,
     addedByName: state.user.displayName || state.user.email || 'Member',
     addedAt: serverTimestamp()
@@ -1215,6 +1415,8 @@ var handleAddTask = function(projectId, taskData) {
     assigneeName: taskData.assigneeName || '',
     dueDate: taskData.dueDate || '',
     status: 'todo',
+    priority: taskData.priority || 'normal',
+    description: taskData.description || '',
     createdBy: state.user.uid,
     createdByName: state.user.displayName || state.user.email || 'Member',
     createdAt: serverTimestamp()
