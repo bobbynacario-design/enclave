@@ -75,7 +75,14 @@ var formatListTime = function(ms) {
 };
 
 var PRESENCE_ONLINE_MS = 5 * 60 * 1000;
-var TYPING_VISIBLE_MS = 6000;
+var TYPING_VISIBLE_MS = 8000;
+
+// Clock-skew-immune typing freshness: track when THIS client first saw
+// each new typing timestamp and time the indicator from that local
+// receipt moment. Comparing the server timestamp directly against the
+// local clock breaks whenever the device clock is a few seconds off.
+// Keyed by conversation id → { ms: lastSeenTypingValue, seenAt: localMs }.
+var typingSeen = {};
 
 var isMemberOnline = function(member) {
   var ms = member ? getFirestoreTimeMs(member.lastSeen) : 0;
@@ -276,10 +283,18 @@ var renderThreadPresence = function() {
     ? getFirestoreTimeMs(conversation.typing[peer.uid])
     : 0;
 
-  if (typingMs > 0 && Date.now() - typingMs < TYPING_VISIBLE_MS) {
+  var entry = conversation ? typingSeen[conversation.id] : null;
+  if (conversation && typingMs > 0 && (!entry || typingMs > entry.ms)) {
+    entry = { ms: typingMs, seenAt: Date.now() };
+    typingSeen[conversation.id] = entry;
+  }
+  var showTyping = typingMs > 0 && entry &&
+    Date.now() - entry.seenAt < TYPING_VISIBLE_MS;
+
+  if (showTyping) {
     subtitleEl.textContent = 'typing…';
     subtitleEl.classList.add('typing');
-    presenceRefreshTimer = setTimeout(renderThreadPresence, 2500);
+    presenceRefreshTimer = setTimeout(renderThreadPresence, 2000);
     return;
   }
 
@@ -683,13 +698,15 @@ var lastTypingWriteMs = 0;
 var sendTypingPing = function() {
   if (!state.user || !messagesState.activeConversationId) return;
   var nowMs = Date.now();
-  if (nowMs - lastTypingWriteMs < 4000) return;
+  if (nowMs - lastTypingWriteMs < 2500) return;
   lastTypingWriteMs = nowMs;
 
   var payload = {};
   payload['typing.' + state.user.uid] = serverTimestamp();
-  updateDoc(doc(db, 'conversations', messagesState.activeConversationId), payload).catch(function() {
-    // Best-effort; conversation may not exist yet.
+  updateDoc(doc(db, 'conversations', messagesState.activeConversationId), payload).catch(function(err) {
+    // Best-effort (the conversation may not exist yet), but surface the
+    // error in the console so rule rejections are diagnosable.
+    logError('Typing ping failed', err);
   });
 };
 
