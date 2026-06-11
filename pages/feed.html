@@ -10,11 +10,14 @@
     <select class="compose-circle" id="composeCircle" aria-label="Post to circle"></select>
   </div>
   <textarea class="compose-body" id="composeBody" placeholder="Share something with the enclave..." rows="3"></textarea>
+  <div id="photoAttachmentPreview" class="photo-preview" hidden></div>
   <div id="driveAttachmentPreview" class="drive-preview" hidden></div>
   <div class="compose-actions">
+    <button type="button" class="btn btn-ghost" id="photoAttachBtn">&#128247; Photos</button>
     <button type="button" class="btn btn-ghost" id="driveAttachBtn">&#128193; Attach from Drive</button>
     <button class="btn btn-primary" id="composeSubmit">Post</button>
   </div>
+  <input type="file" id="photoFileInput" accept="image/*" multiple hidden />
 </div>
 
 <!-- Circle filter pills -->

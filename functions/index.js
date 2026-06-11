@@ -1,11 +1,15 @@
 "use strict";
 
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {
+  onDocumentCreated,
+  onDocumentDeleted,
+} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {logger} = require("firebase-functions/v2");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
+const {getStorage} = require("firebase-admin/storage");
 const {buildDigest} = require("./digest");
 
 initializeApp();
@@ -14,6 +18,43 @@ const db = getFirestore();
 const messaging = getMessaging();
 
 const APP_URL = "https://bobbynacario-design.github.io/enclave/";
+
+// Deletes a post's uploaded images from Storage when the post is
+// deleted, so files don't pile up orphaned in the bucket. Storage rules
+// only let users delete their own files; this runs with admin SDK so
+// admin-deleted posts get cleaned up too.
+exports.cleanupPostImages = onDocumentDeleted(
+    {
+      document: "posts/{postId}",
+      region: "asia-southeast1",
+    },
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
+
+      const images = (snap.data() || {}).images;
+      if (!Array.isArray(images) || images.length === 0) return;
+
+      const bucket = getStorage().bucket();
+      const paths = images
+          .map((im) => im && im.path)
+          .filter((p) => typeof p === "string" &&
+            p.indexOf("post-images/") === 0);
+
+      await Promise.all(paths.map((p) =>
+        bucket.file(p).delete().catch((err) => {
+          logger.warn("Failed to delete post image", {
+            path: p,
+            error: err.message,
+          });
+        })));
+
+      logger.info("Cleaned up post images", {
+        postId: event.params.postId,
+        count: paths.length,
+      });
+    },
+);
 
 // Collects the past week's activity used to build digest emails.
 // Returns {week, usersSnap}; usersSnap doubles as the recipient list.

@@ -33,6 +33,14 @@ import { logError } from '../util/log.js';
 import { showToast } from '../ui/toast.js';
 import { showConfirmModal, showNoticeModal } from '../ui/modals.js';
 import { openDrivePicker, clearDriveAttachment } from '../ui/drivePicker.js';
+import {
+  initPhotoAttach,
+  clearPhotoAttachments,
+  getPendingPhotoCount,
+  uploadPendingPhotos,
+  renderPostImages,
+  wireLightboxButtons
+} from '../ui/photoAttach.js';
 
 // Cross-page
 import { writeNotification } from './notifications.js';
@@ -67,6 +75,9 @@ export const initFeedPage = function() {
   var driveBtn = document.getElementById('driveAttachBtn');
   if (driveBtn) driveBtn.addEventListener('click', openDrivePicker);
   clearDriveAttachment();
+
+  // Photo attachments
+  initPhotoAttach();
 
   if (composeCircle) {
     composeCircle.innerHTML = renderCircleOptions(true);
@@ -290,8 +301,8 @@ var handleComposeSubmit = function() {
 
   var body   = bodyEl.value.trim();
   var circle = circleEl.value;
-  if (!body && !driveAttachment.fileUrl) {
-    showToast('Write something or attach a file.', 'error');
+  if (!body && !driveAttachment.fileUrl && getPendingPhotoCount() === 0) {
+    showToast('Write something, add photos, or attach a file.', 'error');
     return;
   }
 
@@ -316,25 +327,28 @@ var handleComposeSubmit = function() {
   }
 
   var submitBtn = document.getElementById('composeSubmit');
+  var hasPhotos = getPendingPhotoCount() > 0;
   if (submitBtn) {
     submitBtn.disabled    = true;
-    submitBtn.textContent = 'Posting...';
+    submitBtn.textContent = hasPhotos ? 'Uploading...' : 'Posting...';
   }
+
+  var restoreSubmit = function() {
+    if (submitBtn) {
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Post';
+    }
+  };
 
   var savePost = function(postData) {
     addDoc(collection(db, 'posts'), postData).then(function() {
       bodyEl.value = '';
       clearDriveAttachment();
-      if (submitBtn) {
-        submitBtn.disabled    = false;
-        submitBtn.textContent = 'Post';
-      }
+      clearPhotoAttachments();
+      restoreSubmit();
     }).catch(function(err) {
       logError('Failed to post', err);
-      if (submitBtn) {
-        submitBtn.disabled    = false;
-        submitBtn.textContent = 'Post';
-      }
+      restoreSubmit();
       showToast('Failed to post. Check console for details.', 'error');
     });
   };
@@ -348,7 +362,17 @@ var handleComposeSubmit = function() {
     } catch (e) {}
   }
 
-  savePost(post);
+  uploadPendingPhotos().then(function(images) {
+    if (images.length > 0) {
+      post.images = images;
+    }
+    if (submitBtn) submitBtn.textContent = 'Posting...';
+    savePost(post);
+  }).catch(function(err) {
+    logError('Photo upload failed', err);
+    restoreSubmit();
+    showToast('Photo upload failed. Try again.', 'error');
+  });
 };
 
 // ─── Feed: render list ───────────────────────────────────────────────────────
@@ -415,6 +439,13 @@ var renderFeedList = function() {
     btn.addEventListener('click', function() {
       handlePinPost(btn.dataset.pinPost);
     });
+  });
+
+  wireLightboxButtons(list, function(postId) {
+    var post = getAllKnownFeedPosts().find(function(item) {
+      return item.id === postId;
+    });
+    return post ? post.images : [];
   });
 
   var loadMoreBtn = list.querySelector('.load-more-btn');
@@ -542,6 +573,7 @@ var renderPostCard = function(p) {
         '</div>' +
       '</div>' +
       '<div class="post-body">' + bodyEsc + '</div>' +
+      renderPostImages(p) +
       (p.ogUrl ? renderLinkPreview(p) : '') +
       (p.fileUrl
         ? '<a class="post-attachment" href="' + escapeAttr(p.fileUrl) + '" target="_blank" rel="noopener">' +
@@ -845,6 +877,11 @@ export const loadProfileRecentPosts = function(uid) {
       btn.addEventListener('click', function() {
         handleDeletePost(btn.dataset.deletePost, btn.dataset.postAuthor);
       });
+    });
+
+    wireLightboxButtons(container, function(postId) {
+      var post = posts.find(function(item) { return item.id === postId; });
+      return post ? post.images : [];
     });
   }).catch(function(err) {
     logError('Failed to load recent posts', err);
