@@ -178,6 +178,24 @@ export const uploadPendingPhotos = function() {
   }));
 };
 
+// One-shot compress + upload for a single image (used by chat). Resolves
+// to { url, path, w, h }.
+export const uploadChatImage = function(file, pathPrefix) {
+  if (!state.user) return Promise.reject(new Error('not-signed-in'));
+  if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+    return Promise.reject(new Error('not-an-image'));
+  }
+  return compressImage(file).then(function(out) {
+    const path = (pathPrefix || 'chat-images') + '/' + state.user.uid + '/' + Date.now() + '.jpg';
+    const imageRef = ref(storage, path);
+    return uploadBytes(imageRef, out.blob, { contentType: 'image/jpeg' }).then(function() {
+      return getDownloadURL(imageRef);
+    }).then(function(url) {
+      return { url: url, path: path, w: out.w, h: out.h };
+    });
+  });
+};
+
 // ─── Lightbox ────────────────────────────────────────────────────────────────
 export const openImageLightbox = function(images, startIndex) {
   if (!Array.isArray(images) || !images.length) return;

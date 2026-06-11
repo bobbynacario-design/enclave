@@ -51,7 +51,8 @@ export const messagesState = {
   oldestDoc:               null,
   totalUnread:             0,
   unsubscribeConversations: null,
-  unsubscribeThread:        null
+  unsubscribeThread:        null,
+  unsubscribePeer:          null
 };
 
 // Drive attachment state for compose box
@@ -70,6 +71,11 @@ export const resetMessagesState = function(fullReset) {
   if (messagesState.unsubscribeThread) {
     messagesState.unsubscribeThread();
     messagesState.unsubscribeThread = null;
+  }
+
+  if (messagesState.unsubscribePeer) {
+    messagesState.unsubscribePeer();
+    messagesState.unsubscribePeer = null;
   }
 
   messagesState.activePeerId = null;

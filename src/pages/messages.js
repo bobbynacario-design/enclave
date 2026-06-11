@@ -13,7 +13,8 @@ import {
   getDocs,
   serverTimestamp,
   Timestamp,
-  runTransaction
+  runTransaction,
+  deleteField
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { db } from '../../firebase.js';
 
@@ -28,26 +29,57 @@ import { logError } from '../util/log.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
+import { openImageLightbox, uploadChatImage } from '../ui/photoAttach.js';
 
 // Notifications
 import { writeNotification } from './notifications.js';
 
-// ─── Messages ────────────────────────────────────────────────────────────────
-var formatMessageTime = function(date) {
-  var now = new Date();
-  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  var yesterday = new Date(today.getTime() - 86400000);
-  var msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+// ─── Messages: time formatting ───────────────────────────────────────────────
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+var startOfDay = function(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+};
+
+var formatClockTime = function(date) {
   var hours = date.getHours();
   var mins = date.getMinutes();
   var ampm = hours >= 12 ? 'PM' : 'AM';
   var h = hours % 12 || 12;
-  var m = (mins < 10 ? '0' : '') + mins;
-  var timeStr = h + ':' + m + ' ' + ampm;
-  if (msgDay.getTime() === today.getTime()) return timeStr;
-  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday ' + timeStr;
-  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return months[date.getMonth()] + ' ' + date.getDate() + ', ' + timeStr;
+  return h + ':' + (mins < 10 ? '0' : '') + mins + ' ' + ampm;
+};
+
+// Day-chip label between message groups: Today / Yesterday / Jun 9
+var formatDayLabel = function(date) {
+  var now = new Date();
+  var today = startOfDay(now);
+  var yesterday = new Date(today.getTime() - 86400000);
+  var msgDay = startOfDay(date);
+  if (msgDay.getTime() === today.getTime()) return 'Today';
+  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday';
+  return MONTHS[date.getMonth()] + ' ' + date.getDate() +
+    (date.getFullYear() !== now.getFullYear() ? ', ' + date.getFullYear() : '');
+};
+
+// Compact sidebar time: 3:42 PM today, Yesterday, else Jun 9
+var formatListTime = function(ms) {
+  if (!ms) return '';
+  var date = new Date(ms);
+  var now = new Date();
+  var today = startOfDay(now);
+  var yesterday = new Date(today.getTime() - 86400000);
+  var msgDay = startOfDay(date);
+  if (msgDay.getTime() === today.getTime()) return formatClockTime(date);
+  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday';
+  return MONTHS[date.getMonth()] + ' ' + date.getDate();
+};
+
+var PRESENCE_ONLINE_MS = 5 * 60 * 1000;
+var TYPING_VISIBLE_MS = 6000;
+
+var isMemberOnline = function(member) {
+  var ms = member ? getFirestoreTimeMs(member.lastSeen) : 0;
+  return ms > 0 && Date.now() - ms < PRESENCE_ONLINE_MS;
 };
 
 var getConversationId = function(uidA, uidB) {
@@ -181,23 +213,31 @@ var renderMessagesPeopleList = function() {
     var active = member.uid === messagesState.activePeerId ? ' active' : '';
     var initials = escapeHTML(getInitials(member.name || member.email || '?'));
     var name = escapeHTML(member.name || member.email || 'Member');
-    var meta = escapeHTML(member.role || member.email || '');
     var conversation = convByPeer[member.uid] || null;
     var unread = getConversationUnreadCount(conversation);
-    var preview = conversation && conversation.lastMessage
-      ? escapeHTML(conversation.lastMessage)
-      : 'No messages yet.';
+    var online = isMemberOnline(member);
+    var timeLabel = conversation ? formatListTime(getConversationSortValue(conversation)) : '';
+
+    var preview;
+    if (conversation && conversation.lastMessage) {
+      var youPrefix = state.user && conversation.lastSenderId === state.user.uid ? 'You: ' : '';
+      preview = escapeHTML(youPrefix + conversation.lastMessage);
+    } else {
+      preview = escapeHTML(member.role || member.email || 'No messages yet.');
+    }
 
     return '' +
       '<button class="messages-person' + active + (unread > 0 ? ' unread' : '') + '" type="button" data-open-message="' + escapeAttr(member.uid) + '">' +
-        '<div class="messages-person-avatar">' + initials + '</div>' +
+        '<div class="messages-person-avatar' + (online ? ' online' : '') + '">' + initials + '</div>' +
         '<div class="messages-person-meta">' +
           '<div class="messages-person-name-row">' +
             '<div class="messages-person-name">' + name + '</div>' +
+            (timeLabel ? '<span class="messages-person-time' + (unread > 0 ? ' unread' : '') + '">' + escapeHTML(timeLabel) + '</span>' : '') +
+          '</div>' +
+          '<div class="messages-person-preview-row">' +
+            '<div class="messages-person-preview">' + preview + '</div>' +
             (unread > 0 ? '<span class="messages-unread-badge">' + escapeHTML(unread > 99 ? '99+' : String(unread)) + '</span>' : '') +
           '</div>' +
-          '<div class="messages-person-subtitle">' + meta + '</div>' +
-          '<div class="messages-person-preview">' + preview + '</div>' +
         '</div>' +
       '</button>';
   }).join('');
@@ -209,12 +249,116 @@ var renderMessagesPeopleList = function() {
   });
 };
 
+// Header subtitle: typing… beats presence; presence is online / last seen.
+// Re-checks itself shortly after showing "typing…" so it expires cleanly.
+var presenceRefreshTimer = null;
+
+var renderThreadPresence = function() {
+  var subtitleEl = document.getElementById('messagesThreadSubtitle');
+  if (!subtitleEl) return;
+
+  if (presenceRefreshTimer) {
+    clearTimeout(presenceRefreshTimer);
+    presenceRefreshTimer = null;
+  }
+
+  var peer = findMessageMember(messagesState.activePeerId);
+  if (!peer) {
+    subtitleEl.textContent = 'Choose someone to start chatting.';
+    subtitleEl.classList.remove('typing');
+    return;
+  }
+
+  var conversation = messagesState.conversations.find(function(item) {
+    return item.id === messagesState.activeConversationId;
+  }) || null;
+  var typingMs = conversation && conversation.typing
+    ? getFirestoreTimeMs(conversation.typing[peer.uid])
+    : 0;
+
+  if (typingMs > 0 && Date.now() - typingMs < TYPING_VISIBLE_MS) {
+    subtitleEl.textContent = 'typing…';
+    subtitleEl.classList.add('typing');
+    presenceRefreshTimer = setTimeout(renderThreadPresence, 2500);
+    return;
+  }
+
+  subtitleEl.classList.remove('typing');
+  if (isMemberOnline(peer)) {
+    subtitleEl.textContent = 'online';
+  } else {
+    var lastSeenMs = getFirestoreTimeMs(peer.lastSeen);
+    subtitleEl.textContent = lastSeenMs > 0
+      ? 'last seen ' + relativeTime(new Date(lastSeenMs))
+      : (peer.role || peer.email || 'Direct conversation');
+  }
+};
+
+// Live presence for the open thread's peer (lastSeen heartbeats are
+// written every 60s by the shell). Re-subscribes only when the open
+// peer actually changes.
+var presencePeerId = null;
+
+var ensurePeerPresence = function() {
+  if (messagesState.activePeerId === presencePeerId && messagesState.unsubscribePeer) return;
+  presencePeerId = messagesState.activePeerId;
+  subscribePeerPresence(presencePeerId);
+};
+
+var subscribePeerPresence = function(peerId) {
+  if (messagesState.unsubscribePeer) {
+    messagesState.unsubscribePeer();
+    messagesState.unsubscribePeer = null;
+  }
+  if (!peerId) return;
+
+  messagesState.unsubscribePeer = onSnapshot(doc(db, 'users', peerId), function(snap) {
+    if (!snap.exists()) return;
+    var member = findMessageMember(peerId);
+    if (member) member.lastSeen = (snap.data() || {}).lastSeen || member.lastSeen;
+    renderThreadPresence();
+  }, function(err) {
+    logError('Peer presence subscribe error', err);
+  });
+};
+
+var renderMessageBubble = function(message, mine, peerReadAtMs, imageIndexRef) {
+  var createdMs = getFirestoreTimeMs(message.createdAt);
+  var timeLabel = createdMs > 0 ? formatClockTime(new Date(createdMs)) : '';
+  var ticksHtml = '';
+  if (mine) {
+    var seen = peerReadAtMs > 0 && createdMs > 0 && createdMs <= peerReadAtMs;
+    ticksHtml = '<span class="message-ticks' + (seen ? ' seen' : '') + '">' + (seen ? '✓✓' : '✓') + '</span>';
+  }
+
+  var imageHtml = '';
+  if (message.imageUrl) {
+    imageHtml = '<button type="button" class="message-image" data-msg-image="' + imageIndexRef.list.length + '" aria-label="View photo">' +
+      '<img src="' + escapeAttr(message.imageUrl) + '" alt="Photo" loading="lazy" />' +
+    '</button>';
+    imageIndexRef.list.push({ url: message.imageUrl });
+  }
+
+  var bodyHtml = message.body
+    ? '<span class="message-bubble-body">' + highlightMentions(linkifyText(escapeHTML(message.body))) + '</span>'
+    : '';
+
+  return '<div class="message-bubble' + (message.imageUrl ? ' has-image' : '') + '">' +
+    imageHtml +
+    '<span class="message-bubble-line">' +
+      bodyHtml +
+      '<span class="message-bubble-meta-inline">' + escapeHTML(timeLabel) + ticksHtml + '</span>' +
+    '</span>' +
+  '</div>';
+};
+
 var renderMessagesThread = function() {
   var titleEl = document.getElementById('messagesThreadTitle');
   var subtitleEl = document.getElementById('messagesThreadSubtitle');
   var listEl = document.getElementById('messagesThreadList');
   var inputEl = document.getElementById('messagesComposeInput');
   var sendBtn = document.getElementById('messagesSendBtn');
+  var photoBtn = document.getElementById('messagesPhotoBtn');
 
   if (!titleEl || !subtitleEl || !listEl || !inputEl || !sendBtn) return;
 
@@ -225,6 +369,7 @@ var renderMessagesThread = function() {
     if (peer) {
       headerAvatar.textContent = getInitials(peer.name || peer.email || '?');
       headerAvatar.style.display = 'flex';
+      headerAvatar.classList.toggle('online', isMemberOnline(peer));
     } else {
       headerAvatar.textContent = '';
       headerAvatar.style.display = 'none';
@@ -233,18 +378,21 @@ var renderMessagesThread = function() {
 
   if (!peer) {
     titleEl.textContent = 'Select a member';
-    subtitleEl.textContent = 'Choose someone to start chatting.';
+    renderThreadPresence();
     listEl.innerHTML = '<div class="empty-state"><div class="empty-state-title">No conversation selected</div><p class="empty-state-text">Choose a member to start or continue a conversation.</p></div>';
     inputEl.value = '';
     inputEl.disabled = true;
     sendBtn.disabled = true;
+    if (photoBtn) photoBtn.disabled = true;
     return;
   }
 
   titleEl.textContent = peer.name || peer.email || 'Member';
-  subtitleEl.textContent = peer.role || peer.email || 'Direct conversation';
+  renderThreadPresence();
+  ensurePeerPresence();
   inputEl.disabled = false;
   sendBtn.disabled = false;
+  if (photoBtn) photoBtn.disabled = false;
 
   var activeConversation = messagesState.conversations.find(function(conversation) {
     return conversation.id === messagesState.activeConversationId;
@@ -253,15 +401,6 @@ var renderMessagesThread = function() {
     ? activeConversation.readBy[peer.uid]
     : null;
   var peerReadAtMs = getFirestoreTimeMs(peerReadAt);
-  var lastOwnMessageId = null;
-
-  var allMsgs = messagesState.olderMessages.concat(messagesState.thread);
-  for (var i = allMsgs.length - 1; i >= 0; i -= 1) {
-    if (allMsgs[i].authorId === (state.user && state.user.uid)) {
-      lastOwnMessageId = allMsgs[i].id;
-      break;
-    }
-  }
 
   var allMessages = messagesState.olderMessages.concat(messagesState.thread);
 
@@ -275,44 +414,42 @@ var renderMessagesThread = function() {
       (messagesState.loadingOlder ? 'Loading...' : 'Load older messages') + '</button></div>'
     : '';
 
+  // Only yank the scroll to the bottom when the reader is already near
+  // it (or on first render); preserves position while reading history.
+  var nearBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 150 ||
+    listEl.scrollTop === 0;
+  var previousScrollTop = listEl.scrollTop;
+
   var html = loadMoreHtml;
   var previousMessage = null;
+  var previousDayKey = '';
+  var imageIndexRef = { list: [] };
 
   allMessages.forEach(function(message) {
     var mine = message.authorId === (state.user && state.user.uid);
-    var isGrouped = !!(previousMessage &&
-      previousMessage.authorId === message.authorId &&
-      (getFirestoreTimeMs(message.createdAt) - getFirestoreTimeMs(previousMessage.createdAt)) <= 300000);
+    var createdMs = getFirestoreTimeMs(message.createdAt);
 
-    var isLatestOwn = mine && message.id === lastOwnMessageId;
-    var seen = isLatestOwn && peerReadAtMs > 0 && getFirestoreTimeMs(message.createdAt) <= peerReadAtMs;
-    var statusHtml = isLatestOwn
-      ? '<div class="message-bubble-status' + (seen ? ' seen' : '') + '">' +
-          (seen ? '✓✓' : '✓') +
-        '</div>'
-      : '';
-
-    var body = highlightMentions(linkifyText(escapeHTML(message.body || '')));
-
-    var separatorHtml = '';
-    if (!isGrouped) {
-      var msgDate = message.createdAt && typeof message.createdAt.toDate === 'function'
-        ? message.createdAt.toDate()
-        : null;
-      if (msgDate) {
-        separatorHtml = '<div class="message-time-separator">' + escapeHTML(formatMessageTime(msgDate)) + '</div>';
+    // Day chip whenever the calendar day changes
+    var dayKey = '';
+    if (createdMs > 0) {
+      var msgDate = new Date(createdMs);
+      dayKey = msgDate.getFullYear() + '-' + msgDate.getMonth() + '-' + msgDate.getDate();
+      if (dayKey !== previousDayKey) {
+        html += '<div class="message-day-separator"><span>' + escapeHTML(formatDayLabel(msgDate)) + '</span></div>';
       }
     }
 
-    html += separatorHtml +
-      '<div class="message-bubble-row' + (mine ? ' mine' : '') + (isGrouped ? ' grouped' : '') + '">' +
-        '<div class="message-bubble">' +
-          '<div class="message-bubble-body">' + body + '</div>' +
-          statusHtml +
-        '</div>' +
-      '</div>';
+    var isGrouped = !!(previousMessage &&
+      dayKey === previousDayKey &&
+      previousMessage.authorId === message.authorId &&
+      (createdMs - getFirestoreTimeMs(previousMessage.createdAt)) <= 300000);
+
+    html += '<div class="message-bubble-row' + (mine ? ' mine' : '') + (isGrouped ? ' grouped' : '') + '">' +
+      renderMessageBubble(message, mine, peerReadAtMs, imageIndexRef) +
+    '</div>';
 
     previousMessage = message;
+    previousDayKey = dayKey;
   });
 
   listEl.innerHTML = html;
@@ -323,9 +460,20 @@ var renderMessagesThread = function() {
     olderBtn.addEventListener('click', loadOlderMessages);
   }
 
-  // Only auto-scroll to bottom if not loading older messages
-  if (!messagesState.loadingOlder) {
+  // Wire image lightbox
+  var threadImages = imageIndexRef.list;
+  listEl.querySelectorAll('[data-msg-image]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      openImageLightbox(threadImages, parseInt(btn.getAttribute('data-msg-image'), 10) || 0);
+    });
+  });
+
+  // Only auto-scroll to bottom if not loading older messages and the
+  // reader was already at/near the bottom
+  if (!messagesState.loadingOlder && nearBottom) {
     listEl.scrollTop = listEl.scrollHeight;
+  } else if (!messagesState.loadingOlder) {
+    listEl.scrollTop = previousScrollTop;
   }
 };
 
@@ -527,28 +675,49 @@ export const subscribeConversations = function() {
   });
 };
 
-var handleSendMessage = function() {
-  if (!state.user || !messagesState.activePeerId) return;
+// ─── Typing indicator pings ──────────────────────────────────────────────────
+// Throttled write of typing.{uid} on the conversation doc; the peer's
+// conversation listener picks it up. Displayed for TYPING_VISIBLE_MS.
+var lastTypingWriteMs = 0;
 
-  var input = document.getElementById('messagesComposeInput');
-  var sendBtn = document.getElementById('messagesSendBtn');
-  if (!input || !sendBtn) return;
+var sendTypingPing = function() {
+  if (!state.user || !messagesState.activeConversationId) return;
+  var nowMs = Date.now();
+  if (nowMs - lastTypingWriteMs < 4000) return;
+  lastTypingWriteMs = nowMs;
 
-  var body = input.value.trim();
-  if (!body) return;
+  var payload = {};
+  payload['typing.' + state.user.uid] = serverTimestamp();
+  updateDoc(doc(db, 'conversations', messagesState.activeConversationId), payload).catch(function() {
+    // Best-effort; conversation may not exist yet.
+  });
+};
+
+var clearTypingPing = function(conversationId) {
+  if (!state.user || !conversationId) return;
+  lastTypingWriteMs = 0;
+  var payload = {};
+  payload['typing.' + state.user.uid] = deleteField();
+  updateDoc(doc(db, 'conversations', conversationId), payload).catch(function() {});
+};
+
+// Shared send path for text and photo messages.
+// content: { body } and/or { imageUrl, imagePath, imageW, imageH }
+var sendMessage = function(content) {
+  if (!state.user || !messagesState.activePeerId) return Promise.resolve();
 
   var peer = findMessageMember(messagesState.activePeerId);
-  if (!peer) return;
+  if (!peer) return Promise.resolve();
 
+  var body = content.body || '';
   var conversationId = getConversationId(state.user.uid, peer.uid);
   var conversationRef = doc(db, 'conversations', conversationId);
-  var preview = body.length > 120 ? body.slice(0, 117) + '...' : body;
+  var preview = content.imageUrl
+    ? '📷 Photo'
+    : (body.length > 120 ? body.slice(0, 117) + '...' : body);
   var members = [state.user.uid, peer.uid].sort();
 
-  input.disabled = true;
-  sendBtn.disabled = true;
-
-  runTransaction(db, function(tx) {
+  return runTransaction(db, function(tx) {
     return tx.get(conversationRef).then(function(snap) {
       var unreadCount = {};
       var readBy = {};
@@ -573,29 +742,55 @@ var handleSendMessage = function() {
       }, { merge: true });
     });
   }).then(function() {
-    return addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+    var messageDoc = {
       authorId: state.user.uid,
       authorName: state.user.displayName || state.user.email || 'Member',
       body: body,
       createdAt: serverTimestamp()
-    });
+    };
+    if (content.imageUrl) {
+      messageDoc.imageUrl = content.imageUrl;
+      messageDoc.imagePath = content.imagePath || '';
+      messageDoc.imageW = content.imageW || 0;
+      messageDoc.imageH = content.imageH || 0;
+    }
+    return addDoc(collection(db, 'conversations', conversationId, 'messages'), messageDoc);
   }).then(function() {
     messagesState.activePeerId = peer.uid;
     if (messagesState.activeConversationId !== conversationId) {
       subscribeMessageThread(conversationId);
     }
     markConversationRead(conversationId);
-    input.value = '';
-    input.style.height = 'auto';
+    clearTypingPing(conversationId);
     var actor = state.user.displayName || state.user.email || 'Member';
+    var notifText = content.imageUrl
+      ? actor + ' sent you a photo'
+      : actor + ' sent you a message';
     try {
-      writeNotification(peer.uid, 'message', actor + ' sent you a message', {
+      writeNotification(peer.uid, 'message', notifText, {
         page: 'messages',
         params: { peer: state.user.uid }
       });
     } catch (err) {
       logError('Notification write failed', err);
     }
+  });
+};
+
+var handleSendMessage = function() {
+  var input = document.getElementById('messagesComposeInput');
+  var sendBtn = document.getElementById('messagesSendBtn');
+  if (!input || !sendBtn) return;
+
+  var body = input.value.trim();
+  if (!body) return;
+
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  sendMessage({ body: body }).then(function() {
+    input.value = '';
+    input.style.height = 'auto';
   }).catch(function(err) {
     logError('Failed to send message', err);
     showToast('Failed to send message. Check console for details.', 'error');
@@ -606,7 +801,41 @@ var handleSendMessage = function() {
   });
 };
 
+var handleSendPhoto = function(file) {
+  var photoBtn = document.getElementById('messagesPhotoBtn');
+  var sendBtn = document.getElementById('messagesSendBtn');
+  if (!file) return;
+  if (!file.type || file.type.indexOf('image/') !== 0) {
+    showToast('Only image files can be sent.', 'error');
+    return;
+  }
+
+  if (photoBtn) photoBtn.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
+  showToast('Sending photo...', 'info');
+
+  uploadChatImage(file, 'chat-images').then(function(img) {
+    return sendMessage({
+      imageUrl: img.url,
+      imagePath: img.path,
+      imageW: img.w,
+      imageH: img.h
+    });
+  }).catch(function(err) {
+    logError('Failed to send photo', err);
+    showToast(err && err.message === 'decode-failed'
+      ? 'That image format is not supported.'
+      : 'Failed to send photo. Try again.', 'error');
+  }).finally(function() {
+    if (photoBtn) photoBtn.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+  });
+};
+
 export const initMessagesPage = function() {
+  presencePeerId = null;
+  lastTypingWriteMs = 0;
+
   var form = document.getElementById('messagesComposer');
   if (form) {
     form.addEventListener('submit', function(e) {
@@ -621,13 +850,29 @@ export const initMessagesPage = function() {
       input.style.height = 'auto';
       input.style.height = Math.min(input.scrollHeight, 160) + 'px';
     };
-    input.addEventListener('input', autosize);
+    input.addEventListener('input', function() {
+      autosize();
+      if (input.value) sendTypingPing();
+    });
 
     input.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSendMessage();
       }
+    });
+  }
+
+  var photoBtn = document.getElementById('messagesPhotoBtn');
+  var photoInput = document.getElementById('messagesPhotoInput');
+  if (photoBtn && photoInput) {
+    photoBtn.addEventListener('click', function() {
+      photoInput.click();
+    });
+    photoInput.addEventListener('change', function() {
+      var file = photoInput.files && photoInput.files[0];
+      photoInput.value = '';
+      if (file) handleSendPhoto(file);
     });
   }
 

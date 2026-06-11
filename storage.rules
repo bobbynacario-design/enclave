@@ -28,6 +28,18 @@ service firebase.storage {
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Chat photos sent in direct messages. Readable by any signed-in
+    // member (conversation docs gate the message list itself); messages
+    // are immutable so there is no delete path to clean up.
+    match /chat-images/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.auth.uid == userId &&
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
