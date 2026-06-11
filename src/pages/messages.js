@@ -256,6 +256,53 @@ var renderMessagesPeopleList = function() {
   });
 };
 
+// Whether the open thread's peer is typing right now, using the
+// local-receipt freshness cache.
+var isPeerTyping = function() {
+  var peer = findMessageMember(messagesState.activePeerId);
+  if (!peer) return false;
+
+  var conversation = messagesState.conversations.find(function(item) {
+    return item.id === messagesState.activeConversationId;
+  }) || null;
+  if (!conversation) return false;
+
+  var typingMs = conversation.typing
+    ? getFirestoreTimeMs(conversation.typing[peer.uid])
+    : 0;
+  var entry = typingSeen[conversation.id];
+  if (typingMs > 0 && (!entry || typingMs > entry.ms)) {
+    entry = { ms: typingMs, seenAt: Date.now() };
+    typingSeen[conversation.id] = entry;
+  }
+  return typingMs > 0 && !!entry &&
+    Date.now() - entry.seenAt < TYPING_VISIBLE_MS;
+};
+
+// Animated three-dots bubble pinned to the end of the thread, so typing
+// is visible even when the header has scrolled out of view.
+var syncTypingBubble = function() {
+  var listEl = document.getElementById('messagesThreadList');
+  if (!listEl) return;
+
+  var bubble = document.getElementById('typingBubbleRow');
+  var typing = isPeerTyping();
+
+  if (typing && !bubble) {
+    var nearBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 150;
+    bubble = document.createElement('div');
+    bubble.id = 'typingBubbleRow';
+    bubble.className = 'message-bubble-row';
+    bubble.innerHTML = '<div class="message-bubble message-typing-bubble" aria-label="Typing">' +
+      '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>' +
+    '</div>';
+    listEl.appendChild(bubble);
+    if (nearBottom) listEl.scrollTop = listEl.scrollHeight;
+  } else if (!typing && bubble && bubble.parentNode) {
+    bubble.parentNode.removeChild(bubble);
+  }
+};
+
 // Header subtitle: typing… beats presence; presence is online / last seen.
 // Re-checks itself shortly after showing "typing…" so it expires cleanly.
 var presenceRefreshTimer = null;
@@ -276,27 +323,14 @@ var renderThreadPresence = function() {
     return;
   }
 
-  var conversation = messagesState.conversations.find(function(item) {
-    return item.id === messagesState.activeConversationId;
-  }) || null;
-  var typingMs = conversation && conversation.typing
-    ? getFirestoreTimeMs(conversation.typing[peer.uid])
-    : 0;
-
-  var entry = conversation ? typingSeen[conversation.id] : null;
-  if (conversation && typingMs > 0 && (!entry || typingMs > entry.ms)) {
-    entry = { ms: typingMs, seenAt: Date.now() };
-    typingSeen[conversation.id] = entry;
-  }
-  var showTyping = typingMs > 0 && entry &&
-    Date.now() - entry.seenAt < TYPING_VISIBLE_MS;
-
-  if (showTyping) {
+  if (isPeerTyping()) {
     subtitleEl.textContent = 'typing…';
     subtitleEl.classList.add('typing');
+    syncTypingBubble();
     presenceRefreshTimer = setTimeout(renderThreadPresence, 2000);
     return;
   }
+  syncTypingBubble();
 
   subtitleEl.classList.remove('typing');
   if (isMemberOnline(peer)) {
@@ -490,6 +524,9 @@ var renderMessagesThread = function() {
   } else if (!messagesState.loadingOlder) {
     listEl.scrollTop = previousScrollTop;
   }
+
+  // Re-append the typing bubble if the rebuild wiped it mid-typing
+  syncTypingBubble();
 };
 
 var subscribeMessageThread = function(conversationId) {
