@@ -25,6 +25,17 @@ const postExcerpt = (body) => {
   return firstLine.slice(0, 87) + "...";
 };
 
+// One-line description of a post: its text, or what it shared when it
+// has no text (photo-only and file-only posts), or "" if truly empty.
+const postLine = (post) => {
+  const excerpt = postExcerpt(post.body);
+  if (excerpt) return excerpt;
+  const imageCount = Array.isArray(post.images) ? post.images.length : 0;
+  if (imageCount > 0) return "shared " + plural(imageCount, "photo");
+  if (post.fileUrl) return "shared a file";
+  return "";
+};
+
 const manilaDay = (date) => new Intl.DateTimeFormat("en-US", {
   timeZone: "Asia/Manila",
   weekday: "short",
@@ -125,7 +136,7 @@ const buildDigest = (user, week) => {
     summaryParts.slice(0, 3).join(", ");
   const greetName = String(user.name || user.email || "there").split(" ")[0];
 
-  const topPosts = posts.slice()
+  const topPosts = posts.filter((p) => postLine(p) !== "")
       .sort((a, b) => engagementOf(b) - engagementOf(a))
       .slice(0, 3);
 
@@ -155,7 +166,7 @@ const buildDigest = (user, week) => {
         escapeHtml(plural(eng, "interaction")) + `</span>` : "";
       return rowHtml(
           `<strong>` + escapeHtml(p.authorName || "Member") +
-          `</strong> &mdash; ` + escapeHtml(postExcerpt(p.body)) + engNote);
+          `</strong> &mdash; ` + escapeHtml(postLine(p)) + engNote);
     }).join(""));
   }
 
@@ -257,7 +268,7 @@ const buildDigest = (user, week) => {
     textLines.push("Top posts:");
     topPosts.forEach((p) => {
       textLines.push("- " + (p.authorName || "Member") + " — " +
-        postExcerpt(p.body));
+        postLine(p));
     });
     textLines.push("");
   }
