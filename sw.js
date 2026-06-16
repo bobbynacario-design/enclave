@@ -90,7 +90,9 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys => {
       return Promise.all(
         keys
-          .filter(key => key !== CACHE_NAME)
+          // Only clean up THIS app's own old caches. caches is per-origin and shared
+          // with sibling apps (pokerhq, bob) on github.io — never delete theirs.
+          .filter(key => key.startsWith('enclave-shell-') && key !== CACHE_NAME)
           .map(key => {
             console.log('[SW] Deleting old cache:', key);
             return caches.delete(key);
