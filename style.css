@@ -1183,6 +1183,77 @@ label {
   word-wrap: break-word;
 }
 
+.post-body p,
+.post-comment-body p {
+  margin: 0 0 10px;
+}
+
+.post-body p:last-child,
+.post-comment-body p:last-child {
+  margin-bottom: 0;
+}
+
+.post-body h1,
+.post-body h2,
+.post-body h3,
+.post-body h4,
+.post-body h5,
+.post-body h6,
+.post-comment-body h1,
+.post-comment-body h2,
+.post-comment-body h3,
+.post-comment-body h4,
+.post-comment-body h5,
+.post-comment-body h6 {
+  font-size: 16px;
+  line-height: 1.35;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.post-body ul,
+.post-body ol,
+.post-comment-body ul,
+.post-comment-body ol {
+  margin: 0 0 10px 20px;
+  padding: 0;
+}
+
+.post-body blockquote,
+.post-comment-body blockquote {
+  margin: 0 0 10px;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.post-body code,
+.post-comment-body code {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.92em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.post-body pre,
+.post-comment-body pre {
+  margin: 0 0 10px;
+  padding: 10px;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.post-body pre code,
+.post-comment-body pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 /* Auto-linked URLs in post body */
 .post-link {
   color: var(--accent);

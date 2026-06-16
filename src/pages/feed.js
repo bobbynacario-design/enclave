@@ -23,7 +23,7 @@ import { db } from '../../firebase.js';
 import { state, feedState, driveAttachment } from '../state.js';
 
 // Utilities
-import { escapeHTML, escapeAttr, linkifyText, extractFirstUrl, highlightMentions } from '../util/escape.js';
+import { escapeHTML, escapeAttr, extractFirstUrl, renderRichText } from '../util/escape.js';
 import { relativeTime } from '../util/time.js';
 import { getVisibleCircles, getInitials, renderCircleOptions, circleLabel } from '../util/circles.js';
 import { FEED_PAGE_SIZE, ALL_CIRCLES } from '../util/constants.js';
@@ -466,11 +466,11 @@ var renderFeedList = function() {
 var renderPostComments = function(postId, comments, authorId) {
   var items = comments.map(function(comment) {
     if (typeof comment === 'string') {
-      return '<div class="post-comment"><div class="post-comment-body">' + escapeHTML(comment) + '</div></div>';
+      return '<div class="post-comment"><div class="post-comment-body">' + renderRichText(comment) + '</div></div>';
     }
 
     var commentAuthor = escapeHTML(comment.authorName || 'Member');
-    var commentBody = highlightMentions(linkifyText(escapeHTML(comment.body || '')));
+    var commentBody = renderRichText(comment.body || '');
     var commentTime = 'just now';
 
     if (comment.createdAt && typeof comment.createdAt.toDate === 'function') {
@@ -517,7 +517,7 @@ var renderPostCard = function(p) {
 
   var nameEsc     = escapeHTML(p.authorName || 'Unknown');
   var initialsEsc = escapeHTML(p.authorInitials || '?');
-  var bodyEsc     = highlightMentions(linkifyText(escapeHTML(p.body || '')));
+  var bodyEsc     = renderRichText(p.body || '');
   var reacts = Array.isArray(p.reacts) ? p.reacts : [];
   var comments = Array.isArray(p.comments) ? p.comments : [];
   var reacted = state.user && reacts.indexOf(state.user.uid) !== -1;
