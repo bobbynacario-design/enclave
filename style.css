@@ -1256,6 +1256,32 @@ label {
   background: transparent;
 }
 
+.post-body table,
+.post-comment-body table {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+  display: block;
+  overflow-x: auto;
+}
+
+.post-body th,
+.post-body td,
+.post-comment-body th,
+.post-comment-body td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.post-body th,
+.post-comment-body th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
 /* Auto-linked URLs in post body */
 .post-link {
   color: var(--accent);

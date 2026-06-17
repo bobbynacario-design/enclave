@@ -51,6 +51,13 @@ const RICH_TEXT_ALLOWED_TAGS = {
   s: true,
   span: true,
   strong: true,
+  table: true,
+  tbody: true,
+  td: true,
+  tfoot: true,
+  th: true,
+  thead: true,
+  tr: true,
   u: true,
   ul: true
 };
@@ -66,6 +73,31 @@ const RICH_TEXT_DROP_CONTENT_TAGS = {
   style: true,
   svg: true,
   template: true
+};
+
+const RICH_TEXT_BLOCK_TAGS = {
+  blockquote: true,
+  br: true,
+  div: true,
+  h1: true,
+  h2: true,
+  h3: true,
+  h4: true,
+  h5: true,
+  h6: true,
+  hr: true,
+  li: true,
+  ol: true,
+  p: true,
+  pre: true,
+  table: true,
+  tbody: true,
+  td: true,
+  tfoot: true,
+  th: true,
+  thead: true,
+  tr: true,
+  ul: true
 };
 
 const isSafeRichTextUrl = function(value) {
@@ -140,10 +172,48 @@ const sanitizeRichNode = function(node) {
   Array.from(node.childNodes).forEach(sanitizeRichNode);
 };
 
+const normalizeRichTextWhitespace = function(root) {
+  Array.from(root.childNodes).forEach(function(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (!/^\s+$/.test(node.nodeValue || '')) return;
+
+      const prev = node.previousSibling;
+      const next = node.nextSibling;
+      const prevTag = prev && prev.nodeType === Node.ELEMENT_NODE
+        ? prev.tagName.toLowerCase()
+        : '';
+      const nextTag = next && next.nodeType === Node.ELEMENT_NODE
+        ? next.tagName.toLowerCase()
+        : '';
+      const parentTag = node.parentElement
+        ? node.parentElement.tagName.toLowerCase()
+        : '';
+
+      if (
+        !prev ||
+        !next ||
+        RICH_TEXT_BLOCK_TAGS[parentTag] ||
+        RICH_TEXT_BLOCK_TAGS[prevTag] ||
+        RICH_TEXT_BLOCK_TAGS[nextTag]
+      ) {
+        node.remove();
+      } else {
+        node.nodeValue = ' ';
+      }
+      return;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      normalizeRichTextWhitespace(node);
+    }
+  });
+};
+
 export const sanitizeRichHTML = function(html) {
   const template = document.createElement('template');
   template.innerHTML = String(html == null ? '' : html);
   Array.from(template.content.childNodes).forEach(sanitizeRichNode);
+  normalizeRichTextWhitespace(template.content);
   return template.innerHTML;
 };
 

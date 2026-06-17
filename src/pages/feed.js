@@ -138,9 +138,47 @@ var extractHtmlBody = function(html) {
 
   try {
     var parsed = new DOMParser().parseFromString(source, 'text/html');
-    if (parsed && parsed.body && parsed.body.innerHTML.trim()) {
-      return parsed.body.innerHTML;
+    if (!parsed || !parsed.body) return source;
+
+    var article = parsed.querySelector('article');
+    var main = parsed.querySelector('main');
+    var content = document.createElement('div');
+
+    if (article) {
+      var title = parsed.querySelector('main h1, h1');
+      if (title) {
+        content.appendChild(title.cloneNode(true));
+      } else if (parsed.title) {
+        var h1 = document.createElement('h1');
+        h1.textContent = parsed.title;
+        content.appendChild(h1);
+      }
+      content.appendChild(article.cloneNode(true));
+    } else if (main) {
+      content.appendChild(main.cloneNode(true));
+    } else {
+      content.innerHTML = parsed.body.innerHTML;
     }
+
+    content.querySelectorAll([
+      'aside',
+      'button',
+      'canvas',
+      'footer',
+      'form',
+      'header',
+      'input',
+      'nav',
+      'script',
+      'select',
+      'style',
+      'svg',
+      'textarea'
+    ].join(',')).forEach(function(el) {
+      el.remove();
+    });
+
+    return content.innerHTML.trim() || source;
   } catch (err) {}
 
   return source;
