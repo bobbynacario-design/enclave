@@ -952,6 +952,8 @@ label {
 .compose-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 

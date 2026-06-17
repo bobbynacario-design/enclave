@@ -23,7 +23,7 @@ import { db } from '../../firebase.js';
 import { state, feedState, driveAttachment } from '../state.js';
 
 // Utilities
-import { escapeHTML, escapeAttr, extractFirstUrl, renderRichText } from '../util/escape.js';
+import { escapeHTML, escapeAttr, extractFirstUrl, renderRichText, sanitizeRichHTML } from '../util/escape.js';
 import { relativeTime } from '../util/time.js';
 import { getVisibleCircles, getInitials, renderCircleOptions, circleLabel } from '../util/circles.js';
 import { FEED_PAGE_SIZE, ALL_CIRCLES } from '../util/constants.js';
@@ -76,6 +76,15 @@ export const initFeedPage = function() {
   if (driveBtn) driveBtn.addEventListener('click', openDrivePicker);
   clearDriveAttachment();
 
+  var htmlBtn = document.getElementById('htmlImportBtn');
+  var htmlInput = document.getElementById('htmlFileInput');
+  if (htmlBtn && htmlInput) {
+    htmlBtn.addEventListener('click', function() {
+      htmlInput.click();
+    });
+    htmlInput.addEventListener('change', handleHtmlFileImport);
+  }
+
   // Photo attachments
   initPhotoAttach();
 
@@ -121,6 +130,52 @@ export const initFeedPage = function() {
 
   syncSidebarSelection();
   subscribeFeed();
+};
+
+// ─── Feed: HTML import ────────────────────────────────────────────────────────
+var extractHtmlBody = function(html) {
+  var source = String(html == null ? '' : html);
+
+  try {
+    var parsed = new DOMParser().parseFromString(source, 'text/html');
+    if (parsed && parsed.body && parsed.body.innerHTML.trim()) {
+      return parsed.body.innerHTML;
+    }
+  } catch (err) {}
+
+  return source;
+};
+
+var handleHtmlFileImport = function(evt) {
+  var input = evt && evt.currentTarget;
+  var file = input && input.files && input.files[0];
+  var bodyEl = document.getElementById('composeBody');
+  if (!file || !bodyEl) return;
+
+  if (!/\.html?$/i.test(file.name || '') && file.type && file.type !== 'text/html') {
+    showToast('Choose an HTML file.', 'error');
+    input.value = '';
+    return;
+  }
+
+  file.text().then(function(source) {
+    var html = sanitizeRichHTML(extractHtmlBody(source)).trim();
+    if (!html) {
+      showToast('No feed-safe HTML found in that file.', 'error');
+      return;
+    }
+
+    bodyEl.value = bodyEl.value.trim()
+      ? bodyEl.value.trim() + '\n\n' + html
+      : html;
+    bodyEl.focus();
+    showToast('HTML imported into the composer.', 'success');
+  }).catch(function(err) {
+    logError('Failed to import HTML file', err);
+    showToast('Failed to import HTML file.', 'error');
+  }).finally(function() {
+    input.value = '';
+  });
 };
 
 // ─── Feed: live subscription ─────────────────────────────────────────────────
