@@ -15,7 +15,7 @@ import {
 
 import { db } from '../../firebase.js';
 
-import { state, shellState, projectsState } from '../state.js';
+import { state, shellState, projectsState, feedState } from '../state.js';
 
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 
@@ -282,6 +282,7 @@ export var renderShell = function() {
     }
 
     syncSidebarSelection();
+    subscribeUserDoc();
     subscribeConversations();
     subscribeBriefingNotifier();
     subscribeNotifications();
@@ -296,6 +297,79 @@ export var renderShell = function() {
     logError('Failed to load shell', err);
     appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
   });
+};
+
+// ─── Live access sync ─────────────────────────────────────────────────────────
+// Applies a circle/admin change that arrived mid-session.
+var applyAccessChange = function(visibleChanged) {
+  var visible = getVisibleCircles(state);
+
+  document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
+    btn.hidden = !state.isAdmin;
+  });
+
+  document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
+    btn.hidden = visible.indexOf(btn.dataset.circle) === -1;
+  });
+
+  // Filtered to a circle that was just revoked — drop back to the full feed.
+  if (feedState.filter !== 'all' && visible.indexOf(feedState.filter) === -1) {
+    feedState.filter = 'all';
+  }
+
+  syncSidebarSelection();
+  loadPanelCircles();
+
+  // Demoted while sitting on the admin page.
+  if (!state.isAdmin && state.currentPage === 'admin') {
+    loadPage('feed');
+    return;
+  }
+
+  // subscribeFeed builds its query from the circle list, so a stale listener
+  // either queries a revoked circle and trips the read rules, or misses a
+  // newly granted one. loadPage tears the old listener down before resubscribing.
+  if (visibleChanged && state.currentPage === 'feed') {
+    loadPage('feed');
+  }
+};
+
+// The presence heartbeat rewrites this same doc every 60s, so compare before
+// touching anything — otherwise the sidebar rebuilds itself once a minute.
+var subscribeUserDoc = function() {
+  if (!state.user) return;
+
+  if (shellState.unsubscribeUserDoc) {
+    shellState.unsubscribeUserDoc();
+    shellState.unsubscribeUserDoc = null;
+  }
+
+  shellState.unsubscribeUserDoc = onSnapshot(
+    doc(db, 'users', state.user.uid),
+    function(snap) {
+      if (!snap.exists()) return;
+
+      var data        = snap.data() || {};
+      var nextAdmin   = data.isAdmin === true;
+      var nextCircles = normalizeCircles(data.circles);
+      var prevCircles = Array.isArray(state.circles) ? state.circles : [];
+
+      if (nextAdmin === state.isAdmin &&
+          nextCircles.join(',') === prevCircles.join(',')) {
+        return;
+      }
+
+      var prevVisible = getVisibleCircles(state).join(',');
+
+      state.isAdmin = nextAdmin;
+      state.circles = nextCircles;
+
+      applyAccessChange(prevVisible !== getVisibleCircles(state).join(','));
+    },
+    function(err) {
+      logError('User doc listener failed', err);
+    }
+  );
 };
 
 // ─── Presence ─────────────────────────────────────────────────────────────────

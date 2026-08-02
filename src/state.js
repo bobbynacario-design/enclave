@@ -63,8 +63,9 @@ export const driveAttachment = {
 };
 
 export const shellState = {
-  unsubscribeOnline: null,
-  presenceTimer:     null
+  unsubscribeOnline:  null,
+  unsubscribeUserDoc: null,
+  presenceTimer:      null
 };
 
 export const resetMessagesState = function(fullReset) {
@@ -98,6 +99,11 @@ export const resetShellRealtime = function() {
   if (shellState.unsubscribeOnline) {
     shellState.unsubscribeOnline();
     shellState.unsubscribeOnline = null;
+  }
+
+  if (shellState.unsubscribeUserDoc) {
+    shellState.unsubscribeUserDoc();
+    shellState.unsubscribeUserDoc = null;
   }
 
   if (shellState.presenceTimer) {
