@@ -1,11 +1,20 @@
-<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
-  <h1>Notifications</h1>
-  <button class="btn btn-ghost" id="markAllReadBtn">Mark all read</button>
+<div class="page-header-row notifications-page-header">
+  <div>
+    <h1>Notifications</h1>
+    <p class="text-muted">Catch up on conversations, shared work, and network updates.</p>
+  </div>
+  <button type="button" class="btn btn-ghost" id="markAllReadBtn">Mark all read</button>
 </div>
 
-<div class="filter-pills" id="notifFilterPills">
-  <button class="pill active" data-notif-filter="all">All</button>
-  <button class="pill" data-notif-filter="unread">Unread</button>
+<div class="notifications-toolbar">
+  <div class="filter-pills" id="notifFilterPills" role="group" aria-label="Filter notifications">
+    <button type="button" class="pill active" data-notif-filter="all" aria-pressed="true">All</button>
+    <button type="button" class="pill" data-notif-filter="unread" aria-pressed="false">Unread</button>
+    <button type="button" class="pill" data-notif-filter="conversations" aria-pressed="false">Conversations</button>
+    <button type="button" class="pill" data-notif-filter="work" aria-pressed="false">Work</button>
+    <button type="button" class="pill" data-notif-filter="updates" aria-pressed="false">Updates</button>
+  </div>
+  <span class="notifications-summary" id="notificationsSummary" aria-live="polite"></span>
 </div>
 
 <div id="notificationsList">

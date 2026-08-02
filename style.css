@@ -5313,6 +5313,36 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ── Notifications ────────────────────────────────────────── */
+.notifications-page-header {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.notifications-page-header h1 {
+  margin-bottom: 5px;
+}
+
+.notifications-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.notifications-toolbar .filter-pills {
+  margin-bottom: 0;
+}
+
+.notifications-summary {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .notif-badge {
   display: inline-flex;
   align-items: center;
@@ -5330,14 +5360,13 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 .notif-item {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   margin-bottom: 8px;
   background: var(--surface);
-  cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
 .notif-item:hover {
@@ -5347,6 +5376,27 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   background: var(--surface-2);
   border-left: 3px solid var(--accent);
 }
+
+.notif-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 10px 13px 15px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notif-open:focus-visible {
+  border-radius: var(--radius);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .notif-icon {
   font-size: 18px;
   flex-shrink: 0;
@@ -5355,8 +5405,10 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 .notif-content {
   flex: 1;
   min-width: 0;
+  display: block;
 }
 .notif-message {
+  display: block;
   font-size: 14px;
   color: var(--text);
   line-height: 1.4;
@@ -5366,6 +5418,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-weight: 500;
 }
 .notif-time {
+  display: block;
   font-size: 11px;
   color: var(--text-muted);
 }
@@ -5376,17 +5429,67 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   cursor: pointer;
   color: var(--text-muted);
   font-size: 16px;
-  padding: 2px 4px;
+  width: 40px;
+  margin: 7px 7px 7px 0;
+  padding: 0;
   border-radius: 4px;
-  opacity: 0;
+  opacity: 0.45;
   transition: opacity 0.15s, color 0.15s;
   line-height: 1;
 }
-.notif-item:hover .notif-mark-read {
+.notif-item:hover .notif-mark-read,
+.notif-item:focus-within .notif-mark-read {
   opacity: 1;
 }
 .notif-mark-read:hover {
   color: var(--accent-text);
+}
+
+.notifications-empty-state {
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.notifications-empty-state .btn {
+  margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+  .notifications-page-header,
+  .notifications-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notifications-page-header .btn {
+    min-height: 44px;
+  }
+
+  .notifications-toolbar .filter-pills {
+    flex-wrap: nowrap;
+    margin-right: -16px;
+    padding-right: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .notifications-toolbar .filter-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .notifications-toolbar .pill {
+    flex: 0 0 auto;
+  }
+
+  .notifications-summary {
+    min-height: 14px;
+  }
+
+  .notif-mark-read {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 .notif-date-group {
   font-size: 11px;
