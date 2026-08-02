@@ -22,7 +22,7 @@ import {
   getVisibleCircles
 } from '../util/circles.js';
 import { logError } from '../util/log.js';
-import { loadPage } from '../util/shell-bridge.js';
+import { loadPage, syncURLState } from '../util/shell-bridge.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
@@ -136,6 +136,14 @@ var loadMembers = function() {
     membersState.members = members;
     renderMemberFilters();
     renderMembersList();
+    if (membersState.targetMemberId) {
+      if (members.some(function(member) { return member.uid === membersState.targetMemberId; })) {
+        openProfile(membersState.targetMemberId);
+      } else {
+        membersState.targetMemberId = '';
+        syncURLState();
+      }
+    }
   }).catch(function(err) {
     logError('Failed to load members', err);
     list.innerHTML = '<div class="card"><p class="text-muted">Failed to load members. Check Firestore rules.</p></div>';
@@ -321,6 +329,9 @@ var openProfile = function(uid) {
   var body  = document.getElementById('profileModalBody');
   if (!modal || !body) return;
 
+  membersState.targetMemberId = uid;
+  syncURLState();
+
   var nameEsc     = escapeHTML(member.name || 'Unknown');
   var initialsEsc = escapeHTML(getInitials(member.name || member.email || '?'));
   var bioEsc      = escapeHTML(member.bio || 'No bio yet.');
@@ -414,6 +425,8 @@ var closeProfile = function() {
 
   var modal = document.getElementById('profileModal');
   if (modal) modal.hidden = true;
+  membersState.targetMemberId = '';
+  syncURLState();
 };
 
 // ─── Members: edit profile form ─────────────────────────────────────────────

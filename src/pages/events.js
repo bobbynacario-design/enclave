@@ -322,12 +322,18 @@ export const loadPanelEvents = function() {
       }
       var locEsc = escapeHTML(ev.location || '');
       return '' +
-        '<div class="panel-event">' +
+        '<button type="button" class="panel-event" data-open-events aria-label="Open events calendar">' +
           '<div class="panel-event-title">' + titleEsc + '</div>' +
           '<div class="panel-event-meta">' + escapeHTML(when) + '</div>' +
           (locEsc ? '<div class="panel-event-meta">' + locEsc + '</div>' : '') +
-        '</div>';
+          '<span class="panel-event-action">View event &rarr;</span>' +
+        '</button>';
     }).join('');
+    el.querySelectorAll('[data-open-events]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        window.enclaveGoPage('events');
+      });
+    });
   }).catch(function(err) {
     logError('Failed to load panel events', err);
     el.className = 'panel-empty';

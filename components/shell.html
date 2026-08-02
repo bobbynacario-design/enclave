@@ -39,11 +39,13 @@
     </div>
 
     <div class="sidebar-profile">
-      <div class="sidebar-profile-avatar" data-slot="user-avatar"></div>
-      <div class="sidebar-profile-info">
-        <div class="sidebar-profile-name"  data-slot="user-name">&mdash;</div>
-        <div class="sidebar-profile-email" data-slot="user-email">&mdash;</div>
-      </div>
+      <button type="button" class="sidebar-profile-main" data-action="open-my-profile" aria-label="Open my profile">
+        <div class="sidebar-profile-avatar" data-slot="user-avatar"></div>
+        <div class="sidebar-profile-info">
+          <div class="sidebar-profile-name"  data-slot="user-name">&mdash;</div>
+          <div class="sidebar-profile-email" data-slot="user-email">&mdash;</div>
+        </div>
+      </button>
       <button class="btn-ghost btn-icon" data-action="sign-out" title="Sign out">&#x21AA;</button>
     </div>
 
@@ -81,6 +83,7 @@
         <span class="mobile-nav-label">More</span>
       </button>
       <div class="mobile-more-menu" id="mobileMoreMenu">
+        <button type="button" class="mobile-more-item" data-action="open-my-profile">&#128100; My Profile</button>
         <a class="mobile-more-item" data-page="briefings" href="?page=briefings">&#128240; Briefings</a>
         <a class="mobile-more-item" data-page="events" href="?page=events">&#128197; Events</a>
         <a class="mobile-more-item" data-page="members" href="?page=members">&#128101; Members</a>
@@ -94,12 +97,18 @@
   <aside class="shell-right">
 
     <div class="panel-section">
-      <div class="panel-heading">Online Now</div>
+      <div class="panel-heading-row">
+        <div class="panel-heading">Online Now</div>
+        <button type="button" class="panel-heading-link" data-page="members">View all</button>
+      </div>
       <div class="panel-empty" id="panelOnline">Loading...</div>
     </div>
 
     <div class="panel-section">
-      <div class="panel-heading">Upcoming Events</div>
+      <div class="panel-heading-row">
+        <div class="panel-heading">Upcoming Events</div>
+        <button type="button" class="panel-heading-link" data-page="events">View all</button>
+      </div>
       <div class="panel-empty" id="panelEvents">Loading...</div>
     </div>
 

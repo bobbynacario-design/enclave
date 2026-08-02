@@ -305,6 +305,13 @@ export var renderShell = function() {
       if (avEl && state.user.photoURL) {
         avEl.style.backgroundImage = 'url(' + escapeAttr(state.user.photoURL) + ')';
       }
+
+      document.querySelectorAll('[data-action="open-my-profile"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (moreMenu) moreMenu.classList.remove('open');
+          loadPage('members', { member: state.user.uid });
+        });
+      });
     }
 
     // Sidebar "new project" link
@@ -484,15 +491,22 @@ var loadOnlineUsers = function() {
       var avatarText = user.photoURL ? '' : initials;
 
       return '' +
-        '<div class="panel-online-user">' +
+        '<button type="button" class="panel-online-user" data-panel-message="' + escapeAttr(user.uid) + '" aria-label="Message ' + escapeAttr(user.name || user.email || 'member') + '">' +
           '<div class="panel-online-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
           '<div class="panel-online-meta">' +
             '<div class="panel-online-name">' + name + '</div>' +
             '<div class="panel-online-subtitle">' + meta + '</div>' +
           '</div>' +
+          '<span class="panel-online-action">Message</span>' +
           '<div class="panel-online-dot"></div>' +
-        '</div>';
+        '</button>';
     }).join('');
+
+    el.querySelectorAll('[data-panel-message]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        loadPage('messages', { peer: btn.dataset.panelMessage });
+      });
+    });
   }, function(err) {
     logError('Failed to load online users', err);
     el.className = 'panel-empty';

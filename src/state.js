@@ -31,7 +31,8 @@ export const feedState = {
 };
 
 export const membersState = {
-  members: []
+  members: [],
+  targetMemberId: ''
 };
 
 export const adminState = {

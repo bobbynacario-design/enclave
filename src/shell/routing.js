@@ -3,6 +3,7 @@
 import {
   state,
   feedState,
+  membersState,
   messagesState,
   projectsState,
   resetProjectDetailState,
@@ -71,6 +72,7 @@ export var applyURLState = function() {
   var circle = params.get('circle');
   var postId = params.get('postId');
   var peerId = params.get('peer');
+  var memberId = params.get('member');
 
   if (page && VALID_PAGES[page]) {
     state.currentPage = page;
@@ -86,6 +88,8 @@ export var applyURLState = function() {
   if (state.currentPage === 'messages' && peerId) {
     messagesState.activePeerId = peerId;
   }
+
+  membersState.targetMemberId = state.currentPage === 'members' ? (memberId || '') : '';
 
   if (state.currentPage === 'feed') {
     feedState.targetPostId = postId || '';
@@ -133,6 +137,12 @@ export var syncURLState = function() {
     params.delete('peer');
   }
 
+  if (state.currentPage === 'members' && membersState.targetMemberId) {
+    params.set('member', membersState.targetMemberId);
+  } else {
+    params.delete('member');
+  }
+
   var nextURL = window.location.pathname + '?' + params.toString();
   window.history.replaceState({}, '', nextURL);
 };
@@ -154,8 +164,12 @@ export var loadPage = function(page, pageParams) {
   var requestedPeerId = page === 'messages'
     ? ((pageParams && pageParams.peer) || messagesState.activePeerId || '')
     : '';
+  var requestedMemberId = page === 'members'
+    ? ((pageParams && pageParams.member) || membersState.targetMemberId || '')
+    : '';
   teardownProjectsPage();
   state.currentPage = page;
+  membersState.targetMemberId = requestedMemberId;
   syncURLState();
   syncResponsivePanels();
 
