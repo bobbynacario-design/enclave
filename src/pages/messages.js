@@ -26,6 +26,7 @@ import { escapeHTML, escapeAttr, linkifyText, highlightMentions } from '../util/
 import { relativeTime, getFirestoreTimeMs } from '../util/time.js';
 import { getInitials } from '../util/circles.js';
 import { logError } from '../util/log.js';
+import { syncURLState } from '../util/shell-bridge.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
@@ -610,6 +611,7 @@ var loadOlderMessages = function() {
 
 var openMessageThread = function(peerId) {
   messagesState.activePeerId = peerId;
+  syncURLState();
   var conversation = findConversationForPeer(peerId);
 
   renderMessagesPeopleList();

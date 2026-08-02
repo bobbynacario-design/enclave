@@ -74,7 +74,7 @@ registerNotificationNavigator(function(page, params) {
     if (page === 'projects' && params.projectId) {
       projectsState.activeProjectId = params.projectId;
     }
-    loadPage(page);
+    loadPage(page, params);
   }
 });
 

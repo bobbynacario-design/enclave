@@ -1,18 +1,26 @@
 <div class="page-header">
-  <h1>Members</h1>
-  <p class="text-muted">People in the enclave.</p>
+  <h1>Find your people</h1>
+  <p class="text-muted">Discover expertise across your private circles and start a conversation.</p>
 </div>
 
-<div class="members-search">
-  <input
-    type="search"
-    id="membersSearchInput"
-    class="edit-input"
-    placeholder="Search by name or role..."
-    autocomplete="off"
-    aria-label="Search members"
-  />
+<div class="members-discovery-toolbar">
+  <div class="members-search">
+    <input
+      type="search"
+      id="membersSearchInput"
+      class="edit-input"
+      placeholder="Search name, role, or expertise..."
+      autocomplete="off"
+      aria-label="Search members by name, role, or expertise"
+    />
+  </div>
+  <div class="members-filter-group" id="membersFilterGroup" hidden>
+    <span class="members-filter-label">Circle</span>
+    <div class="members-circle-filters" id="membersCircleFilters" aria-label="Filter members by circle"></div>
+  </div>
 </div>
+
+<p class="members-results-summary" id="membersResultsSummary" aria-live="polite"></p>
 
 <div class="members-grid" id="membersList">
   <div class="skeleton-card" aria-hidden="true">

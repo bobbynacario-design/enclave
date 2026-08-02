@@ -3,6 +3,7 @@
 import {
   state,
   feedState,
+  messagesState,
   projectsState,
   resetProjectDetailState,
   resetMessagesState,
@@ -69,6 +70,7 @@ export var applyURLState = function() {
   var page = params.get('page');
   var circle = params.get('circle');
   var postId = params.get('postId');
+  var peerId = params.get('peer');
 
   if (page && VALID_PAGES[page]) {
     state.currentPage = page;
@@ -79,6 +81,10 @@ export var applyURLState = function() {
     if (projectId) {
       projectsState.activeProjectId = projectId;
     }
+  }
+
+  if (state.currentPage === 'messages' && peerId) {
+    messagesState.activePeerId = peerId;
   }
 
   if (state.currentPage === 'feed') {
@@ -121,6 +127,12 @@ export var syncURLState = function() {
     params.delete('projectId');
   }
 
+  if (state.currentPage === 'messages' && messagesState.activePeerId) {
+    params.set('peer', messagesState.activePeerId);
+  } else {
+    params.delete('peer');
+  }
+
   var nextURL = window.location.pathname + '?' + params.toString();
   window.history.replaceState({}, '', nextURL);
 };
@@ -138,7 +150,10 @@ export var getAppURL = function() {
 };
 
 // ─── Page loader ──────────────────────────────────────────────────────────────
-export var loadPage = function(page) {
+export var loadPage = function(page, pageParams) {
+  var requestedPeerId = page === 'messages'
+    ? ((pageParams && pageParams.peer) || messagesState.activePeerId || '')
+    : '';
   teardownProjectsPage();
   state.currentPage = page;
   syncURLState();
@@ -155,6 +170,10 @@ export var loadPage = function(page) {
   }
 
   resetMessagesState(false);
+  if (requestedPeerId) {
+    messagesState.activePeerId = requestedPeerId;
+    syncURLState();
+  }
   resetResourcesState();
   resetBriefingsState();
 

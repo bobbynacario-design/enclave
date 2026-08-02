@@ -18,9 +18,11 @@ import {
   circleLabel,
   renderCircleChecks,
   getCheckedCircles,
-  getInitials
+  getInitials,
+  getVisibleCircles
 } from '../util/circles.js';
 import { logError } from '../util/log.js';
+import { loadPage } from '../util/shell-bridge.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
@@ -46,12 +48,15 @@ export const registerCirclesChangedHandler = function(fn) {
 };
 
 var memberSearchQuery = '';
+var memberCircleFilter = 'all';
 
 // Focus trap teardown for the profile modal, held while it is open.
 var profileTeardown = null;
 
 // ─── Members: init ───────────────────────────────────────────────────────────
 export const initMembersPage = function() {
+  memberSearchQuery = '';
+  memberCircleFilter = 'all';
   loadMembers();
 
   // Delegate close handlers on the modal
@@ -66,6 +71,48 @@ export const initMembersPage = function() {
       renderMembersList();
     });
   }
+};
+
+var openMemberMessage = function(uid) {
+  if (!uid || (state.user && uid === state.user.uid)) return;
+  closeProfile();
+  loadPage('messages', { peer: uid });
+};
+
+var renderMemberFilters = function() {
+  var group = document.getElementById('membersFilterGroup');
+  var filters = document.getElementById('membersCircleFilters');
+  if (!group || !filters) return;
+
+  var visibleCircles = getVisibleCircles(state).filter(function(circle) {
+    return membersState.members.some(function(member) {
+      return Array.isArray(member.circles) && member.circles.indexOf(circle) !== -1;
+    });
+  });
+
+  if (!visibleCircles.length) {
+    group.hidden = true;
+    return;
+  }
+
+  group.hidden = false;
+  var choices = [{ id: 'all', label: 'All' }].concat(visibleCircles.map(function(circle) {
+    return { id: circle, label: circleLabel(circle) };
+  }));
+  filters.innerHTML = choices.map(function(choice) {
+    var active = memberCircleFilter === choice.id;
+    return '<button type="button" class="members-filter-chip' + (active ? ' active' : '') + '" ' +
+      'data-member-circle="' + escapeAttr(choice.id) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+      escapeHTML(choice.label) + '</button>';
+  }).join('');
+
+  filters.querySelectorAll('[data-member-circle]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      memberCircleFilter = button.dataset.memberCircle || 'all';
+      renderMemberFilters();
+      renderMembersList();
+    });
+  });
 };
 
 // ─── Members: load ───────────────────────────────────────────────────────────
@@ -87,6 +134,7 @@ var loadMembers = function() {
     });
 
     membersState.members = members;
+    renderMemberFilters();
     renderMembersList();
   }).catch(function(err) {
     logError('Failed to load members', err);
@@ -104,24 +152,40 @@ var renderMembersList = function() {
     return;
   }
 
-  var visible = memberSearchQuery
-    ? membersState.members.filter(function(m) {
-        var hay = ((m.name || '') + ' ' + (m.role || '') + ' ' + (m.email || '')).toLowerCase();
-        return hay.indexOf(memberSearchQuery) !== -1;
-      })
-    : membersState.members;
+  var visible = membersState.members.filter(function(m) {
+    var matchesCircle = memberCircleFilter === 'all' ||
+      (Array.isArray(m.circles) && m.circles.indexOf(memberCircleFilter) !== -1);
+    var hay = ((m.name || '') + ' ' + (m.role || '') + ' ' + (m.bio || '') + ' ' +
+      (m.email || '') + ' ' + (Array.isArray(m.circles) ? m.circles.map(circleLabel).join(' ') : '')).toLowerCase();
+    var matchesSearch = !memberSearchQuery || hay.indexOf(memberSearchQuery) !== -1;
+    return matchesCircle && matchesSearch;
+  });
 
-  if (visible.length === 0 && memberSearchQuery) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No matches</div><p class="empty-state-text">No members match "' + escapeHTML(memberSearchQuery) + '".</p></div>';
+  var summary = document.getElementById('membersResultsSummary');
+  if (summary) {
+    var isFiltered = !!memberSearchQuery || memberCircleFilter !== 'all';
+    summary.textContent = visible.length + ' ' + (visible.length === 1 ? 'member' : 'members') +
+      (isFiltered ? ' found' : ' in your network');
+  }
+
+  if (visible.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No matches</div><p class="empty-state-text">Try another search or circle filter.</p></div>';
     return;
   }
 
   list.innerHTML = visible.map(renderMemberCard).join('');
 
   // Wire card clicks
-  list.querySelectorAll('.member-card').forEach(function(card) {
-    card.addEventListener('click', function() {
-      openProfile(card.dataset.uid);
+  list.querySelectorAll('[data-open-member]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      openProfile(button.dataset.openMember);
+    });
+  });
+
+  list.querySelectorAll('[data-message-member]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openMemberMessage(btn.dataset.messageMember);
     });
   });
 
@@ -179,14 +243,21 @@ var renderMemberCard = function(m) {
       '>' + btnLabel + '</button>';
   }
 
+  var messageBtn = state.user && m.uid !== state.user.uid
+    ? '<button type="button" class="btn btn-primary member-message-btn" data-message-member="' + escapeAttr(m.uid) + '" ' +
+        'aria-label="Start direct message">Message</button>'
+    : '<span class="member-self-badge">You</span>';
+
   return '' +
-    '<div class="member-card" data-uid="' + escapeAttr(m.uid) + '">' +
-      '<div class="member-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
-      '<div class="member-name">' + nameEsc + '</div>' +
-      roleLineHtml +
-      '<div class="member-circles">' + circleTags + adminBadge + '</div>' +
-      promoteBtn +
-    '</div>';
+    '<article class="member-card">' +
+      '<button type="button" class="member-card-profile" data-open-member="' + escapeAttr(m.uid) + '" aria-label="View member profile">' +
+        '<div class="member-avatar"' + avatarStyle + '>' + avatarText + '</div>' +
+        '<div class="member-name">' + nameEsc + '</div>' +
+        roleLineHtml +
+        '<div class="member-circles">' + circleTags + adminBadge + '</div>' +
+      '</button>' +
+      '<div class="member-card-actions">' + messageBtn + promoteBtn + '</div>' +
+    '</article>';
 };
 
 // ─── Members: admin promotion ────────────────────────────────────────────────
@@ -271,7 +342,7 @@ var openProfile = function(uid) {
   var isSelf = state.user && state.user.uid === uid;
   var editBtnHTML = isSelf
     ? '<button class="btn btn-primary profile-edit-btn" id="profileEditBtn">Edit Profile</button>'
-    : '';
+    : '<button class="btn btn-primary profile-edit-btn" id="profileMessageBtn">Message</button>';
 
   body.innerHTML =
     '<div class="profile-header">' +
@@ -312,6 +383,13 @@ var openProfile = function(uid) {
     if (editBtn) {
       editBtn.addEventListener('click', function() {
         renderEditProfileForm(member);
+      });
+    }
+  } else {
+    var messageBtn = document.getElementById('profileMessageBtn');
+    if (messageBtn) {
+      messageBtn.addEventListener('click', function() {
+        openMemberMessage(member.uid);
       });
     }
   }
