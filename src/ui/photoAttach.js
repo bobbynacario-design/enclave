@@ -12,6 +12,7 @@ import { state } from '../state.js';
 import { escapeAttr } from '../util/escape.js';
 import { logError } from '../util/log.js';
 import { showToast } from './toast.js';
+import { wireModalA11y } from './modals.js';
 
 const MAX_PHOTOS = 4;
 const MAX_DIMENSION = 1920;
@@ -228,8 +229,11 @@ export const openImageLightbox = function(images, startIndex) {
     counter.hidden = images.length < 2;
   };
 
+  let teardown = null;
+
   const close = function() {
     document.removeEventListener('keydown', onKey);
+    if (teardown) { teardown(); }
     if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
   };
 
@@ -238,9 +242,9 @@ export const openImageLightbox = function(images, startIndex) {
     sync();
   };
 
+  // Escape and Tab belong to the focus trap; this only owns photo navigation.
   const onKey = function(e) {
-    if (e.key === 'Escape') close();
-    else if (e.key === 'ArrowLeft' && images.length > 1) step(-1);
+    if (e.key === 'ArrowLeft' && images.length > 1) step(-1);
     else if (e.key === 'ArrowRight' && images.length > 1) step(1);
   };
 
@@ -275,6 +279,13 @@ export const openImageLightbox = function(images, startIndex) {
 
   sync();
   document.body.appendChild(backdrop);
+
+  teardown = wireModalA11y({
+    card:         backdrop,
+    label:        'Photo viewer',
+    initialFocus: closeBtn,
+    onClose:      close
+  });
 };
 
 // Wires click-to-open on any rendered post image grid inside container.

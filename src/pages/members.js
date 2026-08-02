@@ -24,7 +24,7 @@ import { logError } from '../util/log.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
-import { showConfirmModal } from '../ui/modals.js';
+import { showConfirmModal, wireModalA11y } from '../ui/modals.js';
 
 // Push notifications
 import {
@@ -47,6 +47,9 @@ export const registerCirclesChangedHandler = function(fn) {
 
 var memberSearchQuery = '';
 
+// Focus trap teardown for the profile modal, held while it is open.
+var profileTeardown = null;
+
 // ─── Members: init ───────────────────────────────────────────────────────────
 export const initMembersPage = function() {
   loadMembers();
@@ -54,15 +57,6 @@ export const initMembersPage = function() {
   // Delegate close handlers on the modal
   document.querySelectorAll('[data-action="close-profile"]').forEach(function(el) {
     el.addEventListener('click', closeProfile);
-  });
-
-  // Close profile modal on Esc
-  document.addEventListener('keydown', function(e) {
-    if (e.key !== 'Escape') return;
-    var modal = document.getElementById('profileModal');
-    if (modal && !modal.hidden) {
-      closeProfile();
-    }
   });
 
   var searchInput = document.getElementById('membersSearchInput');
@@ -323,10 +317,23 @@ var openProfile = function(uid) {
   }
 
   modal.hidden = false;
+
+  if (profileTeardown) { profileTeardown(); }
+  profileTeardown = wireModalA11y({
+    card:    modal.querySelector('.profile-modal-content'),
+    label:   (member.name || 'Member') + ' profile',
+    onClose: closeProfile
+  });
+
   if (recentPostsLoader) recentPostsLoader(uid);
 };
 
 var closeProfile = function() {
+  if (profileTeardown) {
+    profileTeardown();
+    profileTeardown = null;
+  }
+
   var modal = document.getElementById('profileModal');
   if (modal) modal.hidden = true;
 };

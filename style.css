@@ -762,6 +762,22 @@ body {
   margin-top: 18px;
 }
 
+/* Modals trap focus, so keyboard position has to stay visible inside them.
+   Form fields clear their outline globally, which this deliberately overrides. */
+.dialog-card :focus-visible,
+.profile-modal-content :focus-visible,
+.project-modal-content :focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+
+/* The card itself is focused programmatically as a fallback — no ring for that. */
+.dialog-card:focus,
+.profile-modal-content:focus,
+.project-modal-content:focus {
+  outline: none;
+}
+
 /* ─── Forms ──────────────────────────────────────────────────────────────── */
 input, textarea, select {
   background: var(--bg);

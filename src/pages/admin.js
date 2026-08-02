@@ -38,7 +38,12 @@ import { logError } from '../util/log.js';
 
 import { showToast } from '../ui/toast.js';
 
-import { showConfirmModal, showCirclePickerModal } from '../ui/modals.js';
+import {
+  showConfirmModal,
+  showCirclePickerModal,
+  removeExistingDialog,
+  registerDialog
+} from '../ui/modals.js';
 
 import { writeNotification } from './notifications.js';
 
@@ -491,10 +496,7 @@ var handleAdminBulkInvite = function() {
 var showActionModal = function(mode, email, name) {
   // mode: 'nudge' or 'resend'
   return new Promise(function(resolve) {
-    var existing = document.getElementById('dialogBackdrop');
-    if (existing && existing.parentNode) {
-      existing.parentNode.removeChild(existing);
-    }
+    removeExistingDialog();
 
     var displayName = name || email.split('@')[0] || 'there';
     var titleText, subtitleText, defaultMessage, sendBtnLabel, showNotifOption, lockEmail;
@@ -589,7 +591,10 @@ var showActionModal = function(mode, email, name) {
     sendBtn.className = 'btn btn-primary';
     sendBtn.textContent = sendBtnLabel;
 
+    var teardown = null;
+
     var close = function(result) {
+      if (teardown) { teardown(); }
       if (backdrop.parentNode) {
         backdrop.parentNode.removeChild(backdrop);
       }
@@ -626,7 +631,13 @@ var showActionModal = function(mode, email, name) {
     card.appendChild(actions);
     backdrop.appendChild(card);
     document.body.appendChild(backdrop);
-    textarea.focus();
+
+    teardown = registerDialog({
+      card:         card,
+      title:        title,
+      initialFocus: textarea,
+      onClose:      function() { close(null); }
+    });
     textarea.select();
   });
 };

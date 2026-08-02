@@ -42,7 +42,7 @@ import { syncURLState, syncSidebarSelection, loadPage } from '../util/shell-brid
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
-import { showConfirmModal } from '../ui/modals.js';
+import { showConfirmModal, wireModalA11y } from '../ui/modals.js';
 import { openDrivePicker, registerPickerHandler } from '../ui/drivePicker.js';
 
 // Cross-page
@@ -96,6 +96,9 @@ var getTaskView = function() {
 
 // ─── Modal pending-invites state ────────────────────────────────────────────
 var modalPendingInvites = [];
+
+// Focus trap teardown for the project modal, held while it is open.
+var projectModalTeardown = null;
 
 var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -1227,9 +1230,22 @@ var openProjectModal = function(existingProject) {
   if (backdrop) backdrop.onclick = closeProjectModal;
 
   modal.classList.add('visible');
+
+  if (projectModalTeardown) { projectModalTeardown(); }
+  projectModalTeardown = wireModalA11y({
+    card:         modal.querySelector('.project-modal-content'),
+    title:        titleEl,
+    initialFocus: nameInput,
+    onClose:      closeProjectModal
+  });
 };
 
 var closeProjectModal = function() {
+  if (projectModalTeardown) {
+    projectModalTeardown();
+    projectModalTeardown = null;
+  }
+
   var modal = document.getElementById('projectModal');
   if (modal) modal.classList.remove('visible');
 };
