@@ -12,7 +12,6 @@
   --surface-3:    #1E2430;
   --border:       rgba(255,255,255,0.06);
   --border-2:     rgba(255,255,255,0.12);
-  --border-3:     rgba(255,255,255,0.2);
   /* Control boundaries carry meaning, so they clear 3:1 (WCAG 1.4.11) where
      the decorative --border tokens above deliberately do not. 3.31:1. */
   --border-control: rgba(255,255,255,0.36);
@@ -56,7 +55,6 @@ body.light {
   --surface-3:    #E8E4DB;
   --border:       rgba(0,0,0,0.08);
   --border-2:     rgba(0,0,0,0.14);
-  --border-3:     rgba(0,0,0,0.22);
   --border-control: rgba(0,0,0,0.44);
   --accent:         #6A3A9A;
   /* Light mode's accent already clears 4.5:1 as text (6.17-7.82:1). */
