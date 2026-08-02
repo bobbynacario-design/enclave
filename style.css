@@ -3209,6 +3209,68 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   line-height: 1.5;
 }
 
+.event-attendees {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.event-attendee-avatars {
+  display: flex;
+  flex-shrink: 0;
+  padding-left: 6px;
+}
+
+.event-attendee-avatar {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  margin-left: -6px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.event-attendee-more {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.event-attendee-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-attendees-empty {
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .event-attendees {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .event-attendee-summary {
+    overflow: visible;
+    white-space: normal;
+  }
+}
+
 .event-actions {
   display: flex;
   justify-content: flex-end;

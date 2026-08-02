@@ -21,7 +21,7 @@ import { state, eventsState } from '../state.js';
 // Utilities
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 import { formatCalendarMonthLabel } from '../util/time.js';
-import { circleLabel, getVisibleCircles, renderCircleOptions } from '../util/circles.js';
+import { circleLabel, getVisibleCircles, getInitials, renderCircleOptions } from '../util/circles.js';
 import { logError } from '../util/log.js';
 
 // UI helpers
@@ -429,6 +429,103 @@ const bindEventRsvpButtons = function(container) {
   });
 };
 
+const getAttendeeDisplayName = function(attendee) {
+  var name = String(attendee && (attendee.name || attendee.email) || 'Member').trim();
+  if (name.indexOf('@') !== -1) name = name.split('@')[0];
+  return name || 'Member';
+};
+
+const getAttendeeSummary = function(attendees) {
+  var includesCurrentUser = !!(state.user && attendees.some(function(attendee) {
+    return attendee.uid === state.user.uid;
+  }));
+  var others = attendees.filter(function(attendee) {
+    return !state.user || attendee.uid !== state.user.uid;
+  });
+
+  if (includesCurrentUser) {
+    if (!others.length) return "You're going";
+    return 'You and ' + others.length + ' ' + (others.length === 1 ? 'other are' : 'others are') + ' going';
+  }
+
+  if (attendees.length === 1) return getAttendeeDisplayName(attendees[0]) + ' is going';
+  if (attendees.length === 2) {
+    return getAttendeeDisplayName(attendees[0]) + ' and ' + getAttendeeDisplayName(attendees[1]) + ' are going';
+  }
+  return getAttendeeDisplayName(attendees[0]) + ', ' + getAttendeeDisplayName(attendees[1]) +
+    ' and ' + (attendees.length - 2) + ' ' + (attendees.length === 3 ? 'other' : 'others') + ' are going';
+};
+
+const renderLoadedEventAttendees = function(slot, attendees) {
+  slot.innerHTML = '';
+
+  if (!attendees.length) {
+    var empty = document.createElement('span');
+    empty.className = 'event-attendees-empty';
+    empty.textContent = 'Be the first to join';
+    slot.appendChild(empty);
+    return;
+  }
+
+  attendees.sort(function(a, b) {
+    var aSelf = state.user && a.uid === state.user.uid ? 0 : 1;
+    var bSelf = state.user && b.uid === state.user.uid ? 0 : 1;
+    if (aSelf !== bSelf) return aSelf - bSelf;
+    return getAttendeeDisplayName(a).localeCompare(getAttendeeDisplayName(b));
+  });
+
+  var avatars = document.createElement('div');
+  avatars.className = 'event-attendee-avatars';
+  avatars.setAttribute('aria-hidden', 'true');
+  attendees.slice(0, 4).forEach(function(attendee) {
+    var avatar = document.createElement('span');
+    avatar.className = 'event-attendee-avatar';
+    avatar.textContent = getInitials(getAttendeeDisplayName(attendee));
+    avatars.appendChild(avatar);
+  });
+  if (attendees.length > 4) {
+    var more = document.createElement('span');
+    more.className = 'event-attendee-avatar event-attendee-more';
+    more.textContent = '+' + (attendees.length - 4);
+    avatars.appendChild(more);
+  }
+
+  var summary = document.createElement('span');
+  summary.className = 'event-attendee-summary';
+  summary.textContent = getAttendeeSummary(attendees);
+  slot.appendChild(avatars);
+  slot.appendChild(summary);
+};
+
+const loadEventAttendees = function(eventId, root) {
+  root = root || document;
+  var slot = root.querySelector('[data-event-attendees="' + eventId + '"]');
+  if (!slot) return;
+
+  getDocs(collection(db, 'events', eventId, 'rsvps')).then(function(snap) {
+    var attendees = [];
+    snap.forEach(function(d) {
+      var data = d.data() || {};
+      data.uid = data.uid || d.id;
+      attendees.push(data);
+    });
+    renderLoadedEventAttendees(slot, attendees);
+  }).catch(function(err) {
+    logError('Failed to load event attendees', err);
+    var count = Number(slot.dataset.attendeeCount || 0);
+    slot.textContent = count > 0
+      ? count + ' ' + (count === 1 ? 'person is' : 'people are') + ' going'
+      : 'Be the first to join';
+  });
+};
+
+const loadEventAttendeeLists = function(container) {
+  if (!container) return;
+  container.querySelectorAll('[data-event-attendees]').forEach(function(slot) {
+    loadEventAttendees(slot.dataset.eventAttendees, container);
+  });
+};
+
 // ─── Events: render list ─────────────────────────────────────────────────────
 const renderEventsList = function() {
   var list = document.getElementById('eventsList');
@@ -473,6 +570,7 @@ const renderEventsList = function() {
     '</section>';
 
   bindEventRsvpButtons(document.getElementById('upcomingEventsList'));
+  loadEventAttendeeLists(document.getElementById('upcomingEventsList'));
 };
 
 // ─── Events: render single card ──────────────────────────────────────────────
@@ -513,6 +611,11 @@ const renderEventCard = function(ev, opts) {
         '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">' + rsvpButtonLabel(rsvpCount, false) + '</button>' +
         icsBtn +
       '</div>';
+  var attendeesHtml = !opts.isPast
+    ? '<div class="event-attendees" data-event-attendees="' + escapeAttr(ev.id) + '" data-attendee-count="' + rsvpCount + '" aria-live="polite">' +
+        (rsvpCount > 0 ? 'Loading attendees...' : 'Be the first to join') +
+      '</div>'
+    : '';
 
   return '' +
     '<div class="event-card' + (opts.isPast ? ' event-card-past' : '') + '">' +
@@ -547,6 +650,7 @@ const renderEventCard = function(ev, opts) {
             '</div>' +
           '</div>' +
           (descEsc ? '<div class="event-desc">' + descEsc + '</div>' : '') +
+          attendeesHtml +
           actionsHtml +
         '</div>' +
       '</div>' +
@@ -600,6 +704,9 @@ const handleRsvp = function(eventId, btn) {
     btn.classList.toggle('rsvped', result.isRsvped);
     btn.innerHTML = rsvpButtonLabel(result.count, result.isRsvped);
     btn.disabled = false;
+    var attendeeSlot = document.querySelector('[data-event-attendees="' + eventId + '"]');
+    if (attendeeSlot) attendeeSlot.dataset.attendeeCount = String(result.count);
+    loadEventAttendees(eventId, document);
 
     // Notify event creator on RSVP (not un-RSVP)
     if (result.isRsvped) {

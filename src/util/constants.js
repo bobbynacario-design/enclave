@@ -1,4 +1,4 @@
-export const ASSET_VERSION = 'v157';
+export const ASSET_VERSION = 'v158';
 
 export const ALL_CIRCLES = [
   'hustle-hub',
