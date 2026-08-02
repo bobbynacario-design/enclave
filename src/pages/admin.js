@@ -877,7 +877,7 @@ var syncUserDocsForAllowlist = function(email, circles) {
 
     snap.forEach(function(userSnap) {
       var userData = userSnap.data() || {};
-      if (userData.role === 'admin') return;
+      if (userData.isAdmin === true) return;
 
       updates.push(updateDoc(doc(db, 'users', userSnap.id), {
         circles: normalized.slice()

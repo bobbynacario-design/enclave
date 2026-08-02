@@ -75,7 +75,7 @@ var refreshCurrentUserState = function() {
     if (!snap.exists()) return;
 
     var data = snap.data() || {};
-    state.isAdmin = data.role === 'admin';
+    state.isAdmin = data.isAdmin === true;
     state.circles = normalizeCircles(data.circles);
 
     document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
