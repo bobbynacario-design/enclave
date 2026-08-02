@@ -1,13 +1,6 @@
 // Routing module — page navigation, URL sync, sidebar selection
 
 import {
-  doc,
-  getDoc
-} from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
-
-import { db } from '../../firebase.js';
-
-import {
   state,
   feedState,
   projectsState,
@@ -18,14 +11,9 @@ import {
 
 import { ASSET_VERSION, VALID_PAGES } from '../util/constants.js';
 
-import {
-  normalizeCircles,
-  getVisibleCircles
-} from '../util/circles.js';
+import { getVisibleCircles } from '../util/circles.js';
 
 import { logError } from '../util/log.js';
-
-import { loadPanelCircles } from '../util/shell-bridge.js';
 
 import {
   initBriefingsPage,
@@ -43,16 +31,6 @@ import { initNotificationsPage } from '../pages/notifications.js';
 
 // ─── Global nav handlers (set at module load time) ────────────────────────────
 window.enclaveGoPage = function(page) {
-  if (page === 'admin' && state.user) {
-    refreshCurrentUserState().then(function() {
-      loadPage('admin');
-    }).catch(function(err) {
-      logError('Failed to refresh user state before admin nav', err);
-      loadPage('admin');
-    });
-    return;
-  }
-
   if (page === 'feed') {
     feedState.filter = 'all';
     feedState.targetPostId = '';
@@ -66,29 +44,6 @@ window.enclaveGoCircle = function(circle) {
   feedState.targetPostId = '';
   feedState.pendingTargetScroll = false;
   loadPage('feed');
-};
-
-var refreshCurrentUserState = function() {
-  if (!state.user) return Promise.resolve();
-
-  return getDoc(doc(db, 'users', state.user.uid)).then(function(snap) {
-    if (!snap.exists()) return;
-
-    var data = snap.data() || {};
-    state.isAdmin = data.isAdmin === true;
-    state.circles = normalizeCircles(data.circles);
-
-    document.querySelectorAll('[data-page="admin"]').forEach(function(btn) {
-      btn.hidden = !state.isAdmin;
-    });
-
-    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-      btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
-    });
-
-    syncSidebarSelection();
-    loadPanelCircles();
-  });
 };
 
 // ─── Layout sync ──────────────────────────────────────────────────────────────
