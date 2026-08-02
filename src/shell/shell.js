@@ -113,29 +113,66 @@ export var renderLogin = function() {
 
   app.innerHTML =
     '<main class="login-wrap" aria-labelledby="loginTitle">' +
-      '<div class="login-card">' +
-        '<div class="login-logo">' +
-          '<svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
-            '<polygon points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5" fill="#1A362B" stroke="#F4F1EA" stroke-width="3"/>' +
-            '<path d="M50,5 L50,50 L90,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
-            '<path d="M50,50 L10,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
-            '<path d="M42,38 L60,38 M42,50 L56,50 M42,62 L60,62 M42,38 L42,62" fill="none" stroke="#F4F1EA" stroke-width="4" stroke-linecap="round"/>' +
-          '</svg>' +
-          '<h1 class="login-logo-text" id="loginTitle">ENCLAVE</h1>' +
-        '</div>' +
-        '<p class="login-tagline">private &middot; invite-only</p>' +
-        '<p class="login-desc" id="loginDescription">A private workspace for business interruption consulting and network management.</p>' +
-        deniedHTML +
-        '<button id="googleSignInBtn" class="btn-google">' +
-          '<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
-            '<path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>' +
-            '<path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>' +
-            '<path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>' +
-            '<path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>' +
-          '</svg>' +
-          '<span>Sign in with Google</span>' +
-        '</button>' +
-        '<a class="login-privacy" href="privacy.html">Privacy Policy</a>' +
+      '<div class="login-shell">' +
+        '<section class="login-story">' +
+          '<div class="login-brand">' +
+            '<svg width="62" height="62" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
+              '<polygon points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5" fill="#1A362B" stroke="#F4F1EA" stroke-width="3"/>' +
+              '<path d="M50,5 L50,50 L90,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
+              '<path d="M50,50 L10,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
+              '<path d="M42,38 L60,38 M42,50 L56,50 M42,62 L60,62 M42,38 L42,62" fill="none" stroke="#F4F1EA" stroke-width="4" stroke-linecap="round"/>' +
+            '</svg>' +
+            '<div>' +
+              '<div class="login-logo-text">ENCLAVE</div>' +
+              '<div class="login-tagline">private &middot; invite-only</div>' +
+            '</div>' +
+          '</div>' +
+          '<p class="login-eyebrow">The private operating network</p>' +
+          '<h1 class="login-headline" id="loginTitle">Critical work moves faster inside trusted circles.</h1>' +
+          '<p class="login-desc" id="loginDescription">Enclave brings business interruption consultants and trusted collaborators into one confidential space for intelligence, relationships, and shared execution.</p>' +
+          '<div class="login-benefits" aria-label="What members can do">' +
+            '<article class="login-benefit">' +
+              '<span class="login-benefit-index">01</span>' +
+              '<div><h2>Stay informed</h2><p>Start the day with concise market and world briefings built for the network.</p></div>' +
+            '</article>' +
+            '<article class="login-benefit">' +
+              '<span class="login-benefit-index">02</span>' +
+              '<div><h2>Reach the right people</h2><p>Connect through private circles, member profiles, events, and direct conversations.</p></div>' +
+            '</article>' +
+            '<article class="login-benefit">' +
+              '<span class="login-benefit-index">03</span>' +
+              '<div><h2>Move work forward</h2><p>Coordinate projects, tasks, files, decisions, and updates without losing context.</p></div>' +
+            '</article>' +
+          '</div>' +
+          '<div class="login-trust" aria-label="Privacy and access standards">' +
+            '<span>Invite-only membership</span>' +
+            '<span>Circle-level access</span>' +
+            '<span>Google authentication</span>' +
+          '</div>' +
+        '</section>' +
+        '<aside class="login-card" aria-labelledby="loginAccessTitle">' +
+          '<p class="login-card-kicker">Member access</p>' +
+          '<h2 id="loginAccessTitle">Enter the Enclave</h2>' +
+          '<p class="login-card-desc">Use the Google account associated with your invitation.</p>' +
+          deniedHTML +
+          '<button id="googleSignInBtn" class="btn-google" aria-describedby="loginDescription">' +
+            '<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
+              '<path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>' +
+              '<path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>' +
+              '<path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>' +
+              '<path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>' +
+            '</svg>' +
+            '<span>Sign in with Google</span>' +
+          '</button>' +
+          '<div class="login-access-request">' +
+            '<span>Not yet a member?</span>' +
+            '<a href="mailto:' + ENCLAVE_CONTACT_EMAIL + '?subject=Enclave%20access%20request">Request access</a>' +
+          '</div>' +
+          '<div class="login-card-footer">' +
+            '<span>Access is verified against the private member list.</span>' +
+            '<a class="login-privacy" href="privacy.html">Privacy Policy</a>' +
+          '</div>' +
+        '</aside>' +
       '</div>' +
     '</main>';
 
