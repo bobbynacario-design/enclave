@@ -1,7 +1,45 @@
 <div class="page-header">
   <h1>Events</h1>
-  <p class="text-muted">See what is coming up, who is joining, and save the date.</p>
+  <p class="text-muted">Find the gatherings that matter to you, see who is joining, and save the date.</p>
 </div>
+
+<section class="events-discovery" aria-label="Find events">
+  <div class="events-overview" id="eventsOverview">
+    <div class="event-overview-card">
+      <span class="event-overview-value">&mdash;</span>
+      <span class="event-overview-label">Upcoming events</span>
+    </div>
+    <div class="event-overview-card">
+      <span class="event-overview-value">&mdash;</span>
+      <span class="event-overview-label">Community RSVPs</span>
+    </div>
+    <div class="event-overview-card event-overview-next">
+      <span class="event-overview-value event-overview-value-text">Loading&hellip;</span>
+      <span class="event-overview-label">Next on the calendar</span>
+    </div>
+  </div>
+
+  <div class="events-toolbar">
+    <label class="events-search" for="eventsSearchInput">
+      <span class="sr-only">Search events</span>
+      <span class="events-search-icon" aria-hidden="true">&#128269;</span>
+      <input type="search" id="eventsSearchInput" class="form-input"
+             placeholder="Search events or locations" autocomplete="off" />
+    </label>
+    <label class="events-circle-field" for="eventsCircleFilter">
+      <span class="sr-only">Filter events by circle</span>
+      <select id="eventsCircleFilter" class="form-input">
+        <option value="all">All circles</option>
+      </select>
+    </label>
+    <div class="events-view-pills" role="group" aria-label="Show events">
+      <button type="button" class="events-view-pill active" data-events-view="upcoming" aria-pressed="true">Upcoming <span data-events-count="upcoming">0</span></button>
+      <button type="button" class="events-view-pill" data-events-view="past" aria-pressed="false">Past <span data-events-count="past">0</span></button>
+      <button type="button" class="events-view-pill" data-events-view="all" aria-pressed="false">All</button>
+    </div>
+  </div>
+  <p class="events-results-summary" id="eventsResultsSummary" aria-live="polite">Loading events&hellip;</p>
+</section>
 
 <div id="eventAdminComposer"></div>
 

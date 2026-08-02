@@ -31,6 +31,11 @@ import { showNoticeModal } from '../ui/modals.js';
 // Cross-page
 import { writeNotification } from './notifications.js';
 
+var eventsView = 'upcoming';
+var eventsCircleFilter = 'all';
+var eventsSearch = '';
+var eventsSearchTimer = null;
+
 const renderTimeOptions = function(selectedValue) {
   var options = [];
 
@@ -332,6 +337,12 @@ export const loadPanelEvents = function() {
 
 // ─── Events: init ────────────────────────────────────────────────────────────
 export const initEventsPage = function() {
+  eventsView = 'upcoming';
+  eventsCircleFilter = 'all';
+  eventsSearch = '';
+  if (eventsSearchTimer) window.clearTimeout(eventsSearchTimer);
+  eventsSearchTimer = null;
+
   var composer = document.getElementById('eventAdminComposer');
 
   if (composer) {
@@ -341,6 +352,8 @@ export const initEventsPage = function() {
   if (state.isAdmin) {
     renderInlineEventComposer();
   }
+
+  wireEventDiscovery();
 
   var eventsList = document.getElementById('eventsList');
   if (eventsList) {
@@ -356,6 +369,48 @@ export const initEventsPage = function() {
   }
 
   loadEvents();
+};
+
+const syncEventViewUI = function() {
+  document.querySelectorAll('[data-events-view]').forEach(function(btn) {
+    var active = btn.dataset.eventsView === eventsView;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+};
+
+const wireEventDiscovery = function() {
+  var searchInput = document.getElementById('eventsSearchInput');
+  if (searchInput) searchInput.oninput = function() {
+    eventsSearch = searchInput.value.trim();
+    if (eventsSearchTimer) window.clearTimeout(eventsSearchTimer);
+    eventsSearchTimer = window.setTimeout(function() {
+      eventsSearchTimer = null;
+      renderEventsList();
+    }, 180);
+  };
+
+  var circleSelect = document.getElementById('eventsCircleFilter');
+  if (circleSelect) {
+    circleSelect.innerHTML = getVisibleCircles(state).map(function(circleId) {
+      return '<option value="' + escapeAttr(circleId) + '">' +
+        escapeHTML(circleId === 'all' ? 'All circles' : circleLabel(circleId)) +
+      '</option>';
+    }).join('');
+    circleSelect.onchange = function() {
+      eventsCircleFilter = circleSelect.value;
+      renderEventsList();
+    };
+  }
+
+  document.querySelectorAll('[data-events-view]').forEach(function(btn) {
+    btn.onclick = function() {
+      eventsView = btn.dataset.eventsView;
+      syncEventViewUI();
+      renderEventsList();
+    };
+  });
+  syncEventViewUI();
 };
 
 // ─── Events: load upcoming ───────────────────────────────────────────────────
@@ -399,7 +454,13 @@ const loadEvents = function() {
     renderEventsList();
   }).catch(function(err) {
     logError('Failed to load events', err);
-    list.innerHTML = '<div class="card"><p class="text-muted">Failed to load events. Check Firestore rules.</p></div>';
+    var resultsSummary = document.getElementById('eventsResultsSummary');
+    var overview = document.getElementById('eventsOverview');
+    if (resultsSummary) resultsSummary.textContent = 'Events unavailable';
+    if (overview) {
+      overview.innerHTML = '<div class="event-overview-card event-overview-error"><span class="event-overview-value event-overview-value-text">Could not load the calendar</span><span class="event-overview-label">Check your connection and try again</span></div>';
+    }
+    list.innerHTML = '<div class="empty-state events-empty-state"><div class="empty-state-title">Could not load events</div><p class="empty-state-text">Check your connection and try again.</p></div>';
   });
 };
 
@@ -534,40 +595,117 @@ const renderEventsList = function() {
   var hasUpcoming = eventsState.upcoming.length > 0;
   var hasPast = eventsState.past.length > 0;
 
+  var totalRsvps = eventsState.upcoming.reduce(function(total, ev) {
+    return total + (typeof ev.rsvpCount === 'number' ? ev.rsvpCount : 0);
+  }, 0);
+  var nextEvent = eventsState.upcoming[0] || null;
+  var nextDate = nextEvent && nextEvent.date && typeof nextEvent.date.toDate === 'function'
+    ? nextEvent.date.toDate()
+    : null;
+  var nextLabel = nextEvent
+    ? (nextEvent.title || 'Untitled') + (nextDate
+      ? ' · ' + nextDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      : '')
+    : 'Nothing scheduled';
+  var overview = document.getElementById('eventsOverview');
+  if (overview) {
+    overview.innerHTML =
+      '<div class="event-overview-card">' +
+        '<span class="event-overview-value">' + eventsState.upcoming.length + '</span>' +
+        '<span class="event-overview-label">Upcoming event' + (eventsState.upcoming.length === 1 ? '' : 's') + '</span>' +
+      '</div>' +
+      '<div class="event-overview-card">' +
+        '<span class="event-overview-value">' + totalRsvps + '</span>' +
+        '<span class="event-overview-label">Community RSVP' + (totalRsvps === 1 ? '' : 's') + '</span>' +
+      '</div>' +
+      '<div class="event-overview-card event-overview-next">' +
+        '<span class="event-overview-value event-overview-value-text">' + escapeHTML(nextLabel) + '</span>' +
+        '<span class="event-overview-label">Next on the calendar</span>' +
+      '</div>';
+  }
+
+  var countUpcoming = document.querySelector('[data-events-count="upcoming"]');
+  var countPast = document.querySelector('[data-events-count="past"]');
+  if (countUpcoming) countUpcoming.textContent = eventsState.upcoming.length;
+  if (countPast) countPast.textContent = eventsState.past.length;
+
   if (!hasUpcoming && !hasPast) {
+    var emptySummary = document.getElementById('eventsResultsSummary');
+    if (emptySummary) emptySummary.textContent = 'No events published yet';
     list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No events yet</div><p class="empty-state-text">' +
       (state.isAdmin ? 'Create the first event to get the calendar going.' : 'Upcoming gatherings and important dates will appear here.') +
       '</p></div>';
     return;
   }
 
-  var upcomingHtml = hasUpcoming
-    ? eventsState.upcoming.map(function(ev) {
+  var searchTerm = eventsSearch.toLowerCase();
+  var matchesFilters = function(ev) {
+    if (eventsCircleFilter !== 'all' && ev.circle !== eventsCircleFilter) return false;
+    if (!searchTerm) return true;
+    return [ev.title, ev.location, ev.description, circleLabel(ev.circle || 'all')]
+      .join(' ').toLowerCase().indexOf(searchTerm) !== -1;
+  };
+  var filteredUpcoming = eventsState.upcoming.filter(matchesFilters);
+  var filteredPast = eventsState.past.filter(matchesFilters);
+  var visibleCount = (eventsView === 'past' ? filteredPast.length
+    : eventsView === 'all' ? filteredUpcoming.length + filteredPast.length
+      : filteredUpcoming.length);
+  var resultsSummary = document.getElementById('eventsResultsSummary');
+  if (resultsSummary) {
+    resultsSummary.textContent = visibleCount + ' event' + (visibleCount === 1 ? '' : 's') +
+      (eventsSearch ? ' matching "' + eventsSearch + '"' : '') +
+      (eventsCircleFilter !== 'all' ? ' in ' + circleLabel(eventsCircleFilter) : '');
+  }
+
+  if (visibleCount === 0) {
+    var resetView = eventsState.upcoming.length ? 'upcoming' : 'past';
+    list.innerHTML = '<div class="empty-state events-empty-state"><div class="empty-state-title">No matching events</div><p class="empty-state-text">Try another view, circle, or search term.</p><button type="button" class="btn btn-ghost" data-reset-events-view>Show ' + resetView + ' events</button></div>';
+    var resetBtn = list.querySelector('[data-reset-events-view]');
+    if (resetBtn) resetBtn.onclick = function() {
+      eventsView = resetView;
+      eventsCircleFilter = 'all';
+      eventsSearch = '';
+      var searchInput = document.getElementById('eventsSearchInput');
+      var circleSelect = document.getElementById('eventsCircleFilter');
+      if (searchInput) searchInput.value = '';
+      if (circleSelect) circleSelect.value = 'all';
+      syncEventViewUI();
+      renderEventsList();
+    };
+    return;
+  }
+
+  var upcomingHtml = filteredUpcoming.length
+    ? filteredUpcoming.map(function(ev) {
       return renderEventCard(ev, { isPast: false });
     }).join('')
-    : '<div class="empty-state"><div class="empty-state-title">No upcoming events</div><p class="empty-state-text">Check back soon for new gatherings.</p></div>';
+    : '';
 
-  var pastHtml = hasPast
-    ? eventsState.past.map(function(ev) {
+  var pastHtml = filteredPast.length
+    ? filteredPast.map(function(ev) {
       return renderEventCard(ev, { isPast: true });
     }).join('')
-    : '<div class="empty-state"><div class="empty-state-title">No past events</div><p class="empty-state-text">Past events will be archived here.</p></div>';
+    : '';
 
-  list.innerHTML =
-    '<section class="events-section">' +
+  var upcomingSection = eventsView !== 'past' && upcomingHtml
+    ? '<section class="events-section">' +
       '<div class="events-section-header">' +
         '<h2 class="events-section-title">Upcoming Events</h2>' +
         '<p class="text-muted">What is coming up next.</p>' +
       '</div>' +
       '<div class="events-list-stack" id="upcomingEventsList">' + upcomingHtml + '</div>' +
-    '</section>' +
-    '<section class="events-section">' +
+    '</section>'
+    : '';
+  var pastSection = eventsView !== 'upcoming' && pastHtml
+    ? '<section class="events-section">' +
       '<div class="events-section-header">' +
         '<h2 class="events-section-title">Past Events</h2>' +
         '<p class="text-muted">A simple archive of gatherings that already happened.</p>' +
       '</div>' +
       '<div class="events-list-stack" id="pastEventsList">' + pastHtml + '</div>' +
-    '</section>';
+    '</section>'
+    : '';
+  list.innerHTML = upcomingSection + pastSection;
 
   bindEventRsvpButtons(document.getElementById('upcomingEventsList'));
   loadEventAttendeeLists(document.getElementById('upcomingEventsList'));
