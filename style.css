@@ -1516,12 +1516,100 @@ body.light .login-benefit {
   font-family: var(--sans);
 }
 
+.compose-prompts {
+  margin-top: 11px;
+}
+
+.compose-prompts-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.compose-prompt-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.compose-prompt {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.compose-prompt:hover,
+.compose-prompt:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent-text);
+}
+
+.compose-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.compose-draft-status {
+  color: var(--accent-text);
+}
+
+.compose-shortcut kbd {
+  padding: 2px 5px;
+  border: 1px solid var(--border-control);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
 .compose-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+
+@media (max-width: 600px) {
+  .compose-prompt-list {
+    flex-wrap: nowrap;
+    margin-right: -16px;
+    padding-right: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .compose-prompt-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .compose-prompt {
+    min-height: 44px;
+    flex: 0 0 auto;
+  }
+
+  .compose-shortcut {
+    display: none;
+  }
 }
 
 /* ─── Feed: filter pills ─────────────────────────────────────────────────── */
@@ -1633,6 +1721,30 @@ body.light .login-benefit {
   max-width: 280px;
   margin: 0 auto;
   line-height: 1.5;
+}
+
+.feed-empty-state {
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, var(--surface), var(--surface-2));
+}
+
+.feed-empty-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 22px;
+}
+
+.feed-empty-compose {
+  margin-top: 18px;
 }
 
 .sr-only {

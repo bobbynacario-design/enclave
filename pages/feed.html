@@ -9,9 +9,22 @@
     <div class="compose-avatar" data-slot="compose-avatar"></div>
     <select class="compose-circle" id="composeCircle" aria-label="Post to circle"></select>
   </div>
-  <textarea class="compose-body" id="composeBody" placeholder="Share something with the enclave..." rows="3"></textarea>
+  <textarea class="compose-body" id="composeBody" placeholder="Share an insight, ask for input, or offer your expertise..." rows="3"></textarea>
+  <div class="compose-prompts" role="group" aria-label="Conversation starters">
+    <span class="compose-prompts-label">Start with a prompt</span>
+    <div class="compose-prompt-list">
+      <button type="button" class="compose-prompt" data-compose-prompt="Question for the group: ">Ask for input</button>
+      <button type="button" class="compose-prompt" data-compose-prompt="An insight worth sharing: ">Share an insight</button>
+      <button type="button" class="compose-prompt" data-compose-prompt="I can help with: ">Offer help</button>
+      <button type="button" class="compose-prompt" data-compose-prompt="Looking for a collaborator on: ">Find a collaborator</button>
+    </div>
+  </div>
   <div id="photoAttachmentPreview" class="photo-preview" hidden></div>
   <div id="driveAttachmentPreview" class="drive-preview" hidden></div>
+  <div class="compose-status-row">
+    <span class="compose-draft-status" id="composeDraftStatus" aria-live="polite"></span>
+    <span class="compose-shortcut"><kbd>Ctrl/⌘</kbd> + <kbd>Enter</kbd> to post</span>
+  </div>
   <div class="compose-actions">
     <button type="button" class="btn btn-ghost" id="htmlImportBtn">&#60;/&#62; HTML</button>
     <button type="button" class="btn btn-ghost" id="photoAttachBtn">&#128247; Photos</button>

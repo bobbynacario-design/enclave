@@ -48,6 +48,84 @@ import { writeNotification } from './notifications.js';
 // Shell bridge
 import { syncSidebarSelection, syncURLState, getAppURL } from '../util/shell-bridge.js';
 
+var composeDraftTimer = null;
+var COMPOSE_DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+
+var getComposeDraftKey = function() {
+  return state.user ? 'enclave_feed_draft_' + state.user.uid : '';
+};
+
+var setComposeDraftStatus = function(message) {
+  var status = document.getElementById('composeDraftStatus');
+  if (status) status.textContent = message || '';
+};
+
+var clearComposeDraft = function() {
+  var key = getComposeDraftKey();
+  if (!key) return;
+  try { localStorage.removeItem(key); } catch (err) {}
+};
+
+var saveComposeDraft = function() {
+  if (composeDraftTimer) {
+    window.clearTimeout(composeDraftTimer);
+    composeDraftTimer = null;
+  }
+  var bodyEl = document.getElementById('composeBody');
+  var circleEl = document.getElementById('composeCircle');
+  var key = getComposeDraftKey();
+  if (!bodyEl || !circleEl || !key) return;
+
+  if (!bodyEl.value.trim()) {
+    clearComposeDraft();
+    setComposeDraftStatus('');
+    return;
+  }
+
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      body: bodyEl.value,
+      circle: circleEl.value,
+      savedAt: Date.now()
+    }));
+    setComposeDraftStatus('Text draft saved on this device');
+  } catch (err) {
+    setComposeDraftStatus('Draft could not be saved');
+  }
+};
+
+var queueComposeDraftSave = function() {
+  if (composeDraftTimer) window.clearTimeout(composeDraftTimer);
+  setComposeDraftStatus('Saving draft...');
+  composeDraftTimer = window.setTimeout(function() {
+    composeDraftTimer = null;
+    saveComposeDraft();
+  }, 500);
+};
+
+var restoreComposeDraft = function(visibleCircles) {
+  var bodyEl = document.getElementById('composeBody');
+  var circleEl = document.getElementById('composeCircle');
+  var key = getComposeDraftKey();
+  if (!bodyEl || !circleEl || !key) return;
+
+  try {
+    var raw = localStorage.getItem(key);
+    if (!raw) return;
+    var draft = JSON.parse(raw);
+    if (!draft || typeof draft.body !== 'string' || !draft.body.trim() ||
+        !draft.savedAt || Date.now() - draft.savedAt > COMPOSE_DRAFT_MAX_AGE) {
+      clearComposeDraft();
+      return;
+    }
+    bodyEl.value = draft.body;
+    if (visibleCircles.indexOf(draft.circle) !== -1) circleEl.value = draft.circle;
+    setComposeDraftStatus('Text draft restored from this device');
+  } catch (err) {
+    clearComposeDraft();
+  }
+};
+
 // ─── Feed: init ──────────────────────────────────────────────────────────────
 export const initFeedPage = function() {
   var visibleCircles = getVisibleCircles(state);
@@ -70,6 +148,33 @@ export const initFeedPage = function() {
 
   var submitBtn = document.getElementById('composeSubmit');
   if (submitBtn) submitBtn.addEventListener('click', handleComposeSubmit);
+
+  var bodyEl = document.getElementById('composeBody');
+  if (bodyEl) {
+    bodyEl.addEventListener('input', queueComposeDraftSave);
+    bodyEl.addEventListener('blur', saveComposeDraft);
+    bodyEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleComposeSubmit();
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-compose-prompt]').forEach(function(prompt) {
+    prompt.addEventListener('click', function() {
+      if (!bodyEl) return;
+      var starter = prompt.dataset.composePrompt || '';
+      if (!bodyEl.value.trim()) {
+        bodyEl.value = starter;
+      } else {
+        bodyEl.value = bodyEl.value.replace(/\s*$/, '\n\n') + starter;
+      }
+      bodyEl.focus();
+      bodyEl.setSelectionRange(bodyEl.value.length, bodyEl.value.length);
+      queueComposeDraftSave();
+    });
+  });
 
   // Drive attachment
   var driveBtn = document.getElementById('driveAttachBtn');
@@ -100,7 +205,10 @@ export const initFeedPage = function() {
     if (visibleCircles.indexOf(composeCircle.value) === -1) {
       composeCircle.value = 'all';
     }
+    composeCircle.addEventListener('change', queueComposeDraftSave);
   }
+
+  restoreComposeDraft(visibleCircles);
 
   if (filterPills) {
     filterPills.innerHTML = renderCirclePills();
@@ -207,6 +315,7 @@ var handleHtmlFileImport = function(evt) {
       ? bodyEl.value.trim() + '\n\n' + html
       : html;
     bodyEl.focus();
+    queueComposeDraftSave();
     showToast('HTML imported into the composer.', 'success');
   }).catch(function(err) {
     logError('Failed to import HTML file', err);
@@ -392,6 +501,9 @@ var handleComposeSubmit = function() {
   var circleEl = document.getElementById('composeCircle');
   if (!bodyEl || !circleEl || !state.user) return;
 
+  var submitBtn = document.getElementById('composeSubmit');
+  if (submitBtn && submitBtn.disabled) return;
+
   var body   = bodyEl.value.trim();
   var circle = circleEl.value;
   if (!body && !driveAttachment.fileUrl && getPendingPhotoCount() === 0) {
@@ -419,7 +531,6 @@ var handleComposeSubmit = function() {
     post.fileIcon = driveAttachment.iconUrl;
   }
 
-  var submitBtn = document.getElementById('composeSubmit');
   var hasPhotos = getPendingPhotoCount() > 0;
   if (submitBtn) {
     submitBtn.disabled    = true;
@@ -436,9 +547,16 @@ var handleComposeSubmit = function() {
   var savePost = function(postData) {
     addDoc(collection(db, 'posts'), postData).then(function() {
       bodyEl.value = '';
+      if (composeDraftTimer) {
+        window.clearTimeout(composeDraftTimer);
+        composeDraftTimer = null;
+      }
+      clearComposeDraft();
+      setComposeDraftStatus('Posted successfully');
       clearDriveAttachment();
       clearPhotoAttachments();
       restoreSubmit();
+      showToast('Posted to ' + circleLabel(circle) + '.', 'success');
     }).catch(function(err) {
       logError('Failed to post', err);
       restoreSubmit();
@@ -482,9 +600,32 @@ var renderFeedList = function() {
   });
 
   if (posts.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No posts yet</div><p class="empty-state-text">When someone shares an update, it will appear here.</p></div>';
+    var emptyTitle = feedState.filter === 'all' ? 'Start the conversation' : 'Nothing shared here yet';
+    var emptyText = feedState.filter === 'all'
+      ? 'Share a useful insight, ask for advice, or offer help to your network.'
+      : 'Be the first to share something with ' + circleLabel(feedState.filter) + '.';
+    list.innerHTML = '<div class="empty-state feed-empty-state">' +
+      '<div class="feed-empty-mark" aria-hidden="true">+</div>' +
+      '<div class="empty-state-title">' + escapeHTML(emptyTitle) + '</div>' +
+      '<p class="empty-state-text">' + escapeHTML(emptyText) + '</p>' +
+      '<button type="button" class="btn btn-primary feed-empty-compose" data-focus-composer>Write a post</button>' +
+    '</div>';
   } else {
     list.innerHTML = posts.map(renderPostCard).join('');
+  }
+
+  var focusComposerBtn = list.querySelector('[data-focus-composer]');
+  if (focusComposerBtn) {
+    focusComposerBtn.addEventListener('click', function() {
+      var composer = document.getElementById('composeBody');
+      if (!composer) return;
+      var composeCircle = document.getElementById('composeCircle');
+      if (composeCircle && feedState.filter !== 'all') {
+        composeCircle.value = feedState.filter;
+      }
+      composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(function() { composer.focus(); }, 250);
+    });
   }
 
   if (feedState.hasMore) {
