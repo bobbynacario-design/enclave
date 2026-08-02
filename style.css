@@ -13,11 +13,22 @@
   --border:       rgba(255,255,255,0.06);
   --border-2:     rgba(255,255,255,0.12);
   --border-3:     rgba(255,255,255,0.2);
+  /* Control boundaries carry meaning, so they clear 3:1 (WCAG 1.4.11) where
+     the decorative --border tokens above deliberately do not. 3.31:1. */
+  --border-control: rgba(255,255,255,0.36);
   --accent:         #7c5cbf;
+  /* --accent is a fill: white on it is 5.07:1. As text it is only 3.07-3.91:1,
+     so text uses its own lighter token — 4.87:1 on the worst surface. */
+  --accent-text:    #9d80de;
   --accent-hover:   #9370db;
+  --focus-ring:     #9370db;
   --success:        #2d5a3d;
   --success-hover:  #356b48;
-  --warning:        #d97706;
+  /* --success is a dark fill; as text on its own tint it was 2.10:1. */
+  --success-text:   #2ECC71;
+  /* --warning is only ever text. Lifted from #d97706, which was 4.33:1
+     on --warning-dim. Now 5.27:1 there, 7.16:1 on --surface. */
+  --warning:        #e8890b;
   --warning-dim:    #3a2a14;
   --accent-dim:   rgba(124,92,191,0.12);
   --gold:         #D4AF37;
@@ -46,11 +57,17 @@ body.light {
   --border:       rgba(0,0,0,0.08);
   --border-2:     rgba(0,0,0,0.14);
   --border-3:     rgba(0,0,0,0.22);
+  --border-control: rgba(0,0,0,0.44);
   --accent:         #6A3A9A;
+  /* Light mode's accent already clears 4.5:1 as text (6.17-7.82:1). */
+  --accent-text:    #6A3A9A;
   --accent-hover:   #7c5cbf;
+  --focus-ring:     #6A3A9A;
   --success:        #2d5a3d;
   --success-hover:  #356b48;
-  --warning:        #d97706;
+  --success-text:   #2d5a3d;
+  /* Was #d97706 — 2.86:1 on --warning-dim, 3.19:1 on white. Now 5.14 / 5.73. */
+  --warning:        #a1500a;
   --warning-dim:    #fef3c7;
   --accent-dim:   rgba(106,58,154,0.1);
   --gold:         #8B6914;
@@ -134,7 +151,7 @@ body {
   font-size: 22px;
   font-weight: 400;
   letter-spacing: 0.2em;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .theme-toggle {
   background: transparent;
@@ -480,7 +497,7 @@ body {
     font-size: 22px;
     font-weight: 400;
     letter-spacing: 0.15em;
-    color: var(--accent);
+    color: var(--accent-text);
     line-height: 1;
   }
   .shell-right {
@@ -582,7 +599,7 @@ body {
     background: var(--surface-2);
   }
   .mobile-more-item.active {
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 500;
   }
 }
@@ -762,16 +779,8 @@ body {
   margin-top: 18px;
 }
 
-/* Modals trap focus, so keyboard position has to stay visible inside them.
-   Form fields clear their outline globally, which this deliberately overrides. */
-.dialog-card :focus-visible,
-.profile-modal-content :focus-visible,
-.project-modal-content :focus-visible {
-  outline: 2px solid var(--accent-hover);
-  outline-offset: 2px;
-}
-
-/* The card itself is focused programmatically as a fallback — no ring for that. */
+/* Focus inside modals is covered by the global :focus-visible rule below.
+   The card itself is focused programmatically as a fallback — no ring for that. */
 .dialog-card:focus,
 .profile-modal-content:focus,
 .project-modal-content:focus {
@@ -781,7 +790,7 @@ body {
 /* ─── Forms ──────────────────────────────────────────────────────────────── */
 input, textarea, select {
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius);
   color: var(--text);
   font-family: var(--sans);
@@ -794,6 +803,22 @@ input, textarea, select {
 
 input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
+}
+
+/* ─── Focus visibility ───────────────────────────────────────────────────────
+   Keyboard focus must be visible everywhere, not just inside dialogs. The
+   input/textarea/select reset above clears the outline, so those get an
+   explicit rule; it sits after the reset so equal specificity resolves here. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 label {
@@ -838,7 +863,7 @@ label {
   font-size: 36px;
   font-weight: 400;
   letter-spacing: 0.2em;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .login-tagline {
@@ -1132,7 +1157,7 @@ label {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--accent);
+  color: var(--accent-text);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1183,7 +1208,7 @@ label {
 
 .post-circle {
   font-family: var(--mono);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 500;
   font-size: 11px;
 }
@@ -1300,7 +1325,7 @@ label {
 
 /* Auto-linked URLs in post body */
 .post-link {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: none;
   word-break: break-all;
 }
@@ -1406,7 +1431,7 @@ label {
 }
 
 .post-attachment-open {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   flex-shrink: 0;
 }
@@ -1528,7 +1553,7 @@ label {
 }
 
 .post-react-btn.post-action-active .post-action-icon {
-  color: var(--accent);
+  color: var(--accent-text);
   fill: var(--accent);
 }
 
@@ -2304,7 +2329,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--accent-text);
   text-transform: uppercase;
 }
 
@@ -2361,7 +2386,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--accent);
+  color: var(--accent-text);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -2689,7 +2714,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 
 .message-bubble-status.seen {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -2716,7 +2741,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 
 .message-ticks.seen {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -2759,7 +2784,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 
 .messages-thread-subtitle.typing {
-  color: var(--accent);
+  color: var(--accent-text);
   font-style: italic;
 }
 
@@ -2815,7 +2840,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 
 .messages-person-time.unread {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -2941,7 +2966,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 
 /* ─── Utility ────────────────────────────────────────────────────────────── */
 .text-muted  { color: var(--text-muted); }
-.text-accent { color: var(--accent); }
+.text-accent { color: var(--accent-text); }
 .mt-8        { margin-top: 8px; }
 .mt-16       { margin-top: 16px; }
 .flex        { display: flex; }
@@ -3042,9 +3067,9 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   padding: 2px 8px;
   border-radius: 4px;
 }
-.project-status-active    { background: rgba(45, 90, 61, 0.2);   color: var(--success); }
+.project-status-active    { background: rgba(45, 90, 61, 0.2);   color: var(--success-text); }
 .project-status-on-hold   { background: var(--warning-dim);      color: var(--warning); }
-.project-status-completed { background: rgba(124, 92, 191, 0.15); color: var(--accent); }
+.project-status-completed { background: rgba(124, 92, 191, 0.15); color: var(--accent-text); }
 
 /* Project detail */
 .project-detail-header { margin-bottom: 20px; }
@@ -3166,7 +3191,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 .project-file-row a {
   flex: 1;
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3415,7 +3440,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .pending-invitation-row {
   display: flex;
@@ -3520,7 +3545,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   transition: opacity 0.15s, color 0.15s;
 }
 .task-row:hover .task-edit-btn { opacity: 1; }
-.task-edit-btn:hover { opacity: 1; color: var(--accent); }
+.task-edit-btn:hover { opacity: 1; color: var(--accent-text); }
 
 .task-edit-form {
   display: flex;
@@ -3646,7 +3671,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 .project-card-tasks-label {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--accent);
+  color: var(--accent-text);
   white-space: nowrap;
 }
 .project-card-progress {
@@ -3684,7 +3709,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   flex-shrink: 0;
   width: 20px;
   text-align: center;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 11px;
 }
 .activity-text {
@@ -3705,7 +3730,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 
 /* @mention styles */
 .mention {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
   background: var(--accent-dim);
   padding: 1px 4px;
@@ -3732,7 +3757,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 .mention-option:hover {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* ── Resources ────────────────────────────────────────────── */
@@ -3802,7 +3827,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   display: block;
   font-size: 15px;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: none;
   margin-bottom: 4px;
   word-break: break-word;
@@ -4369,7 +4394,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
 .notif-mark-read:hover {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .notif-date-group {
   font-size: 11px;
