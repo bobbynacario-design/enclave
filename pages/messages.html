@@ -5,7 +5,23 @@
 
 <div class="messages-shell">
   <aside class="messages-sidebar">
-    <div class="messages-sidebar-header" id="messagesSidebarHeader">People</div>
+    <div class="messages-sidebar-header" id="messagesSidebarHeader">
+      <span>Conversations &amp; people</span>
+      <span class="messages-sidebar-count" id="messagesSidebarCount" hidden></span>
+    </div>
+    <div class="messages-sidebar-tools">
+      <label class="messages-search" for="messagesSearchInput">
+        <span class="sr-only">Search conversations and people</span>
+        <span class="messages-search-icon" aria-hidden="true">&#128269;</span>
+        <input type="search" id="messagesSearchInput" class="form-input"
+               placeholder="Search people or messages" autocomplete="off" />
+      </label>
+      <div class="messages-filter-pills" role="group" aria-label="Filter conversations">
+        <button type="button" class="messages-filter-pill active" data-messages-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="messages-filter-pill" data-messages-filter="unread" aria-pressed="false">Unread <span id="messagesUnreadFilterCount">0</span></button>
+      </div>
+      <p class="messages-results-summary" id="messagesResultsSummary" aria-live="polite">Loading people&hellip;</p>
+    </div>
     <div class="messages-people-list" id="messagesPeopleList">
       <div class="skeleton-row" style="padding:8px 0;border-bottom:1px solid var(--border)" aria-hidden="true">
         <div class="skeleton skeleton-avatar"></div>
@@ -33,6 +49,7 @@
 
   <section class="messages-thread card">
     <div class="messages-thread-header">
+      <button type="button" class="messages-back-btn" id="messagesBackBtn" aria-label="Back to conversations">&larr;</button>
       <div class="messages-thread-header-avatar" id="messagesThreadHeaderAvatar"></div>
       <div>
         <div class="messages-thread-title" id="messagesThreadTitle">Select a member</div>

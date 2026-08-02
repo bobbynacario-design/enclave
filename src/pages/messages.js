@@ -77,6 +77,10 @@ var formatListTime = function(ms) {
 
 var PRESENCE_ONLINE_MS = 5 * 60 * 1000;
 var TYPING_VISIBLE_MS = 8000;
+var MESSAGE_FILTER_KEY = 'enclave_message_filter';
+var messagesListFilter = 'all';
+var messagesListSearch = '';
+var messagesMobileThreadOpen = false;
 
 // Clock-skew-immune typing freshness: track when THIS client first saw
 // each new typing timestamp and time the indicator from that local
@@ -130,9 +134,12 @@ var getConversationUnreadCount = function(conversation) {
 
 var syncMessagesUnreadState = function() {
   var total = 0;
+  var unreadConversations = 0;
 
   messagesState.conversations.forEach(function(conversation) {
-    total += getConversationUnreadCount(conversation);
+    var unread = getConversationUnreadCount(conversation);
+    total += unread;
+    if (unread > 0) unreadConversations += 1;
   });
 
   messagesState.totalUnread = total;
@@ -151,14 +158,14 @@ var syncMessagesUnreadState = function() {
     }
   });
 
-  var sidebarHeader = document.getElementById('messagesSidebarHeader');
-  if (sidebarHeader) {
-    sidebarHeader.innerHTML = 'People' + (
-      total > 0
-        ? '<span class="messages-sidebar-count">' + escapeHTML(total > 99 ? '99+' : String(total)) + ' unread</span>'
-        : ''
-    );
+  var sidebarCount = document.getElementById('messagesSidebarCount');
+  if (sidebarCount) {
+    sidebarCount.hidden = total <= 0;
+    sidebarCount.textContent = total > 0 ? (total > 99 ? '99+' : String(total)) + ' unread' : '';
   }
+
+  var filterCount = document.getElementById('messagesUnreadFilterCount');
+  if (filterCount) filterCount.textContent = unreadConversations > 99 ? '99+' : String(unreadConversations);
 };
 
 var markConversationRead = function(conversationId) {
@@ -173,8 +180,9 @@ var markConversationRead = function(conversationId) {
   if (unread <= 0) return Promise.resolve();
 
   if (!conversation.unreadCount) conversation.unreadCount = {};
-  conversation.unreadCount[state.user.uid] = 0;
   if (!conversation.readBy) conversation.readBy = {};
+  var previousReadAt = conversation.readBy[state.user.uid];
+  conversation.unreadCount[state.user.uid] = 0;
   conversation.readBy[state.user.uid] = Timestamp.now();
   syncMessagesUnreadState();
   renderMessagesPeopleList();
@@ -185,6 +193,32 @@ var markConversationRead = function(conversationId) {
 
   return updateDoc(doc(db, 'conversations', conversationId), payload).catch(function(err) {
     logError('Failed to mark conversation read', err);
+    var currentConversation = messagesState.conversations.find(function(item) {
+      return item.id === conversationId;
+    }) || conversation;
+    if (!currentConversation.unreadCount) currentConversation.unreadCount = {};
+    if (!currentConversation.readBy) currentConversation.readBy = {};
+    currentConversation.unreadCount[state.user.uid] = unread;
+    if (previousReadAt) currentConversation.readBy[state.user.uid] = previousReadAt;
+    else delete currentConversation.readBy[state.user.uid];
+    syncMessagesUnreadState();
+    renderMessagesPeopleList();
+    showToast('Could not mark the conversation as read.', 'error');
+  });
+};
+
+var syncMessagesLayout = function() {
+  var shell = document.querySelector('.messages-shell');
+  if (shell) {
+    shell.classList.toggle('has-active-thread', !!messagesState.activePeerId && messagesMobileThreadOpen);
+  }
+};
+
+var syncMessagesFilterUI = function() {
+  document.querySelectorAll('[data-messages-filter]').forEach(function(btn) {
+    var active = btn.dataset.messagesFilter === messagesListFilter;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 };
 
@@ -194,6 +228,8 @@ var renderMessagesPeopleList = function() {
 
   if (messagesState.members.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No members found</div><p class="empty-state-text">Members will appear here once they\'ve signed in.</p></div>';
+    var noMembersSummary = document.getElementById('messagesResultsSummary');
+    if (noMembersSummary) noMembersSummary.textContent = 'No people available';
     return;
   }
 
@@ -216,6 +252,46 @@ var renderMessagesPeopleList = function() {
   });
 
   syncMessagesUnreadState();
+
+  var searchTerm = messagesListSearch.toLowerCase();
+  members = members.filter(function(member) {
+    var conversation = convByPeer[member.uid] || null;
+    if (messagesListFilter === 'unread' && getConversationUnreadCount(conversation) <= 0) return false;
+    if (!searchTerm) return true;
+    var haystack = [
+      member.name,
+      member.email,
+      member.role,
+      conversation && conversation.lastMessage
+    ].join(' ').toLowerCase();
+    return haystack.indexOf(searchTerm) !== -1;
+  });
+
+  var resultsSummary = document.getElementById('messagesResultsSummary');
+  if (resultsSummary) {
+    var resultLabel = messagesListFilter === 'unread' ? 'unread conversation' : 'person';
+    resultsSummary.textContent = members.length + ' ' + resultLabel + (members.length === 1 ? '' : 's') +
+      (messagesListSearch ? ' matching "' + messagesListSearch + '"' : '');
+  }
+
+  if (members.length === 0) {
+    var emptyTitle = messagesListSearch ? 'No matching conversations' : 'You are all caught up';
+    var emptyText = messagesListSearch
+      ? 'Try another name, role, email, or message.'
+      : 'There are no unread conversations right now.';
+    list.innerHTML = '<div class="messages-empty-state"><div class="empty-state-title">' + escapeHTML(emptyTitle) + '</div><p class="empty-state-text">' + escapeHTML(emptyText) + '</p><button type="button" class="btn btn-ghost" data-reset-messages-view>Show everyone</button></div>';
+    var resetBtn = list.querySelector('[data-reset-messages-view]');
+    if (resetBtn) resetBtn.onclick = function() {
+      messagesListFilter = 'all';
+      messagesListSearch = '';
+      var searchInput = document.getElementById('messagesSearchInput');
+      if (searchInput) searchInput.value = '';
+      try { localStorage.setItem(MESSAGE_FILTER_KEY, messagesListFilter); } catch (e) {}
+      syncMessagesFilterUI();
+      renderMessagesPeopleList();
+    };
+    return;
+  }
 
   list.innerHTML = members.map(function(member) {
     var active = member.uid === messagesState.activePeerId ? ' active' : '';
@@ -252,9 +328,11 @@ var renderMessagesPeopleList = function() {
 
   list.querySelectorAll('[data-open-message]').forEach(function(btn) {
     btn.addEventListener('click', function() {
+      messagesMobileThreadOpen = true;
       openMessageThread(btn.dataset.openMessage);
     });
   });
+  syncMessagesLayout();
 };
 
 // Whether the open thread's peer is typing right now, using the
@@ -624,12 +702,14 @@ var openMessageThread = function(peerId) {
     messagesState.activeConversationId = null;
     messagesState.thread = [];
     renderMessagesThread();
+    syncMessagesLayout();
     return;
   }
 
   subscribeMessageThread(conversation.id);
   markConversationRead(conversation.id);
   renderMessagesThread();
+  syncMessagesLayout();
 };
 
 var loadMessageMembers = function() {
@@ -891,6 +971,37 @@ var handleSendPhoto = function(file) {
 export const initMessagesPage = function() {
   presencePeerId = null;
   lastTypingWriteMs = 0;
+  messagesListSearch = '';
+  messagesMobileThreadOpen = new URLSearchParams(window.location.search).has('peer');
+
+  try {
+    var savedFilter = localStorage.getItem(MESSAGE_FILTER_KEY);
+    if (savedFilter === 'all' || savedFilter === 'unread') messagesListFilter = savedFilter;
+  } catch (e) {}
+
+  var searchInput = document.getElementById('messagesSearchInput');
+  if (searchInput) {
+    searchInput.oninput = function() {
+      messagesListSearch = searchInput.value.trim();
+      renderMessagesPeopleList();
+    };
+  }
+
+  document.querySelectorAll('[data-messages-filter]').forEach(function(btn) {
+    btn.onclick = function() {
+      messagesListFilter = btn.dataset.messagesFilter;
+      try { localStorage.setItem(MESSAGE_FILTER_KEY, messagesListFilter); } catch (e) {}
+      syncMessagesFilterUI();
+      renderMessagesPeopleList();
+    };
+  });
+  syncMessagesFilterUI();
+
+  var backBtn = document.getElementById('messagesBackBtn');
+  if (backBtn) backBtn.onclick = function() {
+    messagesMobileThreadOpen = false;
+    openMessageThread(null);
+  };
 
   var form = document.getElementById('messagesComposer');
   if (form) {
@@ -934,5 +1045,6 @@ export const initMessagesPage = function() {
 
   renderMessagesPeopleList();
   renderMessagesThread();
+  syncMessagesLayout();
   loadMessageMembers();
 };
