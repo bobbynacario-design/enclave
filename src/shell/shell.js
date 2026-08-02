@@ -359,7 +359,7 @@ var applyAccessChange = function(visibleChanged) {
   });
 
   // Filtered to a circle that was just revoked — drop back to the full feed.
-  if (feedState.filter !== 'all' && visible.indexOf(feedState.filter) === -1) {
+  if (feedState.filter !== 'all' && feedState.filter !== 'saved' && visible.indexOf(feedState.filter) === -1) {
     feedState.filter = 'all';
   }
 

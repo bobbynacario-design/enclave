@@ -70,6 +70,7 @@ export var applyURLState = function() {
   var params = new URLSearchParams(window.location.search);
   var page = params.get('page');
   var circle = params.get('circle');
+  var feedView = params.get('view');
   var postId = params.get('postId');
   var peerId = params.get('peer');
   var memberId = params.get('member');
@@ -98,7 +99,9 @@ export var applyURLState = function() {
       feedState.openComments[feedState.targetPostId] = true;
     }
 
-    if (circle && getVisibleCircles(state).indexOf(circle) !== -1) {
+    if (feedView === 'saved') {
+      feedState.filter = 'saved';
+    } else if (circle && getVisibleCircles(state).indexOf(circle) !== -1) {
       feedState.filter = circle;
     } else {
       feedState.filter = 'all';
@@ -114,9 +117,16 @@ export var syncURLState = function() {
   params.set('page', state.currentPage);
 
   if (state.currentPage === 'feed' && feedState.filter !== 'all') {
-    params.set('circle', feedState.filter);
+    if (feedState.filter === 'saved') {
+      params.set('view', 'saved');
+      params.delete('circle');
+    } else {
+      params.set('circle', feedState.filter);
+      params.delete('view');
+    }
   } else {
     params.delete('circle');
+    params.delete('view');
   }
 
   if (state.currentPage === 'feed' && feedState.targetPostId) {

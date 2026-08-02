@@ -2249,6 +2249,7 @@ body.light .login-benefit {
 
 .post-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   border-top: 1px solid var(--border);
   padding-top: 10px;
@@ -2292,6 +2293,25 @@ body.light .login-benefit {
 .post-action-active {
   color: var(--accent, #7F77DD);
   font-weight: 500;
+}
+
+.post-save-btn:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.post-save-icon {
+  width: 16px;
+  color: currentColor;
+  font-size: 17px;
+  line-height: 1;
+  text-align: center;
+}
+
+.feed-saved-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .post-react-btn.post-action-active .post-action-icon {

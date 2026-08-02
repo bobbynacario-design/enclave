@@ -83,6 +83,8 @@ var runSignOut = function(accessDenied) {
     feedState.unsubscribe();
     feedState.unsubscribe = null;
   }
+  feedState.savedPosts = [];
+  feedState.savedPostsLoaded = false;
   if (projectsState.unsubscribe) {
     projectsState.unsubscribe();
     projectsState.unsubscribe = null;

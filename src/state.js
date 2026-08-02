@@ -21,6 +21,8 @@ export const feedState = {
   livePosts:   [],
   olderPosts:  [],
   filter:      'all',
+  savedPosts:  [],
+  savedPostsLoaded: false,
   unsubscribe: null,
   hasMore:     false,
   loadingMore: false,

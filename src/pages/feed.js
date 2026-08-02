@@ -15,6 +15,8 @@ import {
   getDocs,
   serverTimestamp,
   runTransaction,
+  arrayUnion,
+  arrayRemove,
   Timestamp
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { db } from '../../firebase.js';
@@ -50,6 +52,7 @@ import { syncSidebarSelection, syncURLState, getAppURL } from '../util/shell-bri
 
 var composeDraftTimer = null;
 var COMPOSE_DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+var pendingPostSaves = {};
 
 var getComposeDraftKey = function() {
   return state.user ? 'enclave_feed_draft_' + state.user.uid : '';
@@ -132,7 +135,7 @@ export const initFeedPage = function() {
   var composeCircle = document.getElementById('composeCircle');
   var filterPills = document.querySelector('.filter-pills');
 
-  if (visibleCircles.indexOf(feedState.filter) === -1) {
+  if (feedState.filter !== 'saved' && visibleCircles.indexOf(feedState.filter) === -1) {
     feedState.filter = 'all';
   }
 
@@ -215,7 +218,7 @@ export const initFeedPage = function() {
   }
 
   document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
-    pill.hidden = visibleCircles.indexOf(pill.dataset.filter) === -1;
+    pill.hidden = pill.dataset.filter !== 'saved' && visibleCircles.indexOf(pill.dataset.filter) === -1;
   });
 
   document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
@@ -228,7 +231,11 @@ export const initFeedPage = function() {
         p.classList.toggle('active', p === pill);
       });
       syncSidebarSelection();
-      renderFeedList();
+      if (feedState.filter === 'saved') {
+        ensureSavedPostsLoaded().then(renderFeedList);
+      } else {
+        renderFeedList();
+      }
     });
   });
 
@@ -238,6 +245,53 @@ export const initFeedPage = function() {
 
   syncSidebarSelection();
   subscribeFeed();
+  loadSavedPosts().then(function() {
+    if (state.currentPage !== 'feed') return null;
+    return feedState.filter === 'saved' ? ensureSavedPostsLoaded() : null;
+  }).then(function() {
+    if (state.currentPage === 'feed') renderFeedList();
+  });
+};
+
+var loadSavedPosts = function() {
+  feedState.savedPostsLoaded = false;
+  if (!state.user) return Promise.resolve();
+
+  return getDoc(doc(db, 'users', state.user.uid)).then(function(snap) {
+    var data = snap.exists() ? (snap.data() || {}) : {};
+    var saved = Array.isArray(data.savedPosts) ? data.savedPosts : [];
+    feedState.savedPosts = saved.filter(function(id, index) {
+      return typeof id === 'string' && saved.indexOf(id) === index;
+    });
+    feedState.savedPostsLoaded = true;
+  }).catch(function(err) {
+    logError('Failed to load saved posts', err);
+    showToast('Saved posts could not be loaded.', 'error');
+  });
+};
+
+var ensureSavedPostsLoaded = function() {
+  var known = {};
+  getAllKnownFeedPosts().forEach(function(post) { known[post.id] = true; });
+  var missing = feedState.savedPosts.filter(function(id) { return !known[id]; });
+  if (missing.length === 0) return Promise.resolve();
+
+  return Promise.all(missing.map(function(id) {
+    return getDoc(doc(db, 'posts', id)).then(function(snap) {
+      if (!snap.exists()) return null;
+      var post = snap.data() || {};
+      post.id = snap.id;
+      return getVisibleCircles(state).indexOf(post.circle || 'all') !== -1 ? post : null;
+    }).catch(function(err) {
+      logError('Failed to load saved post', err);
+      return null;
+    });
+  })).then(function(posts) {
+    var loaded = posts.filter(Boolean);
+    feedState.olderPosts = loaded.concat(feedState.olderPosts.filter(function(post) {
+      return !loaded.some(function(savedPost) { return savedPost.id === post.id; });
+    }));
+  });
 };
 
 // ─── Feed: HTML import ────────────────────────────────────────────────────────
@@ -361,7 +415,10 @@ var subscribeFeed = function() {
     }
 
     ensureTargetPostLoaded().then(function() {
-      renderFeedList();
+      if (feedState.filter === 'saved' && !feedState.savedPostsLoaded) return null;
+      return feedState.filter === 'saved' ? ensureSavedPostsLoaded() : null;
+    }).then(function() {
+      if (feedState.filter !== 'saved' || feedState.savedPostsLoaded) renderFeedList();
     });
   }, function(err) {
     logError('Feed subscribe error', err);
@@ -414,7 +471,11 @@ var ensureTargetPostLoaded = function() {
 var getRenderedFeedPosts = function() {
   var combined = getAllKnownFeedPosts();
 
-  if (feedState.filter !== 'all') {
+  if (feedState.filter === 'saved') {
+    combined = combined.filter(function(post) {
+      return feedState.savedPosts.indexOf(post.id) !== -1;
+    });
+  } else if (feedState.filter !== 'all') {
     combined = combined.filter(function(post) {
       return post.circle === feedState.filter;
     });
@@ -600,15 +661,20 @@ var renderFeedList = function() {
   });
 
   if (posts.length === 0) {
-    var emptyTitle = feedState.filter === 'all' ? 'Start the conversation' : 'Nothing shared here yet';
-    var emptyText = feedState.filter === 'all'
+    var isSavedView = feedState.filter === 'saved';
+    var emptyTitle = isSavedView ? 'Nothing saved yet' : (feedState.filter === 'all' ? 'Start the conversation' : 'Nothing shared here yet');
+    var emptyText = isSavedView
+      ? 'Save useful posts to build a private reading list you can return to anytime.'
+      : (feedState.filter === 'all'
       ? 'Share a useful insight, ask for advice, or offer help to your network.'
-      : 'Be the first to share something with ' + circleLabel(feedState.filter) + '.';
+      : 'Be the first to share something with ' + circleLabel(feedState.filter) + '.');
     list.innerHTML = '<div class="empty-state feed-empty-state">' +
-      '<div class="feed-empty-mark" aria-hidden="true">+</div>' +
+      '<div class="feed-empty-mark" aria-hidden="true">' + (isSavedView ? '&#9734;' : '+') + '</div>' +
       '<div class="empty-state-title">' + escapeHTML(emptyTitle) + '</div>' +
       '<p class="empty-state-text">' + escapeHTML(emptyText) + '</p>' +
-      '<button type="button" class="btn btn-primary feed-empty-compose" data-focus-composer>Write a post</button>' +
+      (isSavedView
+        ? '<button type="button" class="btn btn-primary" data-show-all-feed>Browse the feed</button>'
+        : '<button type="button" class="btn btn-primary feed-empty-compose" data-focus-composer>Write a post</button>') +
     '</div>';
   } else {
     list.innerHTML = posts.map(renderPostCard).join('');
@@ -628,7 +694,19 @@ var renderFeedList = function() {
     });
   }
 
-  if (feedState.hasMore) {
+  var showAllBtn = list.querySelector('[data-show-all-feed]');
+  if (showAllBtn) {
+    showAllBtn.addEventListener('click', function() {
+      feedState.filter = 'all';
+      syncURLState();
+      document.querySelectorAll('.filter-pills .pill').forEach(function(pill) {
+        pill.classList.toggle('active', pill.dataset.filter === 'all');
+      });
+      renderFeedList();
+    });
+  }
+
+  if (feedState.hasMore && feedState.filter !== 'saved') {
     list.insertAdjacentHTML('beforeend',
       '<div class="feed-load-more">' +
         '<button class="btn btn-ghost load-more-btn" type="button">' +
@@ -660,6 +738,12 @@ var renderFeedList = function() {
   list.querySelectorAll('[data-share-post]').forEach(function(btn) {
     btn.addEventListener('click', function() {
       handleSharePost(btn.dataset.sharePost);
+    });
+  });
+
+  list.querySelectorAll('[data-save-post]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      handleSavePost(btn.dataset.savePost);
     });
   });
 
@@ -740,7 +824,7 @@ var renderPostComments = function(postId, comments, authorId) {
     '</div>';
 };
 
-var renderPostCard = function(p) {
+var renderPostCard = function(p, context) {
   var circleLabelText = p.circle === 'all'
     ? 'All'
     : circleLabel(p.circle || 'all');
@@ -762,6 +846,13 @@ var renderPostCard = function(p) {
   var commentBtnClass = commentsOpen
     ? 'post-action post-comment-btn post-action-active'
     : 'post-action post-comment-btn';
+  var isSaved = feedState.savedPosts.indexOf(p.id) !== -1;
+  var savePending = !!pendingPostSaves[p.id];
+  var saveBtn = context === 'profile' ? '' :
+    '<button class="post-action post-save-btn' + (isSaved ? ' post-action-active' : '') + '" data-save-post="' + escapeAttr(p.id) + '" aria-label="' + (isSaved ? 'Remove from saved posts' : 'Save post') + '" aria-pressed="' + (isSaved ? 'true' : 'false') + '"' + ((!feedState.savedPostsLoaded || savePending) ? ' disabled' : '') + '>' +
+      '<span class="post-save-icon" aria-hidden="true">' + (isSaved ? '&#9733;' : '&#9734;') + '</span>' +
+      '<span class="post-action-label">' + (isSaved ? 'Saved' : 'Save') + '</span>' +
+    '</button>';
   var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid);
   var deleteBtn = canDelete
     ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '" aria-label="Delete post">' +
@@ -840,11 +931,48 @@ var renderPostCard = function(p) {
           '</svg>' +
           '<span class="post-action-label">Share</span>' +
         '</button>' +
+        saveBtn +
         pinBtn +
         deleteBtn +
       '</div>' +
       (commentsOpen ? renderPostComments(p.id, comments, p.authorId) : '') +
     '</div>';
+};
+
+var handleSavePost = function(postId) {
+  if (!state.user || !postId || !feedState.savedPostsLoaded || pendingPostSaves[postId]) return;
+
+  var previous = feedState.savedPosts.slice();
+  var next = previous.slice();
+  var index = next.indexOf(postId);
+  var isRemoving = index !== -1;
+  if (isRemoving) {
+    next.splice(index, 1);
+  } else {
+    next.push(postId);
+  }
+
+  pendingPostSaves[postId] = true;
+  feedState.savedPosts = next;
+  renderFeedList();
+
+  updateDoc(doc(db, 'users', state.user.uid), {
+    savedPosts: isRemoving ? arrayRemove(postId) : arrayUnion(postId)
+  }).then(function() {
+    delete pendingPostSaves[postId];
+    renderFeedList();
+    showToast(isRemoving ? 'Removed from saved posts.' : 'Saved for later.', 'success');
+  }).catch(function(err) {
+    logError('Failed to update saved posts', err);
+    delete pendingPostSaves[postId];
+    var current = feedState.savedPosts.slice();
+    var currentIndex = current.indexOf(postId);
+    if (isRemoving && currentIndex === -1) current.push(postId);
+    if (!isRemoving && currentIndex !== -1) current.splice(currentIndex, 1);
+    feedState.savedPosts = current;
+    renderFeedList();
+    showToast('Could not update saved posts.', 'error');
+  });
 };
 
 var handleSharePost = function(postId) {
@@ -1080,7 +1208,7 @@ export const loadProfileRecentPosts = function(uid) {
       return;
     }
 
-    container.innerHTML = posts.map(renderPostCard).join('');
+    container.innerHTML = posts.map(function(post) { return renderPostCard(post, 'profile'); }).join('');
 
     container.querySelectorAll('[data-share-post]').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -1130,6 +1258,7 @@ export const loadProfileRecentPosts = function(uid) {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 var renderCirclePills = function() {
   return '<button class="pill active" data-filter="all">All</button>' +
+    '<button class="pill feed-saved-pill" data-filter="saved"><span aria-hidden="true">&#9733;</span> Saved</button>' +
     ALL_CIRCLES.map(function(id) {
       return '<button class="pill" data-filter="' + escapeAttr(id) + '">' + escapeHTML(circleLabel(id)) + '</button>';
     }).join('');
