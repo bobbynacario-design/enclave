@@ -1,21 +1,35 @@
-<div class="page-header">
-  <h1>Resources</h1>
+<div class="page-header-row resource-page-header">
+  <div>
+    <h1>Resources</h1>
+    <p class="text-muted">A member-curated library of useful tools, references, and ideas.</p>
+  </div>
+  <button type="button" class="btn btn-primary" id="resourceFormToggle" aria-expanded="false" aria-controls="resourceAddForm">Share resource</button>
 </div>
 
-<!-- Admin add form -->
-<div id="resourceAddForm" class="card resource-add-card" style="display:none;">
-  <h3 style="margin:0 0 12px;">Add Resource</h3>
+<!-- Member add form -->
+<div id="resourceAddForm" class="card resource-add-card" hidden>
+  <div class="resource-add-heading">
+    <div>
+      <h2>Share a useful resource</h2>
+      <p class="text-muted">Add something practical that other members can use.</p>
+    </div>
+    <button type="button" class="btn btn-ghost" id="resourceFormCancel">Cancel</button>
+  </div>
   <div class="form-row">
+    <label class="sr-only" for="resourceTitle">Resource title</label>
     <input type="text" id="resourceTitle" class="input" placeholder="Title" />
   </div>
-  <div class="form-row" style="display:flex;gap:8px;align-items:center;">
-    <input type="url" id="resourceUrl" class="input" placeholder="https://..." style="flex:1;" />
+  <div class="form-row resource-url-row">
+    <label class="sr-only" for="resourceUrl">Resource URL</label>
+    <input type="url" id="resourceUrl" class="input" placeholder="https://..." />
     <button type="button" class="btn btn-ghost" id="resourceDriveBtn" title="Attach from Google Drive">&#128194; Drive</button>
   </div>
   <div class="form-row">
+    <label class="sr-only" for="resourceDesc">Short description</label>
     <input type="text" id="resourceDesc" class="input" placeholder="Short description (optional)" />
   </div>
   <div class="form-row">
+    <label class="sr-only" for="resourceCategory">Resource category</label>
     <select id="resourceCategory" class="input">
       <option value="general">General Reference</option>
       <option value="podcast">Podcast</option>
@@ -28,19 +42,23 @@
 </div>
 
 <!-- Search -->
-<div class="resource-search-wrap">
-  <input type="text" id="resourceSearch" class="input" placeholder="Search resources..." />
+<div class="resource-discovery-bar">
+  <div class="resource-search-wrap">
+    <label class="sr-only" for="resourceSearch">Search resources</label>
+    <input type="search" id="resourceSearch" class="input" placeholder="Search title, description, or link..." autocomplete="off" />
+  </div>
+  <span class="resource-results-summary" id="resourceResultsSummary" aria-live="polite"></span>
 </div>
 
 <!-- Category filter pills -->
 <div class="resource-filters" id="resourceFilters">
-  <button class="resource-filter-pill active" data-cat="all">All</button>
-  <button class="resource-filter-pill" data-cat="saved">&#9733; Saved</button>
-  <button class="resource-filter-pill" data-cat="podcast">Podcast</button>
-  <button class="resource-filter-pill" data-cat="video">Video</button>
-  <button class="resource-filter-pill" data-cat="legal">Legal</button>
-  <button class="resource-filter-pill" data-cat="tool">Tool</button>
-  <button class="resource-filter-pill" data-cat="general">General</button>
+  <button type="button" class="resource-filter-pill active" data-cat="all">All</button>
+  <button type="button" class="resource-filter-pill" data-cat="saved">&#9733; Saved</button>
+  <button type="button" class="resource-filter-pill" data-cat="podcast">Podcast</button>
+  <button type="button" class="resource-filter-pill" data-cat="video">Video</button>
+  <button type="button" class="resource-filter-pill" data-cat="legal">Legal</button>
+  <button type="button" class="resource-filter-pill" data-cat="tool">Tool</button>
+  <button type="button" class="resource-filter-pill" data-cat="general">General</button>
 </div>
 
 <!-- Resource list -->
