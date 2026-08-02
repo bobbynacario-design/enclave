@@ -77,6 +77,7 @@ var runSignOut = function(accessDenied) {
   state.user = null;
   state.isAdmin = false;
   state.circles = [];
+  state.needsOnboarding = false;
   adminState.allowlist = [];
   if (feedState.unsubscribe) {
     feedState.unsubscribe();
@@ -185,6 +186,9 @@ var upsertUserDoc = function(user, allowlistEntry) {
     if (snap.exists()) {
       var existing = snap.data() || {};
       state.isAdmin = existing.isAdmin === true;
+      // Only explicit false opts a member into onboarding. Existing member
+      // records predate this field and must not be interrupted retroactively.
+      state.needsOnboarding = existing.onboardingCompleted === false;
       state.circles = state.isAdmin
         ? normalizeCircles(existing.circles)
         : allowedCircles.slice();
@@ -199,10 +203,12 @@ var upsertUserDoc = function(user, allowlistEntry) {
       });
     } else {
       state.circles = allowedCircles.slice();
+      state.needsOnboarding = true;
       base.joinedAt = serverTimestamp();
       base.bio      = '';
       base.role     = '';
       base.circles  = allowedCircles.slice();
+      base.onboardingCompleted = false;
       // The owner admin can set isAdmin during create (rule allows this).
       // Non-owners must omit the field — they get isAdmin set later via
       // the role-change update path by an existing admin.

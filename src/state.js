@@ -4,6 +4,7 @@ export const state = {
   accessDenied: false,
   isAdmin:      false,
   circles:      [],
+  needsOnboarding: false,
   googleAccessToken: ''
 };
 

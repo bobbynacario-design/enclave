@@ -21,6 +21,7 @@ const PRECACHE_URLS = [
   './src/util/shell-bridge.js',
   './src/ui/toast.js',
   './src/ui/modals.js',
+  './src/ui/onboarding.js',
   './src/ui/drivePicker.js',
   './src/auth/auth.js',
   './src/shell/routing.js',

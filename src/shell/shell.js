@@ -43,6 +43,7 @@ import { subscribeBriefingNotifier } from '../pages/briefings.js';
 import { subscribeNotifications }    from '../pages/notifications.js';
 import { loadPanelEvents }           from '../pages/events.js';
 import { loadSidebarProjects }       from '../pages/projects.js';
+import { openOnboarding }            from '../ui/onboarding.js';
 
 // ─── PWA install prompt ───────────────────────────────────────────────────────
 let deferredInstallPrompt = null;
@@ -330,6 +331,7 @@ export var renderShell = function() {
     loadSidebarProjects();
     syncResponsivePanels();
     loadPage(state.currentPage);
+    openOnboarding();
   }).catch(function(err) {
     logError('Failed to load shell', err);
     appEl.innerHTML = '<div id="loading">Failed to load shell.</div>';
