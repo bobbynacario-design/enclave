@@ -59,6 +59,9 @@ var statusLabel = function(status) {
 
 // ─── Task helpers ────────────────────────────────────────────────────────────
 var TASK_VIEW_KEY = 'enclave_task_view';
+var PROJECT_FILTER_KEY = 'enclave_project_filter';
+var projectListFilter = 'all';
+var projectListSearch = '';
 
 var PRIORITY_RANK = { high: 0, normal: 1, low: 2 };
 
@@ -326,8 +329,10 @@ var renderRecoveryCard = function(detailEl, opts) {
     resetProjectDetailState();
     var listEl2 = document.getElementById('projectsList');
     var headerEl2 = document.querySelector('.page-header-row');
+    var overviewEl2 = document.querySelector('.projects-overview');
     if (listEl2) listEl2.hidden = false;
     if (headerEl2) headerEl2.hidden = false;
+    if (overviewEl2) overviewEl2.hidden = false;
     detailEl.hidden = true;
     detailEl.innerHTML = '';
     syncURLState();
@@ -372,9 +377,11 @@ var renderRecoveryCard = function(detailEl, opts) {
 var loadProjectDetail = function(projectId) {
   var listEl = document.getElementById('projectsList');
   var headerEl = document.querySelector('.page-header-row');
+  var overviewEl = document.querySelector('.projects-overview');
   var detailEl = document.getElementById('projectDetail');
   if (listEl) listEl.hidden = true;
   if (headerEl) headerEl.hidden = true;
+  if (overviewEl) overviewEl.hidden = true;
   if (detailEl) {
     detailEl.hidden = false;
     detailEl.innerHTML = '<div class="skeleton-card" aria-hidden="true">' +
@@ -760,9 +767,11 @@ var renderProjectDetail = function(p) {
     resetProjectDetailState();
     var listEl = document.getElementById('projectsList');
     var headerEl = document.querySelector('.page-header-row');
+    var overviewEl = document.querySelector('.projects-overview');
     var detailEl2 = document.getElementById('projectDetail');
     if (listEl) listEl.hidden = false;
     if (headerEl) headerEl.hidden = false;
+    if (overviewEl) overviewEl.hidden = false;
     if (detailEl2) { detailEl2.hidden = true; detailEl2.innerHTML = ''; }
     syncURLState();
     if (projectsState.unsubscribe) {
@@ -1519,38 +1528,123 @@ var renderProjectsList = function() {
   var list = document.getElementById('projectsList');
   if (!list) return;
 
-  if (projectsState.projects.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No projects yet</div><p class="empty-state-text">Shared work and project updates will appear here.</p></div>';
+  var projects = projectsState.projects.slice();
+  var counts = { all: projects.length, active: 0, 'on-hold': 0, completed: 0 };
+  var taskTotal = 0;
+  var taskDone = 0;
+  projects.forEach(function(p) {
+    var status = p.status || 'active';
+    if (counts[status] !== undefined) counts[status] += 1;
+    taskTotal += typeof p.taskTotal === 'number' ? p.taskTotal : 0;
+    taskDone += typeof p.taskDone === 'number' ? p.taskDone : 0;
+  });
+
+  var summary = document.getElementById('projectsSummary');
+  var openTasks = Math.max(0, taskTotal - taskDone);
+  if (summary) {
+    summary.innerHTML =
+      '<div class="project-summary-card project-summary-active">' +
+        '<span class="project-summary-value">' + counts.active + '</span>' +
+        '<span class="project-summary-label">Active project' + (counts.active === 1 ? '' : 's') + '</span>' +
+      '</div>' +
+      '<div class="project-summary-card">' +
+        '<span class="project-summary-value">' + openTasks + '</span>' +
+        '<span class="project-summary-label">Open task' + (openTasks === 1 ? '' : 's') + '</span>' +
+      '</div>' +
+      '<div class="project-summary-card">' +
+        '<span class="project-summary-value">' + taskDone + '</span>' +
+        '<span class="project-summary-label">Task' + (taskDone === 1 ? '' : 's') + ' completed</span>' +
+      '</div>';
+  }
+
+  Object.keys(counts).forEach(function(key) {
+    var countEl = document.querySelector('[data-project-filter-count="' + key + '"]');
+    if (countEl) countEl.textContent = counts[key];
+  });
+
+  if (projects.length === 0) {
+    list.innerHTML = '<div class="empty-state projects-empty"><div class="empty-state-title">Start your first shared project</div><p class="empty-state-text">Create a workspace for tasks, files, decisions, and team updates.</p><button type="button" class="btn btn-primary" data-create-first-project>Create a project</button></div>';
+    var firstProjectBtn = list.querySelector('[data-create-first-project]');
+    if (firstProjectBtn) firstProjectBtn.onclick = function() {
+      projectsState.editingProjectId = null;
+      openProjectModal();
+    };
+    var noProjectsSummary = document.getElementById('projectsResultsSummary');
+    if (noProjectsSummary) noProjectsSummary.textContent = 'No projects yet';
     return;
   }
 
-  list.innerHTML = projectsState.projects.map(function(p) {
+  var searchTerm = projectListSearch.toLowerCase();
+  var filtered = projects.filter(function(p) {
+    var status = p.status || 'active';
+    if (projectListFilter !== 'all' && status !== projectListFilter) return false;
+    if (!searchTerm) return true;
+    var memberNames = Object.keys(p.memberNames || {}).map(function(uid) { return p.memberNames[uid]; }).join(' ');
+    var haystack = [p.name, p.description, memberNames].join(' ').toLowerCase();
+    return haystack.indexOf(searchTerm) !== -1;
+  });
+  var projectStatusRank = { active: 0, 'on-hold': 1, completed: 2 };
+  filtered.sort(function(a, b) {
+    var statusDiff = (projectStatusRank[a.status || 'active'] || 0) - (projectStatusRank[b.status || 'active'] || 0);
+    if (statusDiff !== 0) return statusDiff;
+    return getFirestoreTimeMs(b.updatedAt || b.createdAt) - getFirestoreTimeMs(a.updatedAt || a.createdAt);
+  });
+
+  var resultsSummary = document.getElementById('projectsResultsSummary');
+  if (resultsSummary) {
+    var filterLabel = projectListFilter === 'all' ? 'project' : statusLabel(projectListFilter).toLowerCase() + ' project';
+    resultsSummary.textContent = filtered.length + ' ' + filterLabel + (filtered.length === 1 ? '' : 's') +
+      (projectListSearch ? ' matching "' + projectListSearch + '"' : '');
+  }
+
+  if (filtered.length === 0) {
+    var emptyTitle = projectListSearch ? 'No matching projects' : 'No ' + statusLabel(projectListFilter).toLowerCase() + ' projects';
+    var emptyText = projectListSearch
+      ? 'Try another project name, description, or member.'
+      : 'Choose another status to see the rest of your work.';
+    list.innerHTML = '<div class="empty-state projects-empty"><div class="empty-state-title">' + escapeHTML(emptyTitle) + '</div><p class="empty-state-text">' + escapeHTML(emptyText) + '</p><button type="button" class="btn btn-ghost" data-reset-project-view>Show all projects</button></div>';
+    var resetBtn = list.querySelector('[data-reset-project-view]');
+    if (resetBtn) resetBtn.onclick = function() {
+      projectListFilter = 'all';
+      projectListSearch = '';
+      var searchInput = document.getElementById('projectSearchInput');
+      if (searchInput) searchInput.value = '';
+      try { localStorage.setItem(PROJECT_FILTER_KEY, projectListFilter); } catch (e) {}
+      syncProjectFilterUI();
+      renderProjectsList();
+    };
+    return;
+  }
+
+  list.innerHTML = filtered.map(function(p) {
     var statusClass = 'project-status project-status-' + (p.status || 'active').replace(/\s/g, '-');
     var desc = escapeHTML((p.description || '').substring(0, 120));
-    return '' +
-      '<div class="project-card" data-project-card="' + escapeAttr(p.id) + '">' +
-        '<div class="project-card-name">' + escapeHTML(p.name || 'Untitled') + '</div>' +
-        (desc ? '<div class="project-card-desc">' + desc + '</div>' : '') +
-        '<div class="project-card-footer">' +
-          '<span class="' + statusClass + '">' + escapeHTML(statusLabel(p.status)) + '</span>' +
-          renderMemberStack(p) +
-          '<span class="project-card-tasks" data-task-count-for="' + escapeAttr(p.id) + '"></span>' +
-        '</div>' +
-      '</div>';
-  }).join('');
-
-  // Render task counts from denormalized counters on the project doc
-  projectsState.projects.forEach(function(p) {
-    var el = document.querySelector('[data-task-count-for="' + p.id + '"]');
-    if (!el) return;
     var total = typeof p.taskTotal === 'number' ? p.taskTotal : 0;
     var done = typeof p.taskDone === 'number' ? p.taskDone : 0;
-    if (total > 0) {
-      var pct = Math.round((done / total) * 100);
-      el.innerHTML = '<span class="project-card-tasks-label">' + done + '/' + total + ' tasks</span>' +
-        '<div class="project-card-progress"><div class="project-card-progress-fill" style="width:' + pct + '%"></div></div>';
-    }
-  });
+    var pct = total > 0 ? Math.max(0, Math.min(100, Math.round((done / total) * 100))) : 0;
+    var updatedMs = getFirestoreTimeMs(p.updatedAt || p.createdAt);
+    var updatedLabel = updatedMs ? 'Updated ' + relativeTime(new Date(updatedMs)) : 'No updates yet';
+    var progressHtml = total > 0
+      ? '<div class="project-card-progress-row"><span>' + done + ' of ' + total + ' tasks</span><strong>' + pct + '%</strong></div>' +
+        '<div class="project-card-progress" role="progressbar" aria-label="Task progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><div class="project-card-progress-fill" style="width:' + pct + '%"></div></div>'
+      : '<div class="project-card-no-tasks">No tasks added yet</div>';
+    return '' +
+      '<article class="project-card">' +
+        '<button type="button" class="project-card-open" data-project-card="' + escapeAttr(p.id) + '" aria-label="Open ' + escapeAttr(p.name || 'Untitled') + '">' +
+          '<div class="project-card-heading">' +
+            '<span class="project-card-name">' + escapeHTML(p.name || 'Untitled') + '</span>' +
+            '<span class="project-card-arrow" aria-hidden="true">&rarr;</span>' +
+          '</div>' +
+          (desc ? '<div class="project-card-desc">' + desc + '</div>' : '<div class="project-card-desc project-card-desc-empty">Add a description to give the team context.</div>') +
+          progressHtml +
+          '<div class="project-card-footer">' +
+            '<span class="' + statusClass + '">' + escapeHTML(statusLabel(p.status)) + '</span>' +
+            renderMemberStack(p) +
+            '<span class="project-card-updated">' + escapeHTML(updatedLabel) + '</span>' +
+          '</div>' +
+        '</button>' +
+      '</article>';
+  }).join('');
 
   list.querySelectorAll('[data-project-card]').forEach(function(card) {
     card.addEventListener('click', function() {
@@ -1559,6 +1653,42 @@ var renderProjectsList = function() {
       loadProjectDetail(card.dataset.projectCard);
     });
   });
+};
+
+var syncProjectFilterUI = function() {
+  document.querySelectorAll('[data-project-filter]').forEach(function(btn) {
+    var active = btn.dataset.projectFilter === projectListFilter;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+};
+
+var wireProjectOverview = function() {
+  try {
+    var savedFilter = localStorage.getItem(PROJECT_FILTER_KEY);
+    if (savedFilter === 'all' || savedFilter === 'active' || savedFilter === 'on-hold' || savedFilter === 'completed') {
+      projectListFilter = savedFilter;
+    }
+  } catch (e) {}
+
+  var searchInput = document.getElementById('projectSearchInput');
+  if (searchInput) {
+    searchInput.value = projectListSearch;
+    searchInput.oninput = function() {
+      projectListSearch = searchInput.value.trim();
+      renderProjectsList();
+    };
+  }
+
+  document.querySelectorAll('[data-project-filter]').forEach(function(btn) {
+    btn.onclick = function() {
+      projectListFilter = btn.dataset.projectFilter;
+      try { localStorage.setItem(PROJECT_FILTER_KEY, projectListFilter); } catch (e) {}
+      syncProjectFilterUI();
+      renderProjectsList();
+    };
+  });
+  syncProjectFilterUI();
 };
 
 // ─── Projects: sidebar loader ───────────────────────────────────────────────
@@ -1766,6 +1896,8 @@ export var teardownProjectsPage = function() {
 
 // ─── Projects: page init ────────────────────────────────────────────────────
 export var initProjectsPage = function() {
+  wireProjectOverview();
+
   var createBtn = document.getElementById('createProjectBtn');
   if (createBtn) {
     createBtn.onclick = function() {

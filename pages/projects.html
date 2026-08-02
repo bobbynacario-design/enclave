@@ -1,10 +1,43 @@
 <div class="page-header page-header-row">
   <div>
     <h1>Projects</h1>
-    <p class="text-muted">Collaborative workspaces.</p>
+    <p class="text-muted">See what is moving, what needs attention, and where your team is making progress.</p>
   </div>
-  <button class="btn btn-primary" id="createProjectBtn">+ New Project</button>
+  <button class="btn btn-primary" id="createProjectBtn" type="button">+ New Project</button>
 </div>
+
+<section class="projects-overview" aria-label="Project overview">
+  <div class="projects-summary" id="projectsSummary" aria-live="polite">
+    <div class="project-summary-card">
+      <span class="project-summary-value">&mdash;</span>
+      <span class="project-summary-label">Active projects</span>
+    </div>
+    <div class="project-summary-card">
+      <span class="project-summary-value">&mdash;</span>
+      <span class="project-summary-label">Open tasks</span>
+    </div>
+    <div class="project-summary-card">
+      <span class="project-summary-value">&mdash;</span>
+      <span class="project-summary-label">Tasks completed</span>
+    </div>
+  </div>
+
+  <div class="projects-toolbar">
+    <label class="projects-search" for="projectSearchInput">
+      <span class="sr-only">Search projects</span>
+      <span class="projects-search-icon" aria-hidden="true">&#128269;</span>
+      <input type="search" id="projectSearchInput" class="form-input"
+             placeholder="Search projects or members" autocomplete="off" />
+    </label>
+    <div class="project-filter-pills" role="group" aria-label="Filter projects">
+      <button type="button" class="project-filter-pill active" data-project-filter="all" aria-pressed="true">All <span data-project-filter-count="all">0</span></button>
+      <button type="button" class="project-filter-pill" data-project-filter="active" aria-pressed="false">Active <span data-project-filter-count="active">0</span></button>
+      <button type="button" class="project-filter-pill" data-project-filter="on-hold" aria-pressed="false">On hold <span data-project-filter-count="on-hold">0</span></button>
+      <button type="button" class="project-filter-pill" data-project-filter="completed" aria-pressed="false">Completed <span data-project-filter-count="completed">0</span></button>
+    </div>
+  </div>
+  <p class="projects-results-summary" id="projectsResultsSummary" aria-live="polite">Loading projects&hellip;</p>
+</section>
 
 <!-- Create/Edit modal -->
 <div class="project-modal" id="projectModal">

@@ -3830,38 +3830,206 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   justify-content: space-between;
   gap: 12px;
 }
+.projects-overview {
+  margin-bottom: 16px;
+}
+.projects-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.project-summary-card {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.project-summary-card.project-summary-active {
+  background: linear-gradient(135deg, var(--surface), var(--green-dim));
+  border-color: rgba(45, 90, 61, 0.35);
+}
+.project-summary-value {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.project-summary-label {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.projects-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.projects-search {
+  position: relative;
+  flex: 1 1 260px;
+  max-width: 380px;
+}
+.projects-search .form-input {
+  width: 100%;
+  padding-left: 38px;
+}
+.projects-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  z-index: 1;
+  color: var(--text-muted);
+  font-size: 13px;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+.project-filter-pills {
+  display: flex;
+  gap: 6px;
+}
+.project-filter-pill {
+  min-height: 34px;
+  padding: 5px 10px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.project-filter-pill:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.project-filter-pill.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.project-filter-pill span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 3px;
+  padding: 0 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.project-filter-pill:not(.active) span {
+  background: var(--surface-3);
+}
+.projects-results-summary {
+  margin: 9px 2px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
 .projects-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
 }
 .project-card {
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
-.project-card:hover {
+.project-card:hover,
+.project-card:focus-within {
   border-color: var(--accent);
   box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
   transform: translateY(-1px);
+}
+.project-card-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.project-card-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.project-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 .project-card-name {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 4px;
 }
+.project-card-arrow {
+  color: var(--text-muted);
+  font-size: 18px;
+  transition: color 0.15s, transform 0.15s;
+}
+.project-card:hover .project-card-arrow,
+.project-card:focus-within .project-card-arrow {
+  color: var(--accent-text);
+  transform: translateX(2px);
+}
 .project-card-desc {
+  min-height: 38px;
   font-size: 13px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+.project-card-desc-empty {
+  font-style: italic;
+  opacity: 0.75;
+}
+.project-card-progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.project-card-progress-row strong {
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.project-card-no-tasks {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 .project-card-members {
   display: flex;
@@ -3905,9 +4073,76 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 14px;
   font-size: 12px;
   color: var(--text-muted);
 }
+.project-card-updated {
+  overflow: hidden;
+  margin-left: auto;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.projects-empty {
+  grid-column: 1 / -1;
+  padding: 42px 20px;
+  background: var(--surface);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius);
+}
+.projects-empty .btn {
+  margin-top: 14px;
+}
+
+@media (max-width: 760px) {
+  .projects-summary {
+    grid-template-columns: repeat(3, minmax(112px, 1fr));
+    margin-right: -16px;
+    padding-right: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .projects-summary::-webkit-scrollbar {
+    display: none;
+  }
+  .project-summary-card {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .project-summary-label {
+    white-space: normal;
+  }
+  .projects-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .projects-search {
+    flex-basis: auto;
+    max-width: none;
+  }
+  .projects-search .form-input,
+  .project-filter-pill {
+    min-height: 44px;
+  }
+  .project-filter-pills {
+    margin-right: -13px;
+    padding-right: 13px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .project-filter-pills::-webkit-scrollbar {
+    display: none;
+  }
+  .project-filter-pill {
+    flex: 0 0 auto;
+  }
+  .project-card-open {
+    min-height: 44px;
+  }
+}
+
 .project-status {
   display: inline-block;
   font-size: 11px;
@@ -4525,17 +4760,16 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   white-space: nowrap;
 }
 .project-card-progress {
-  flex: 1;
-  height: 4px;
+  width: 100%;
+  height: 5px;
   background: var(--surface-2);
-  border-radius: 2px;
+  border-radius: 999px;
   overflow: hidden;
-  min-width: 40px;
 }
 .project-card-progress-fill {
   height: 100%;
   background: var(--accent);
-  border-radius: 2px;
+  border-radius: 999px;
 }
 
 /* Activity log */
