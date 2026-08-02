@@ -28,6 +28,9 @@ import { showToast } from '../ui/toast.js';
 import { showConfirmModal, openBriefingImportModal, openBriefingDiscussModal } from '../ui/modals.js';
 
 const BRIEFING_READ_KEY = 'enclave_last_briefing_ts';
+let selectedBriefingId = '';
+let briefingTopicFilter = 'all';
+let briefingSearch = '';
 
 export const resetBriefingsState = function() {
   if (briefingsState.unsubscribe) {
@@ -54,6 +57,36 @@ const normalizeSections = function(b) {
   return sectionList;
 };
 
+const getRelevantStories = function(sec) {
+  const stories = Array.isArray(sec.stories) ? sec.stories : [];
+  const hasRelevantField = stories.length > 0 && typeof stories[0].relevant === 'boolean';
+  const relevant = [];
+  stories.forEach(function(story, idx) {
+    if (hasRelevantField && story.relevant !== true) return;
+    relevant.push({ story: story, key: sec.id + '_' + idx });
+  });
+  return relevant;
+};
+
+const getVisibleSections = function(b, topic, search) {
+  const searchTerm = String(search || '').toLowerCase();
+  const visible = [];
+  normalizeSections(b).forEach(function(sec) {
+    if (topic !== 'all' && sec.id !== topic) return;
+    const stories = getRelevantStories(sec).filter(function(entry) {
+      if (!searchTerm) return true;
+      const story = entry.story || {};
+      return [story.headline, story.body].join(' ').toLowerCase().indexOf(searchTerm) !== -1;
+    });
+    if (stories.length) visible.push({ id: sec.id, stories: stories });
+  });
+  return visible;
+};
+
+const countStories = function(sections) {
+  return sections.reduce(function(total, sec) { return total + sec.stories.length; }, 0);
+};
+
 // ─── Per-story reactions ─────────────────────────────────────────────────────
 // Stored as briefings/{bid}/reactions/{uid} = { stories: { 'global_0': true } }
 // where the key is '<sectionId>_<raw story index>'.
@@ -75,7 +108,7 @@ const updateReactionButtons = function(bid) {
 
 const syncReactionSubscriptions = function() {
   const liveIds = {};
-  briefingsState.briefings.forEach(function(b) { liveIds[b.id] = true; });
+  if (selectedBriefingId) liveIds[selectedBriefingId] = true;
 
   Object.keys(briefingsState.reactionUnsubs).forEach(function(bid) {
     if (liveIds[bid]) return;
@@ -85,6 +118,7 @@ const syncReactionSubscriptions = function() {
   });
 
   briefingsState.briefings.forEach(function(b) {
+    if (b.id !== selectedBriefingId) return;
     if (briefingsState.reactionUnsubs[b.id]) return;
     briefingsState.reactionUnsubs[b.id] = onSnapshot(
       collection(db, 'briefings', b.id, 'reactions'),
@@ -172,7 +206,7 @@ export const subscribeBriefingNotifier = function() {
   });
 };
 
-const renderBriefingCard = function(b) {
+const renderBriefingCard = function(b, visibleSections, isLatest) {
   const m = b.markets || {};
   const pseiMove = String(m.psei_move || '');
   const asxMove = String(m.asx_move || '');
@@ -203,23 +237,12 @@ const renderBriefingCard = function(b) {
       '</div>' +
     '</div>';
 
-  const sectionList = normalizeSections(b);
   const reactionState = getReactionState(b.id);
 
   let sections = '';
-  sectionList.forEach(function(sec) {
-    const stories = sec.stories || [];
-    // If stories have a 'relevant' boolean field, filter by it; otherwise show all.
-    // Reaction keys use the raw index so they stay stable regardless of filtering.
-    const hasRelevantField = stories.length > 0 && typeof stories[0].relevant === 'boolean';
-    const relevant = [];
-    stories.forEach(function(s, idx) {
-      if (hasRelevantField && s.relevant !== true) return;
-      relevant.push({ story: s, key: sec.id + '_' + idx });
-    });
-    if (!relevant.length) return;
+  visibleSections.forEach(function(sec) {
     const meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id, color: '#888' };
-    const storiesHtml = relevant.map(function(it) {
+    const storiesHtml = sec.stories.map(function(it) {
       const s = it.story;
       const count = reactionState.counts[it.key] || 0;
       const activeClass = reactionState.mine[it.key] ? ' active' : '';
@@ -263,11 +286,14 @@ const renderBriefingCard = function(b) {
 
   return '<div class="briefing-card">' +
     '<div class="briefing-card-head">' +
+      '<div class="briefing-edition-kicker">' + (isLatest ? 'Latest edition' : 'Archive edition') + '</div>' +
       '<div class="briefing-card-title">' + escapeHTML(b.date || 'Untitled') + '</div>' +
       '<div class="briefing-card-sub">Work Network · Daily Briefing</div>' +
     '</div>' +
     tickers +
-    (sections ? '<div class="briefing-sections">' + sections + '</div>' : '') +
+    (sections
+      ? '<div class="briefing-sections">' + sections + '</div>'
+      : '<div class="briefing-reader-empty"><div class="empty-state-title">No matching stories</div><p class="empty-state-text">Try another topic or search term.</p><button type="button" class="btn btn-ghost" data-reset-briefing-view>Show all stories</button></div>') +
     watchBox +
     '<div class="briefing-footer">' +
       '<span class="briefing-footer-tag">' + escapeHTML(b.circle || 'work-network') + '</span>' +
@@ -278,21 +304,95 @@ const renderBriefingCard = function(b) {
   '</div>';
 };
 
+const sortBriefings = function(items) {
+  return items.slice().sort(function(a, b) {
+    const publishedDiff = getBriefingPublishedMs(b) - getBriefingPublishedMs(a);
+    if (publishedDiff !== 0) return publishedDiff;
+    const da = new Date((a.date || '').replace(/^\w+,\s*/, ''));
+    const db2 = new Date((b.date || '').replace(/^\w+,\s*/, ''));
+    return (db2.getTime() || 0) - (da.getTime() || 0);
+  });
+};
+
+const renderBriefingControls = function(sorted, selected) {
+  const editionSelect = document.getElementById('briefingEditionSelect');
+  if (editionSelect) {
+    editionSelect.disabled = false;
+    editionSelect.innerHTML = sorted.map(function(b, index) {
+      return '<option value="' + escapeAttr(b.id) + '"' + (b.id === selected.id ? ' selected' : '') + '>' +
+        escapeHTML((index === 0 ? 'Latest — ' : '') + (b.date || 'Untitled')) +
+      '</option>';
+    }).join('');
+  }
+
+  const searchInput = document.getElementById('briefingSearchInput');
+  if (searchInput) searchInput.disabled = false;
+
+  const availableSections = normalizeSections(selected).filter(function(sec) {
+    return getRelevantStories(sec).length > 0;
+  });
+  if (briefingTopicFilter !== 'all' && !availableSections.some(function(sec) { return sec.id === briefingTopicFilter; })) {
+    briefingTopicFilter = 'all';
+  }
+
+  const filters = document.getElementById('briefingTopicFilters');
+  if (filters) {
+    const allActive = briefingTopicFilter === 'all';
+    filters.innerHTML = '<button type="button" class="briefing-topic-pill' + (allActive ? ' active' : '') + '" data-briefing-topic="all" aria-pressed="' + (allActive ? 'true' : 'false') + '">All topics</button>' +
+      availableSections.map(function(sec) {
+        const meta = BRIEFING_SECTION_META[sec.id] || { label: sec.id };
+        const active = briefingTopicFilter === sec.id;
+        return '<button type="button" class="briefing-topic-pill' + (active ? ' active' : '') + '" data-briefing-topic="' + escapeAttr(sec.id) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' + escapeHTML(meta.label) + '</button>';
+      }).join('');
+
+    filters.querySelectorAll('[data-briefing-topic]').forEach(function(btn) {
+      btn.onclick = function() {
+        briefingTopicFilter = btn.dataset.briefingTopic;
+        renderBriefingList();
+      };
+    });
+  }
+};
+
 const renderBriefingList = function() {
   const listEl = document.getElementById('briefingList');
   if (!listEl) return;
 
   if (!briefingsState.briefings.length) {
-    listEl.innerHTML = '<p class="text-muted">No briefings yet.</p>';
+    selectedBriefingId = '';
+    syncReactionSubscriptions();
+    const editionSelect = document.getElementById('briefingEditionSelect');
+    if (editionSelect) {
+      editionSelect.disabled = true;
+      editionSelect.innerHTML = '<option>No editions available</option>';
+    }
+    const searchInput = document.getElementById('briefingSearchInput');
+    if (searchInput) searchInput.disabled = true;
+    const resultsSummary = document.getElementById('briefingResultsSummary');
+    if (resultsSummary) resultsSummary.textContent = 'No briefings published yet';
+    listEl.innerHTML = '<div class="briefing-reader-empty"><div class="empty-state-title">No briefings yet</div><p class="empty-state-text">The next market and world briefing will appear here when it is published.</p></div>';
     return;
   }
 
-  const sorted = briefingsState.briefings.slice().sort(function(a, b) {
-    const da = new Date((a.date || '').replace(/^\w+,\s*/, ''));
-    const db2 = new Date((b.date || '').replace(/^\w+,\s*/, ''));
-    return (db2.getTime() || 0) - (da.getTime() || 0);
-  });
-  listEl.innerHTML = sorted.map(renderBriefingCard).join('');
+  const sorted = sortBriefings(briefingsState.briefings);
+  let selected = sorted.find(function(b) { return b.id === selectedBriefingId; });
+  if (!selected) {
+    selected = sorted[0];
+    selectedBriefingId = selected.id;
+    syncReactionSubscriptions();
+  }
+
+  renderBriefingControls(sorted, selected);
+  const allVisible = getVisibleSections(selected, 'all', '');
+  const visible = getVisibleSections(selected, briefingTopicFilter, briefingSearch);
+  const visibleCount = countStories(visible);
+  const totalCount = countStories(allVisible);
+  const resultsSummary = document.getElementById('briefingResultsSummary');
+  if (resultsSummary) {
+    resultsSummary.textContent = visibleCount + ' of ' + totalCount + ' stor' + (totalCount === 1 ? 'y' : 'ies') +
+      (briefingSearch ? ' matching "' + briefingSearch + '"' : '');
+  }
+  listEl.innerHTML = renderBriefingCard(selected, visible, selected.id === sorted[0].id);
 
   listEl.querySelectorAll('[data-briefing-delete]').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -326,6 +426,15 @@ const renderBriefingList = function() {
       if (found) openBriefingDiscussModal(found.briefing, found.story);
     });
   });
+
+  const resetBtn = listEl.querySelector('[data-reset-briefing-view]');
+  if (resetBtn) resetBtn.onclick = function() {
+    briefingTopicFilter = 'all';
+    briefingSearch = '';
+    const searchInput = document.getElementById('briefingSearchInput');
+    if (searchInput) searchInput.value = '';
+    renderBriefingList();
+  };
 };
 
 const subscribeBriefings = function() {
@@ -344,7 +453,9 @@ const subscribeBriefings = function() {
   }, function(err) {
     logError('Briefings subscribe error', err);
     const listEl = document.getElementById('briefingList');
-    if (listEl) listEl.innerHTML = '<p class="text-muted">Failed to load briefings.</p>';
+    const resultsSummary = document.getElementById('briefingResultsSummary');
+    if (resultsSummary) resultsSummary.textContent = 'Briefings unavailable';
+    if (listEl) listEl.innerHTML = '<div class="briefing-reader-empty"><div class="empty-state-title">Could not load briefings</div><p class="empty-state-text">Check your connection and try again.</p></div>';
   });
 };
 
@@ -365,11 +476,32 @@ const markBriefingsRead = function() {
 };
 
 export const initBriefingsPage = function() {
+  selectedBriefingId = '';
+  briefingTopicFilter = 'all';
+  briefingSearch = '';
+
   const adminBar = document.getElementById('briefingAdminBar');
   if (adminBar && state.isAdmin) adminBar.hidden = false;
 
   const importBtn = document.getElementById('briefingImportBtn');
   if (importBtn) importBtn.addEventListener('click', openBriefingImportModal);
+
+  const editionSelect = document.getElementById('briefingEditionSelect');
+  if (editionSelect) editionSelect.onchange = function() {
+    selectedBriefingId = editionSelect.value;
+    briefingTopicFilter = 'all';
+    briefingSearch = '';
+    const searchInput = document.getElementById('briefingSearchInput');
+    if (searchInput) searchInput.value = '';
+    syncReactionSubscriptions();
+    renderBriefingList();
+  };
+
+  const searchInput = document.getElementById('briefingSearchInput');
+  if (searchInput) searchInput.oninput = function() {
+    briefingSearch = searchInput.value.trim();
+    renderBriefingList();
+  };
 
   subscribeBriefings();
 };

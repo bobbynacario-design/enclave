@@ -1,12 +1,36 @@
-<div class="page-header">
-  <h1>Briefings <span class="briefing-new-badge" id="briefingNewBadge" style="display:none">New</span></h1>
-  <p class="text-muted">Daily market and world briefing for the Work Network circle.</p>
+<div class="page-header page-header-row briefing-page-header">
+  <div>
+    <h1>Briefings <span class="briefing-new-badge" id="briefingNewBadge" style="display:none">New</span></h1>
+    <p class="text-muted">Scan today&rsquo;s signal, focus by topic, or revisit an earlier edition.</p>
+  </div>
+
+  <!-- Admin only: shown/hidden by JS -->
+  <div id="briefingAdminBar" hidden>
+    <button class="btn btn-primary" id="briefingImportBtn" type="button">Import JSON</button>
+  </div>
 </div>
 
-<!-- Admin only: shown/hidden by JS -->
-<div id="briefingAdminBar" hidden>
-  <button class="btn btn-primary" id="briefingImportBtn">Import JSON</button>
-</div>
+<section class="briefing-reader-tools" aria-label="Briefing reader controls">
+  <label class="briefing-edition-field" for="briefingEditionSelect">
+    <span class="briefing-tool-label">Edition</span>
+    <select class="form-input" id="briefingEditionSelect" disabled>
+      <option>Loading briefings&hellip;</option>
+    </select>
+  </label>
+  <label class="briefing-search" for="briefingSearchInput">
+    <span class="sr-only">Search this briefing</span>
+    <span class="briefing-search-icon" aria-hidden="true">&#128269;</span>
+    <input type="search" class="form-input" id="briefingSearchInput"
+           placeholder="Search this edition" autocomplete="off" disabled />
+  </label>
+
+  <div class="briefing-topic-row">
+    <div class="briefing-topic-filters" id="briefingTopicFilters" role="group" aria-label="Filter stories by topic">
+      <button type="button" class="briefing-topic-pill active" data-briefing-topic="all" aria-pressed="true">All topics</button>
+    </div>
+    <p class="briefing-results-summary" id="briefingResultsSummary" aria-live="polite">Loading today&rsquo;s signal&hellip;</p>
+  </div>
+</section>
 
 <!-- Briefing list -->
 <div id="briefingList">
