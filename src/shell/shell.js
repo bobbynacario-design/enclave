@@ -112,19 +112,19 @@ export var renderLogin = function() {
   }
 
   app.innerHTML =
-    '<div class="login-wrap">' +
+    '<main class="login-wrap" aria-labelledby="loginTitle">' +
       '<div class="login-card">' +
         '<div class="login-logo">' +
-          '<svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+          '<svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
             '<polygon points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5" fill="#1A362B" stroke="#F4F1EA" stroke-width="3"/>' +
             '<path d="M50,5 L50,50 L90,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
             '<path d="M50,50 L10,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
             '<path d="M42,38 L60,38 M42,50 L56,50 M42,62 L60,62 M42,38 L42,62" fill="none" stroke="#F4F1EA" stroke-width="4" stroke-linecap="round"/>' +
           '</svg>' +
-          '<div class="login-logo-text">ENCLAVE</div>' +
+          '<h1 class="login-logo-text" id="loginTitle">ENCLAVE</h1>' +
         '</div>' +
-        '<div class="login-tagline">private &middot; invite-only</div>' +
-        '<div class="login-desc">A private workspace for business interruption consulting and network management.</div>' +
+        '<p class="login-tagline">private &middot; invite-only</p>' +
+        '<p class="login-desc" id="loginDescription">A private workspace for business interruption consulting and network management.</p>' +
         deniedHTML +
         '<button id="googleSignInBtn" class="btn-google">' +
           '<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
@@ -137,7 +137,7 @@ export var renderLogin = function() {
         '</button>' +
         '<a class="login-privacy" href="privacy.html">Privacy Policy</a>' +
       '</div>' +
-    '</div>';
+    '</main>';
 
   document.getElementById('googleSignInBtn').addEventListener('click', handleSignIn);
 
@@ -326,11 +326,12 @@ var applyAccessChange = function(visibleChanged) {
     return;
   }
 
-  // subscribeFeed builds its query from the circle list, so a stale listener
-  // either queries a revoked circle and trips the read rules, or misses a
-  // newly granted one. loadPage tears the old listener down before resubscribing.
-  if (visibleChanged && state.currentPage === 'feed') {
-    loadPage('feed');
+  // Feed and Events both build their queries from the circle list. Reload the
+  // active circle-bound page so revoked content is removed immediately and
+  // newly granted content appears without requiring a manual navigation.
+  if (visibleChanged &&
+      (state.currentPage === 'feed' || state.currentPage === 'events')) {
+    loadPage(state.currentPage);
   }
 };
 
