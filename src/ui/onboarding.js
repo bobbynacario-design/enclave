@@ -65,7 +65,7 @@ var stepContent = function() {
       '<div class="onboarding-step-copy">' +
         '<p class="onboarding-eyebrow">Invitation verified</p>' +
         '<h2 id="onboardingTitle">Welcome, ' + escapeHTML(firstName) + '.</h2>' +
-        '<p>Your Enclave membership is active. A quick setup will make the network useful from your first visit.</p>' +
+        '<p>You\'re in. A quick setup takes about a minute.</p>' +
       '</div>' +
       '<div class="onboarding-circle-panel">' +
         '<div class="onboarding-section-label">Your private circles</div>' +
@@ -78,17 +78,17 @@ var stepContent = function() {
     return '' +
       '<div class="onboarding-step-copy">' +
         '<p class="onboarding-eyebrow">Complete your profile</p>' +
-        '<h2 id="onboardingTitle">Help the network know where you fit.</h2>' +
-        '<p>A clear role and short introduction make trusted connections easier.</p>' +
+        '<h2 id="onboardingTitle">Tell people a little about you.</h2>' +
+        '<p>It helps members who don\'t know you yet.</p>' +
       '</div>' +
       '<div class="onboarding-fields">' +
         '<div>' +
-          '<label for="onboardingRole">Role or specialty</label>' +
-          '<input class="edit-input" id="onboardingRole" type="text" maxlength="60" required placeholder="e.g. Business interruption consultant" value="' + escapeAttr(onboardingDraft.role) + '" />' +
+          '<label for="onboardingRole">What you do</label>' +
+          '<input class="edit-input" id="onboardingRole" type="text" maxlength="60" required placeholder="e.g. Nurse, student, run a café, retired" value="' + escapeAttr(onboardingDraft.role) + '" />' +
         '</div>' +
         '<div>' +
           '<label for="onboardingBio">Short introduction <span>Optional</span></label>' +
-          '<textarea class="edit-input edit-textarea" id="onboardingBio" rows="4" maxlength="280" placeholder="What do you work on, and how can members collaborate with you?">' + escapeHTML(onboardingDraft.bio) + '</textarea>' +
+          '<textarea class="edit-input edit-textarea" id="onboardingBio" rows="4" maxlength="280" placeholder="A line or two about you, and how you know the group.">' + escapeHTML(onboardingDraft.bio) + '</textarea>' +
           '<div class="onboarding-field-help">You can update this later from your member profile.</div>' +
         '</div>' +
       '</div>';
@@ -101,9 +101,9 @@ var stepContent = function() {
       '<p>We will take you there when setup is complete.</p>' +
     '</div>' +
     '<div class="onboarding-destinations">' +
-      renderDestination('briefings', 'Briefings', 'Catch up on the latest market and world intelligence.', true) +
-      renderDestination('members', 'Members', 'See who is in the network and discover relevant expertise.', false) +
-      renderDestination('feed', 'Feed', 'Read updates and join the active circle conversations.', false) +
+      renderDestination('briefings', 'Briefings', 'Catch up on the latest news in a few minutes.', true) +
+      renderDestination('members', 'Members', 'See who else is here.', false) +
+      renderDestination('feed', 'Feed', 'See what your circles are sharing.', false) +
     '</div>';
 };
 

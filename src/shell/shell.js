@@ -138,26 +138,26 @@ export var renderLogin = function() {
               '<div class="login-tagline">private &middot; invite-only</div>' +
             '</div>' +
           '</div>' +
-          '<p class="login-eyebrow">The private operating network</p>' +
-          '<h1 class="login-headline" id="loginTitle">Critical work moves faster inside trusted circles.</h1>' +
-          '<p class="login-desc" id="loginDescription">Enclave brings business interruption consultants and trusted collaborators into one confidential space for intelligence, relationships, and shared execution.</p>' +
+          '<p class="login-eyebrow">Your private network</p>' +
+          '<h1 class="login-headline" id="loginTitle">A private space for the people who matter.</h1>' +
+          '<p class="login-desc" id="loginDescription">Enclave brings family, friends and trusted colleagues into one invite-only space. Each group has its own circle, so people only see what is shared with them.</p>' +
           '<div class="login-benefits" aria-label="What members can do">' +
             '<article class="login-benefit">' +
               '<span class="login-benefit-index">01</span>' +
-              '<div><h2>Stay informed</h2><p>Start the day with concise market and world briefings built for the network.</p></div>' +
+              '<div><h2>Stay in touch</h2><p>Share news, photos and updates with the circles you choose, and message people directly.</p></div>' +
             '</article>' +
             '<article class="login-benefit">' +
               '<span class="login-benefit-index">02</span>' +
-              '<div><h2>Reach the right people</h2><p>Connect through private circles, member profiles, events, and direct conversations.</p></div>' +
+              '<div><h2>Plan together</h2><p>Organise events, trips and projects, with tasks and files kept in one place.</p></div>' +
             '</article>' +
             '<article class="login-benefit">' +
               '<span class="login-benefit-index">03</span>' +
-              '<div><h2>Move work forward</h2><p>Coordinate projects, tasks, files, decisions, and updates without losing context.</p></div>' +
+              '<div><h2>Keep up to date</h2><p>Catch up on what your circles have shared, plus news briefings.</p></div>' +
             '</article>' +
           '</div>' +
           '<div class="login-trust" aria-label="Privacy and access standards">' +
-            '<span>Invite-only membership</span>' +
-            '<span>Circle-level access</span>' +
+            '<span>Invite-only</span>' +
+            '<span>You only see your circles</span>' +
             '<span>Verified email sign-in</span>' +
           '</div>' +
         '</section>' +
