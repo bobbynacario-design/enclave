@@ -30,7 +30,17 @@ import { ALL_CIRCLES, ASSET_VERSION, ENCLAVE_CONTACT_EMAIL } from '../util/const
 
 import { logError } from '../util/log.js';
 
-import { handleSignIn, handleSignOut } from '../auth/auth.js';
+import {
+  handleSignIn,
+  handleSignOut,
+  handleEmailSignIn,
+  handleEmailRegister,
+  handlePasswordReset,
+  resendVerificationEmail,
+  refreshEmailVerification,
+  checkAllowlist,
+  MIN_PASSWORD_LENGTH
+} from '../auth/auth.js';
 
 import {
   loadPage,
@@ -148,14 +158,37 @@ export var renderLogin = function() {
           '<div class="login-trust" aria-label="Privacy and access standards">' +
             '<span>Invite-only membership</span>' +
             '<span>Circle-level access</span>' +
-            '<span>Google authentication</span>' +
+            '<span>Verified email sign-in</span>' +
           '</div>' +
         '</section>' +
         '<aside class="login-card" aria-labelledby="loginAccessTitle">' +
           '<p class="login-card-kicker">Member access</p>' +
           '<h2 id="loginAccessTitle">Enter the Enclave</h2>' +
-          '<p class="login-card-desc">Use the Google account associated with your invitation.</p>' +
+          '<p class="login-card-desc">Use the email address your invitation was sent to.</p>' +
           deniedHTML +
+          '<form id="emailAuthForm" class="login-form" novalidate>' +
+            '<div class="login-mode" role="group" aria-label="Sign in or create an account">' +
+              '<button type="button" class="login-mode-btn active" data-auth-mode="signin" aria-pressed="true">Sign in</button>' +
+              '<button type="button" class="login-mode-btn" data-auth-mode="register" aria-pressed="false">Create account</button>' +
+            '</div>' +
+            '<div class="form-group" id="authNameGroup" hidden>' +
+              '<label for="authName">Your name</label>' +
+              '<input id="authName" type="text" autocomplete="name" maxlength="80" />' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label for="authEmail">Email</label>' +
+              '<input id="authEmail" type="email" autocomplete="email" inputmode="email" required />' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label for="authPassword">Password</label>' +
+              '<input id="authPassword" type="password" autocomplete="current-password" required />' +
+              '<p class="login-form-hint" id="authPasswordHint" hidden>At least ' + MIN_PASSWORD_LENGTH + ' characters.</p>' +
+            '</div>' +
+            '<p class="login-form-message" id="authFormMessage" role="alert" hidden></p>' +
+            '<button type="submit" class="btn btn-primary login-submit" id="authSubmitBtn">Sign in</button>' +
+            '<button type="button" class="login-link" id="forgotPasswordBtn">Forgot password?</button>' +
+          '</form>' +
+          '<div class="login-divider" aria-hidden="true"><span>or</span></div>' +
           '<button id="googleSignInBtn" class="btn-google" aria-describedby="loginDescription">' +
             '<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
               '<path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>' +
@@ -163,7 +196,7 @@ export var renderLogin = function() {
               '<path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>' +
               '<path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>' +
             '</svg>' +
-            '<span>Sign in with Google</span>' +
+            '<span>Continue with Google</span>' +
           '</button>' +
           '<div class="login-access-request">' +
             '<span>Not yet a member?</span>' +
@@ -178,6 +211,7 @@ export var renderLogin = function() {
     '</main>';
 
   document.getElementById('googleSignInBtn').addEventListener('click', handleSignIn);
+  bindEmailAuthForm();
 
   var retryBtn = document.getElementById('loginRetryBtn');
   if (retryBtn) {
@@ -186,6 +220,207 @@ export var renderLogin = function() {
       renderLogin();
     });
   }
+};
+
+// ─── Login: email + password form ─────────────────────────────────────────────
+var bindEmailAuthForm = function() {
+  var form = document.getElementById('emailAuthForm');
+  if (!form) return;
+
+  var nameGroup   = document.getElementById('authNameGroup');
+  var nameInput   = document.getElementById('authName');
+  var emailInput  = document.getElementById('authEmail');
+  var passInput   = document.getElementById('authPassword');
+  var passHint    = document.getElementById('authPasswordHint');
+  var message     = document.getElementById('authFormMessage');
+  var submitBtn   = document.getElementById('authSubmitBtn');
+  var forgotBtn   = document.getElementById('forgotPasswordBtn');
+  var mode = 'signin';
+
+  var showMessage = function(text, tone) {
+    message.textContent = text || '';
+    message.hidden = !text;
+    message.classList.toggle('is-success', tone === 'success');
+  };
+
+  var setMode = function(next) {
+    mode = next;
+    var registering = mode === 'register';
+    form.querySelectorAll('[data-auth-mode]').forEach(function(btn) {
+      var active = btn.dataset.authMode === mode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    nameGroup.hidden = !registering;
+    passHint.hidden = !registering;
+    passInput.setAttribute('autocomplete', registering ? 'new-password' : 'current-password');
+    submitBtn.textContent = registering ? 'Create account' : 'Sign in';
+    forgotBtn.hidden = registering;
+    showMessage('');
+  };
+
+  form.querySelectorAll('[data-auth-mode]').forEach(function(btn) {
+    btn.addEventListener('click', function() { setMode(btn.dataset.authMode); });
+  });
+
+  var readEmail = function() {
+    return emailInput.value.trim().toLowerCase();
+  };
+
+  var validate = function() {
+    var email = readEmail();
+    if (mode === 'register' && !nameInput.value.trim()) {
+      nameInput.focus();
+      return 'Enter your name.';
+    }
+    if (!email || email.indexOf('@') === -1) {
+      emailInput.focus();
+      return 'Enter the email address your invitation was sent to.';
+    }
+    if (!passInput.value) {
+      passInput.focus();
+      return 'Enter your password.';
+    }
+    if (mode === 'register' && passInput.value.length < MIN_PASSWORD_LENGTH) {
+      passInput.focus();
+      return 'Use at least ' + MIN_PASSWORD_LENGTH + ' characters for your password.';
+    }
+    return '';
+  };
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var problem = validate();
+    if (problem) {
+      showMessage(problem);
+      return;
+    }
+    showMessage('');
+    var registering = mode === 'register';
+    submitBtn.disabled = true;
+    submitBtn.textContent = registering ? 'Creating account...' : 'Signing in...';
+
+    var request = registering
+      ? handleEmailRegister(nameInput.value.trim(), readEmail(), passInput.value)
+      : handleEmailSignIn(readEmail(), passInput.value);
+
+    request.then(function(result) {
+      // On success onAuthStateChanged has already replaced this screen.
+      if (!document.body.contains(form)) return;
+      submitBtn.disabled = false;
+      submitBtn.textContent = registering ? 'Create account' : 'Sign in';
+      if (!result.ok && result.message) showMessage(result.message);
+    });
+  });
+
+  forgotBtn.addEventListener('click', function() {
+    var email = readEmail();
+    if (!email || email.indexOf('@') === -1) {
+      showMessage('Enter your email address above, then choose Forgot password.');
+      emailInput.focus();
+      return;
+    }
+    forgotBtn.disabled = true;
+    handlePasswordReset(email).then(function(result) {
+      forgotBtn.disabled = false;
+      if (result.ok) {
+        showMessage('If there\'s an account for ' + email + ', a password reset link is on its way. ' +
+          'Also works if you joined with Google and want a password.', 'success');
+      } else {
+        showMessage(result.message);
+      }
+    });
+  });
+
+  setMode('signin');
+};
+
+// ─── Render: verify email screen ──────────────────────────────────────────────
+// Shown to a signed-in email/password account that hasn't clicked its link yet.
+// Nothing from Firestore loads here; the rules would refuse it anyway.
+var verifyCheckInFlight = false;
+
+export var renderVerifyEmail = function(user) {
+  var app = document.getElementById('app');
+  var email = (user && user.email) || '';
+
+  app.innerHTML =
+    '<main class="login-wrap" aria-labelledby="verifyTitle">' +
+      '<div class="login-shell login-shell--single">' +
+        '<aside class="login-card">' +
+          '<p class="login-card-kicker">One more step</p>' +
+          '<h2 id="verifyTitle">Check your inbox</h2>' +
+          '<p class="login-card-desc">A verification link was sent to <strong>' + escapeHTML(email) + '</strong>. ' +
+            'Open it, then come back here. You only need to do this once.</p>' +
+          '<p class="login-form-message" id="verifyMessage" role="status" hidden></p>' +
+          '<button type="button" class="btn btn-primary login-submit" id="verifyContinueBtn">I\'ve verified, continue</button>' +
+          '<div class="login-verify-actions">' +
+            '<button type="button" class="login-link" id="verifyResendBtn">Resend the email</button>' +
+            '<button type="button" class="login-link" id="verifySignOutBtn">Use a different account</button>' +
+          '</div>' +
+          '<div class="login-card-footer">' +
+            '<span>Can\'t find it? Check your spam or promotions folder.</span>' +
+            '<a class="login-privacy" href="privacy.html">Privacy Policy</a>' +
+          '</div>' +
+        '</aside>' +
+      '</div>' +
+    '</main>';
+
+  var message = document.getElementById('verifyMessage');
+  var continueBtn = document.getElementById('verifyContinueBtn');
+
+  var showMessage = function(text, tone) {
+    message.textContent = text || '';
+    message.hidden = !text;
+    message.classList.toggle('is-success', tone === 'success');
+  };
+
+  var tryContinue = function(silent) {
+    if (verifyCheckInFlight) return;
+    verifyCheckInFlight = true;
+    if (!silent) continueBtn.disabled = true;
+    refreshEmailVerification().then(function(verifiedUser) {
+      if (verifiedUser) {
+        renderLoading('Checking access...');
+        checkAllowlist(verifiedUser);
+        return;
+      }
+      if (!silent) showMessage('Not verified yet. Open the link in the email first, then try again.');
+    }).catch(function(err) {
+      logError('Verification check failed', err);
+      if (!silent) showMessage('Couldn\'t check just now. Try again in a moment.');
+    }).finally(function() {
+      verifyCheckInFlight = false;
+      if (document.body.contains(continueBtn)) continueBtn.disabled = false;
+    });
+  };
+
+  continueBtn.addEventListener('click', function() { tryContinue(false); });
+
+  document.getElementById('verifyResendBtn').addEventListener('click', function(e) {
+    var btn = e.currentTarget;
+    btn.disabled = true;
+    resendVerificationEmail().then(function(result) {
+      btn.disabled = false;
+      if (result.ok) {
+        showMessage('Sent. Check ' + email + ' for the new link.', 'success');
+      } else {
+        showMessage(result.message);
+      }
+    });
+  });
+
+  document.getElementById('verifySignOutBtn').addEventListener('click', handleSignOut);
+
+  // Coming back from the mail app usually means the link was just clicked.
+  var onReturn = function() {
+    if (!document.body.contains(continueBtn)) {
+      document.removeEventListener('visibilitychange', onReturn);
+      return;
+    }
+    if (document.visibilityState === 'visible') tryContinue(true);
+  };
+  document.addEventListener('visibilitychange', onReturn);
 };
 
 // ─── Render: app shell (logged in) ───────────────────────────────────────────

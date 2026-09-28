@@ -2,8 +2,18 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Every rule below that trusts the caller's identity goes through here.
+    // email_verified matters because these rules trust token.email (allowlist,
+    // owner, project invites): an unverified email/password account could
+    // otherwise register with someone else's invited address. Google accounts
+    // are always verified.
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null &&
+        request.auth.token.get('email_verified', false) == true;
+    }
+
+    function allowlistPath() {
+      return /databases/$(database)/documents/allowlist/$(request.auth.token.email.lower());
     }
 
     function userDocExists() {
@@ -124,11 +134,20 @@ service cloud.firestore {
       // Reconsider if app moves toward broader access.
       allow list: if userDocExists();
 
+      // A member record can only be created for an allowlisted email, and only
+      // with circles that invite grants. Without this, any signed-in account
+      // could write its own record with every circle and read them all.
       allow create: if signedIn() &&
         request.auth.uid == userId &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.email == request.auth.token.email &&
         request.resource.data.circles is list &&
+        (
+          ownerAdmin() || (
+            exists(allowlistPath()) &&
+            request.resource.data.circles.hasOnly(get(allowlistPath()).data.circles)
+          )
+        ) &&
         (
           !request.resource.data.keys().hasAny(['isAdmin']) ||
           (ownerAdmin() && request.resource.data.isAdmin is bool)

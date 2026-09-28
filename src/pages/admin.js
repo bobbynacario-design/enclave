@@ -1067,7 +1067,7 @@ var queueInviteEmail = function(email, circles, personalMessage) {
     '</td></tr></table>' +
     '</td></tr>' +
     '<tr><td style="padding:0 32px 32px;" align="center">' +
-    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;margin:0 0 4px 0;text-align:center;">Sign in with this Google account:</p>' +
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;margin:0 0 4px 0;text-align:center;">Sign in with this email address (create a password, or use Google):</p>' +
     '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#1a1a1a;margin:0;text-align:center;">' + escapeHTML(email) + '</p>' +
     '</td></tr>' +
     '<tr><td style="border-top:1px solid #e5e5e5;padding:24px 32px;">' +
@@ -1102,7 +1102,7 @@ var queueInviteEmail = function(email, circles, personalMessage) {
         t +=
           '\n\n' +
           'Open Enclave: ' + inviteURL + '\n\n' +
-          'Sign in with this Google account: ' + email + '\n\n' +
+          'Sign in with this email address (create a password, or use Google): ' + email + '\n\n' +
           '—\n\n' +
           'Enclave is private and invite-only. If you weren\'t expecting this\n' +
           'email, you can ignore it.';

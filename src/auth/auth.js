@@ -5,6 +5,12 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  updateProfile,
+  reload,
   GoogleAuthProvider as GAP
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
@@ -138,6 +144,144 @@ export var handleSignIn = function() {
 export var handleSignOut = function() {
   if (authFlowState.busy) return;
   runSignOut(false);
+};
+
+// ─── Auth: email + password ───────────────────────────────────────────────────
+// Any email address works as long as it is on the allowlist — the same
+// checkAllowlist() gate Google sign-in goes through. Email accounts must be
+// verified before any data loads: the Firestore/Storage rules trust the
+// token's email, so an unverified account could otherwise claim someone
+// else's invite. Google accounts arrive already verified.
+export var MIN_PASSWORD_LENGTH = 8;
+
+export var emailAuthMessage = function(err) {
+  switch (err && err.code) {
+    case 'auth/invalid-email':
+      return 'That email address doesn\'t look right.';
+    case 'auth/missing-password':
+      return 'Enter your password.';
+    case 'auth/weak-password':
+      return 'Use at least ' + MIN_PASSWORD_LENGTH + ' characters for your password.';
+    case 'auth/email-already-in-use':
+      return 'There\'s already an account for this email. Sign in instead. If you ' +
+        'joined with Google, use Continue with Google, or Forgot password to set a password.';
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Email or password is incorrect. New here? Choose Create account.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a few minutes and try again.';
+    case 'auth/operation-not-allowed':
+      return 'Email sign-in isn\'t switched on yet. Use Continue with Google for now.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact the admin.';
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.';
+    default:
+      return 'Couldn\'t sign in. Please try again.';
+  }
+};
+
+// Send the reader back to this page after the emailed link, falling back to
+// Firebase's default landing page if this origin isn't an authorized domain.
+var CONTINUE_URL_ERRORS = [
+  'auth/unauthorized-continue-uri',
+  'auth/invalid-continue-uri',
+  'auth/missing-continue-uri'
+];
+
+var continueSettings = function() {
+  return { url: window.location.origin + window.location.pathname };
+};
+
+var withContinueFallback = function(send) {
+  return send(continueSettings()).catch(function(err) {
+    if (CONTINUE_URL_ERRORS.indexOf(err && err.code) !== -1) return send(undefined);
+    throw err;
+  });
+};
+
+var runEmailFlow = function(work) {
+  if (authFlowState.busy) return Promise.resolve({ ok: false, message: '' });
+  state.accessDenied = false;
+  authFlowState.busy = true;
+  return work().then(function() {
+    return { ok: true };
+  }).catch(function(err) {
+    logError('Email auth error', err);
+    return { ok: false, message: emailAuthMessage(err) };
+  }).finally(function() {
+    authFlowState.busy = false;
+  });
+};
+
+var sendVerification = function(user) {
+  return withContinueFallback(function(settings) {
+    return sendEmailVerification(user, settings);
+  });
+};
+
+// onAuthStateChanged in app.js picks up the new session from here.
+export var handleEmailSignIn = function(email, password) {
+  return runEmailFlow(function() {
+    return signInWithEmailAndPassword(auth, email, password);
+  });
+};
+
+export var handleEmailRegister = function(name, email, password) {
+  return runEmailFlow(function() {
+    return createUserWithEmailAndPassword(auth, email, password).then(function(cred) {
+      // The name becomes the member's display name once access is granted.
+      return updateProfile(cred.user, { displayName: name }).catch(function(err) {
+        logError('Display name update failed', err);
+      }).then(function() {
+        return sendVerification(cred.user).catch(function(err) {
+          logError('Verification email failed', err);
+          showToast('We couldn\'t send the verification email. Use Resend on the next screen.', 'error');
+        });
+      });
+    });
+  });
+};
+
+export var resendVerificationEmail = function() {
+  if (!auth.currentUser) return Promise.resolve({ ok: false, message: 'Sign in again first.' });
+  return sendVerification(auth.currentUser).then(function() {
+    return { ok: true };
+  }).catch(function(err) {
+    logError('Verification resend failed', err);
+    return { ok: false, message: emailAuthMessage(err) };
+  });
+};
+
+// Deliberately says the same thing whether or not an account exists, so the
+// form can't be used to discover who is a member.
+export var handlePasswordReset = function(email) {
+  return withContinueFallback(function(settings) {
+    return sendPasswordResetEmail(auth, email, settings);
+  }).then(function() {
+    return { ok: true };
+  }).catch(function(err) {
+    if (err && err.code === 'auth/user-not-found') return { ok: true };
+    logError('Password reset error', err);
+    return { ok: false, message: emailAuthMessage(err) };
+  });
+};
+
+// Re-read the account after the member clicks the emailed link. The ID token
+// is force-refreshed so Firestore sees the verified email straight away —
+// otherwise the cached token keeps email_verified false for up to an hour.
+export var refreshEmailVerification = function() {
+  var user = auth.currentUser;
+  if (!user) return Promise.resolve(null);
+  return reload(user).then(function() {
+    var current = auth.currentUser;
+    if (!current || !current.emailVerified) return null;
+    return current.getIdToken(true).then(function() {
+      return current;
+    });
+  });
 };
 
 // ─── Auth: allowlist check ────────────────────────────────────────────────────

@@ -48,6 +48,7 @@ import {
   renderShell,
   renderLogin,
   renderLoading,
+  renderVerifyEmail,
   loadPanelCircles
 } from './src/shell/shell.js';
 
@@ -81,6 +82,12 @@ registerNotificationNavigator(function(page, params) {
 // ─── Auth state listener ──────────────────────────────────────────────────────
 onAuthStateChanged(auth, function(user) {
   if (user) {
+    // Email/password accounts must verify their address before the allowlist
+    // check runs. Google accounts arrive verified and skip straight through.
+    if (!user.emailVerified) {
+      renderVerifyEmail(user);
+      return;
+    }
     renderLoading('Checking access...');
     checkAllowlist(user);
   } else {
