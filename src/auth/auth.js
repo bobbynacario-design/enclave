@@ -169,7 +169,11 @@ export var emailAuthMessage = function(err) {
     case 'auth/invalid-login-credentials':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return 'Email or password is incorrect. New here? Choose Create account.';
+      // A member who joined with Google has no password yet, and Firebase
+      // reports that the same way as a wrong password.
+      return 'Email or password is incorrect. If you usually use Continue with Google, ' +
+        'you don\'t have a password yet: choose Forgot password to set one. ' +
+        'New here? Choose Create account.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/operation-not-allowed':
