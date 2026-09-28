@@ -217,6 +217,27 @@ const destroyCircle = async (db, circle) => {
 // Passes a circle to its longest-standing remaining member, or deletes it
 // if nobody is left. Used when the owner leaves or is removed.
 const handOver = async (db, circle, leavingUid, caller) => {
+  // The original circles always belong to an admin, and are never deleted.
+  // The only way here for one is an admin removing the admin who owned it,
+  // so it passes to the admin doing the removal.
+  if (isLegacy(circle.id)) {
+    if (!caller.isAdmin || caller.uid === leavingUid) {
+      throw fail("failed-precondition",
+          "The original circles stay with an admin.");
+    }
+    const batch = db.batch();
+    batch.update(circle.ref, {
+      ownerId: caller.uid,
+      ownerName: caller.name,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    const join = {circles: FieldValue.arrayUnion(circle.id)};
+    batch.update(db.collection("users").doc(caller.uid), join);
+    batch.update(db.collection("allowlist").doc(caller.email), join);
+    await batch.commit();
+    return {newOwnerId: caller.uid};
+  }
+
   const others = (await membersOf(db, circle.id))
       .filter((doc) => doc.id !== leavingUid)
       .sort((a, b) => joinedMs(a) - joinedMs(b));
