@@ -54,7 +54,7 @@ const engagementOf = (post) => {
 const sectionHtml = (title, inner) =>
   `<tr><td style="padding:0 32px 18px;">` +
   `<p style="${FONT}font-size:12px;font-weight:600;letter-spacing:1px;` +
-  `text-transform:uppercase;color:#7c5cbf;margin:0 0 8px 0;">` +
+  `text-transform:uppercase;color:#A04A2B;margin:0 0 8px 0;">` +
   escapeHtml(title) + `</p>` + inner + `</td></tr>`;
 
 const rowHtml = (inner) =>
@@ -204,7 +204,7 @@ const buildDigest = (user, week) => {
         rowHtml(escapeHtml(plural(week.briefingCount, "daily briefing")) +
         was + ` published this week &mdash; ` +
         `<a href="${APP_URL}?page=briefings" target="_blank" ` +
-        `style="color:#7c5cbf;">catch up in the app</a>.`));
+        `style="color:#A04A2B;">catch up in the app</a>.`));
   }
 
   const html =
@@ -214,7 +214,7 @@ const buildDigest = (user, week) => {
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0"` +
     ` width="600" style="max-width:600px;width:100%;` +
     `background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
-    `<tr><td bgcolor="#7c5cbf" style="padding:24px;">` +
+    `<tr><td bgcolor="#A04A2B" style="padding:24px;">` +
     `<table role="presentation" cellpadding="0" cellspacing="0"` +
     ` border="0"><tr>` +
     `<td style="vertical-align:middle;">` +
@@ -234,7 +234,7 @@ const buildDigest = (user, week) => {
     sections +
     `<tr><td style="padding:8px 32px 32px;" align="center">` +
     `<table role="presentation" cellpadding="0" cellspacing="0"` +
-    ` border="0"><tr><td bgcolor="#7c5cbf" style="border-radius:8px;">` +
+    ` border="0"><tr><td bgcolor="#A04A2B" style="border-radius:8px;">` +
     `<a href="${APP_URL}" target="_blank" style="display:inline-block;` +
     `padding:14px 32px;${FONT}font-size:16px;font-weight:600;` +
     `color:#ffffff;text-decoration:none;border-radius:8px;">` +

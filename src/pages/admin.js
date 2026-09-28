@@ -652,7 +652,7 @@ var queueNudgeEmail = function(email, name, message) {
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f5f7">' +
     '<tr><td align="center" style="padding:24px 16px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">' +
-    '<tr><td bgcolor="#7c5cbf" style="padding:24px;">' +
+    '<tr><td bgcolor="#A04A2B" style="padding:24px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
     '<td style="vertical-align:middle;">' +
     '<img src="https://bobbynacario-design.github.io/enclave/icon-192.png" width="56" height="56" alt="Enclave" style="display:block;border:0;border-radius:12px;">' +
@@ -671,7 +671,7 @@ var queueNudgeEmail = function(email, name, message) {
     renderEmailInstallBlock() +
     '<tr><td style="padding:8px 32px 32px;" align="center">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
-    '<td bgcolor="#7c5cbf" style="border-radius:8px;">' +
+    '<td bgcolor="#A04A2B" style="border-radius:8px;">' +
     '<a href="' + escapeAttr(inviteURL) + '" target="_blank" style="display:inline-block;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Open Enclave</a>' +
     '</td></tr></table>' +
     '</td></tr>' +
@@ -926,7 +926,7 @@ var renderEmailInstallBlock = function() {
       '</p>' +
     '</td></tr>' +
     '<tr><td style="padding:0 32px 14px;">' +
-      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#7c5cbf;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#A04A2B;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
         'iPhone / iPad (Safari)' +
       '</p>' +
       '<ol style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.6;">' +
@@ -936,7 +936,7 @@ var renderEmailInstallBlock = function() {
       '</ol>' +
     '</td></tr>' +
     '<tr><td style="padding:0 32px 14px;">' +
-      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#7c5cbf;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#A04A2B;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
         'Android (Chrome)' +
       '</p>' +
       '<ol style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.6;">' +
@@ -946,7 +946,7 @@ var renderEmailInstallBlock = function() {
       '</ol>' +
     '</td></tr>' +
     '<tr><td style="padding:0 32px 24px;">' +
-      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#7c5cbf;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
+      '<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#A04A2B;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.04em;">' +
         'Desktop (Chrome / Edge)' +
       '</p>' +
       '<ol style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;padding-left:20px;line-height:1.6;">' +
@@ -1015,8 +1015,8 @@ var queueInviteEmail = function(email, circles, personalMessage) {
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
       circleNames.map(function(name) {
         return '' +
-          '<td bgcolor="#ffffff" style="border:1px solid #d9c8ff;border-radius:16px;padding:6px 12px;white-space:nowrap;">' +
-            '<span style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#7c5cbf;">' + escapeHTML(name) + '</span>' +
+          '<td bgcolor="#ffffff" style="border:1px solid #F0CDBF;border-radius:16px;padding:6px 12px;white-space:nowrap;">' +
+            '<span style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#A04A2B;">' + escapeHTML(name) + '</span>' +
           '</td><td style="width:8px;"></td>';
       }).join('') +
       '</tr></table>'
@@ -1026,7 +1026,7 @@ var queueInviteEmail = function(email, circles, personalMessage) {
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f5f7">' +
     '<tr><td align="center" style="padding:24px 16px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">' +
-    '<tr><td bgcolor="#7c5cbf" style="padding:24px;">' +
+    '<tr><td bgcolor="#A04A2B" style="padding:24px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
     '<td style="vertical-align:middle;">' +
     '<img src="https://bobbynacario-design.github.io/enclave/icon-192.png" width="56" height="56" alt="Enclave" style="display:block;border:0;border-radius:12px;">' +
@@ -1044,7 +1044,7 @@ var queueInviteEmail = function(email, circles, personalMessage) {
     '</td></tr>' +
     (personalMessage
       ? '<tr><td style="padding:0 32px 16px;">' +
-          '<div style="background:#f5f0ff;border-left:3px solid #7c5cbf;border-radius:4px;padding:14px 16px;">' +
+          '<div style="background:#FBEFEA;border-left:3px solid #A04A2B;border-radius:4px;padding:14px 16px;">' +
             '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;margin:0;line-height:1.6;white-space:pre-wrap;">' +
               escapeHTML(personalMessage) +
             '</p>' +
@@ -1052,7 +1052,7 @@ var queueInviteEmail = function(email, circles, personalMessage) {
         '</td></tr>'
       : '') +
     '<tr><td style="padding:0 32px 32px;">' +
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f0ff" style="border-radius:8px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#FBEFEA" style="border-radius:8px;">' +
     '<tr><td style="padding:20px;">' +
     circlePills +
     '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#6b6b6b;line-height:1.5;margin:12px 0 0 0;">Each circle is a private space &#8212; you\'ll only see what people share in circles you\'re part of.</p>' +
@@ -1062,7 +1062,7 @@ var queueInviteEmail = function(email, circles, personalMessage) {
     renderEmailInstallBlock() +
     '<tr><td style="padding:8px 32px 32px;" align="center">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
-    '<td bgcolor="#7c5cbf" style="border-radius:8px;">' +
+    '<td bgcolor="#A04A2B" style="border-radius:8px;">' +
     '<a href="' + escapeAttr(inviteURL) + '" target="_blank" style="display:inline-block;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Open Enclave</a>' +
     '</td></tr></table>' +
     '</td></tr>' +

@@ -1,6 +1,8 @@
 // Enclave Service Worker
 
-const CACHE_NAME = 'enclave-shell-v2';
+// v3: new Member logo and icons (icons are served cache-first, so the old
+// ones would otherwise stick).
+const CACHE_NAME = 'enclave-shell-v3';
 
 const PRECACHE_URLS = [
   './',

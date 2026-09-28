@@ -37,7 +37,7 @@ const buildProjectInviteEmail = (opts) => {
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0"` +
     ` width="600" style="max-width:600px;width:100%;` +
     `background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
-    `<tr><td bgcolor="#7c5cbf" style="padding:24px;">` +
+    `<tr><td bgcolor="#A04A2B" style="padding:24px;">` +
     `<table role="presentation" cellpadding="0" cellspacing="0"` +
     ` border="0"><tr>` +
     `<td style="vertical-align:middle;">` +
@@ -57,7 +57,7 @@ const buildProjectInviteEmail = (opts) => {
     `the Projects page to join.</p></td></tr>` +
     `<tr><td style="padding:8px 32px 32px;" align="center">` +
     `<table role="presentation" cellpadding="0" cellspacing="0"` +
-    ` border="0"><tr><td bgcolor="#7c5cbf" style="border-radius:8px;">` +
+    ` border="0"><tr><td bgcolor="#A04A2B" style="border-radius:8px;">` +
     `<a href="${APP_URL}?page=projects" target="_blank"` +
     ` style="display:inline-block;padding:14px 32px;${FONT}` +
     `font-size:16px;font-weight:600;color:#ffffff;` +

@@ -15,12 +15,15 @@
   /* Control boundaries carry meaning, so they clear 3:1 (WCAG 1.4.11) where
      the decorative --border tokens above deliberately do not. 3.31:1. */
   --border-control: rgba(255,255,255,0.36);
-  --accent:         #7c5cbf;
-  /* --accent is a fill: white on it is 5.07:1. As text it is only 3.07-3.91:1,
-     so text uses its own lighter token — 4.87:1 on the worst surface. */
-  --accent-text:    #9d80de;
-  --accent-hover:   #9370db;
-  --focus-ring:     #9370db;
+  /* Terracotta accent. The logo's own terracotta (#D77855) is too light for
+     white text (3.13:1), so the fills use a deeper shade. */
+  --accent:         #B3542F;
+  /* --accent is a fill: white on it is 4.97:1. As text it is only 3.13-3.99:1,
+     so text uses its own lighter token — 5.94:1 on the worst surface. */
+  --accent-text:    #E08A6B;
+  /* Darker on hover so white text stays above 4.5:1 (5.88:1). */
+  --accent-hover:   #A34A2A;
+  --focus-ring:     #E08A6B;
   --success:        #2d5a3d;
   --success-hover:  #356b48;
   /* --success is a dark fill; as text on its own tint it was 2.10:1. */
@@ -29,7 +32,7 @@
      on --warning-dim. Now 5.27:1 there, 7.16:1 on --surface. */
   --warning:        #e8890b;
   --warning-dim:    #3a2a14;
-  --accent-dim:   rgba(124,92,191,0.12);
+  --accent-dim:   rgba(215,120,85,0.12);
   --gold:         #D4AF37;
   --gold-dim:     rgba(212,175,55,0.12);
   --green:        #2ECC71;
@@ -56,18 +59,19 @@ body.light {
   --border:       rgba(0,0,0,0.08);
   --border-2:     rgba(0,0,0,0.14);
   --border-control: rgba(0,0,0,0.44);
-  --accent:         #6A3A9A;
-  /* Light mode's accent already clears 4.5:1 as text (6.17-7.82:1). */
-  --accent-text:    #6A3A9A;
-  --accent-hover:   #7c5cbf;
-  --focus-ring:     #6A3A9A;
+  --accent:         #A04A2B;
+  /* Light mode's accent clears 4.5:1 both as a fill under white text (5.98:1)
+     and as text on every light surface (4.72-5.98:1). */
+  --accent-text:    #A04A2B;
+  --accent-hover:   #B3542F;
+  --focus-ring:     #A04A2B;
   --success:        #2d5a3d;
   --success-hover:  #356b48;
   --success-text:   #2d5a3d;
   /* Was #d97706 — 2.86:1 on --warning-dim, 3.19:1 on white. Now 5.14 / 5.73. */
   --warning:        #a1500a;
   --warning-dim:    #fef3c7;
-  --accent-dim:   rgba(106,58,154,0.1);
+  --accent-dim:   rgba(160,74,43,0.1);
   --gold:         #8B6914;
   --gold-dim:     rgba(139,105,20,0.1);
   --green:        #1A7A40;
@@ -142,14 +146,16 @@ body {
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
+/* Wordmark: plain wide-spaced DM Sans in the text colour, so the terracotta
+   stays in the mark. Same treatment on the login, mobile bar and onboarding. */
 .sidebar-logo-text {
-  font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 400;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
   letter-spacing: 0.2em;
-  color: var(--accent-text);
+  color: var(--text);
 }
 .theme-toggle {
   background: transparent;
@@ -589,11 +595,11 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-family: var(--serif);
-    font-size: 22px;
-    font-weight: 400;
-    letter-spacing: 0.15em;
-    color: var(--accent-text);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    color: var(--text);
     line-height: 1;
   }
   .shell-right {
@@ -801,7 +807,7 @@ body {
 }
 
 .toast-info {
-  border-color: rgba(124, 92, 191, 0.45);
+  border-color: rgba(215, 120, 85, 0.45);
 }
 
 /* ─── SW update banner ───────────────────────────────────────────────────── */
@@ -943,7 +949,7 @@ label {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 14% 18%, rgba(124, 92, 191, 0.16), transparent 32%),
+    radial-gradient(circle at 14% 18%, rgba(215, 120, 85, 0.16), transparent 32%),
     radial-gradient(circle at 85% 80%, rgba(45, 90, 61, 0.2), transparent 30%),
     var(--bg);
 }
@@ -999,11 +1005,11 @@ body.light .login-wrap::before {
 }
 
 .login-logo-text {
-  font-family: var(--serif);
-  font-size: 28px;
-  font-weight: 400;
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 600;
   letter-spacing: 0.22em;
-  color: var(--accent-text);
+  color: var(--text);
   line-height: 1;
 }
 
@@ -1400,7 +1406,7 @@ body.light .login-form-message.is-success {
     height: 52px;
   }
   .login-logo-text {
-    font-size: 24px;
+    font-size: 17px;
   }
   .login-headline {
     font-size: clamp(42px, 13vw, 56px);
@@ -1465,9 +1471,10 @@ body.light .login-form-message.is-success {
 }
 
 .onboarding-wordmark {
-  font-family: var(--serif);
-  color: var(--accent-text);
-  font-size: 20px;
+  font-family: var(--sans);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: 0.2em;
 }
 
@@ -2017,13 +2024,13 @@ body.light .login-form-message.is-success {
 
 .post-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
+  box-shadow: 0 4px 12px rgba(215, 120, 85, 0.08);
   transform: translateY(-1px);
 }
 
 .post-card-target {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(124, 92, 191, 0.35), 0 14px 28px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 0 0 1px rgba(215, 120, 85, 0.35), 0 14px 28px rgba(0, 0, 0, 0.18);
 }
 
 .post-pinned {
@@ -2467,7 +2474,7 @@ body.light .login-form-message.is-success {
 }
 
 .post-comment-btn.post-action-active {
-  background: rgba(124, 92, 191, 0.08);
+  background: rgba(215, 120, 85, 0.08);
 }
 
 @keyframes post-react-bounce {
@@ -2726,7 +2733,7 @@ body.light .login-form-message.is-success {
 .member-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
+  box-shadow: 0 4px 12px rgba(215, 120, 85, 0.08);
 }
 
 .member-card-profile {
@@ -3580,7 +3587,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 
 .event-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
+  box-shadow: 0 4px 12px rgba(215, 120, 85, 0.08);
   transform: translateY(-1px);
 }
 
@@ -4610,7 +4617,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 .project-card:hover,
 .project-card:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.08);
+  box-shadow: 0 4px 12px rgba(215, 120, 85, 0.08);
   transform: translateY(-1px);
 }
 .project-card-open {
@@ -4806,7 +4813,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 }
 .project-status-active    { background: rgba(45, 90, 61, 0.2);   color: var(--success-text); }
 .project-status-on-hold   { background: var(--warning-dim);      color: var(--warning); }
-.project-status-completed { background: rgba(124, 92, 191, 0.15); color: var(--accent-text); }
+.project-status-completed { background: rgba(215, 120, 85, 0.15); color: var(--accent-text); }
 
 /* Project detail */
 .project-detail-header { margin-bottom: 20px; }
@@ -5165,8 +5172,8 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
 .pending-invite-chip-remove:hover { color: var(--danger); }
 
 .pending-invitations-banner {
-  background: rgba(124, 92, 191, 0.08);
-  border: 1px solid rgba(124, 92, 191, 0.25);
+  background: rgba(215, 120, 85, 0.08);
+  border: 1px solid rgba(215, 120, 85, 0.25);
   border-radius: var(--radius);
   padding: 12px 16px;
   margin-bottom: 16px;
@@ -5184,7 +5191,7 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   align-items: center;
   gap: 10px;
   padding: 8px 0;
-  border-top: 1px solid rgba(124, 92, 191, 0.15);
+  border-top: 1px solid rgba(215, 120, 85, 0.15);
 }
 .pending-invitation-row:first-of-type { border-top: 0; }
 .pending-invitation-info { flex: 1; min-width: 0; }

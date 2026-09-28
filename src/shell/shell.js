@@ -128,10 +128,11 @@ export var renderLogin = function() {
         '<section class="login-story">' +
           '<div class="login-brand">' +
             '<svg width="62" height="62" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
-              '<polygon points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5" fill="#1A362B" stroke="#F4F1EA" stroke-width="3"/>' +
-              '<path d="M50,5 L50,50 L90,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
-              '<path d="M50,50 L10,72.5" fill="none" stroke="#F4F1EA" stroke-width="3"/>' +
-              '<path d="M42,38 L60,38 M42,50 L56,50 M42,62 L60,62 M42,38 L42,62" fill="none" stroke="#F4F1EA" stroke-width="4" stroke-linecap="round"/>' +
+              '<rect width="100" height="100" rx="22" fill="#1A362B"/>' +
+              '<g transform="translate(7 4) scale(0.92)">' +
+                '<line x1="30" y1="50" x2="60" y2="50" stroke="#D77855" stroke-width="10" stroke-linecap="round"/>' +
+                '<path d="M67.8 33.9 A24 24 0 1 0 67.8 66.1" fill="none" stroke="#F4F1EA" stroke-width="10" stroke-linecap="round"/>' +
+              '</g>' +
             '</svg>' +
             '<div>' +
               '<div class="login-logo-text">ENCLAVE</div>' +
