@@ -1,0 +1,23 @@
+<div class="page-header page-header-row">
+  <div>
+    <h1>Circles</h1>
+    <p class="text-muted">Small private groups for family, friends or a team. Only the people in a circle see what's shared there.</p>
+  </div>
+  <button class="btn btn-primary circles-new-btn" id="circlesNewBtn" type="button">+ New Circle</button>
+</div>
+
+<div class="card circles-create" id="circlesCreate" hidden>
+  <label class="profile-section-title" for="circlesCreateName">Circle name</label>
+  <input type="text" id="circlesCreateName" class="edit-input" maxlength="40" placeholder="e.g. Cousins, Book club, Weekend hikers" autocomplete="off" />
+  <p class="form-help">You'll look after it: you choose who's in it and can rename it later.</p>
+  <div class="edit-actions">
+    <button class="btn btn-ghost" id="circlesCreateCancel" type="button">Cancel</button>
+    <button class="btn btn-primary" id="circlesCreateSave" type="button">Create Circle</button>
+  </div>
+</div>
+
+<div id="circlesSetup"></div>
+
+<div class="circles-list" id="circlesList" aria-live="polite">
+  <div class="text-muted">Loading circles...</div>
+</div>

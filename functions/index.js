@@ -16,6 +16,9 @@ const {buildProjectInviteEmail} = require("./emails");
 
 initializeApp();
 
+// Member-created circles: create, invite, leave and so on (see circles.js).
+exports.circles = require("./circles").circles;
+
 const db = getFirestore();
 const messaging = getMessaging();
 

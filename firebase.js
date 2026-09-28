@@ -6,6 +6,7 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'https://www.gst
 import { getAuth, GoogleAuthProvider }  from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getFirestore }                 from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage }                   from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
+import { getFunctions }                 from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-functions.js';
 import {
   getMessaging,
   isSupported as isMessagingSupported
@@ -34,6 +35,7 @@ initializeAppCheck(app, {
 export const auth           = getAuth(app);
 export const db             = getFirestore(app);
 export const storage        = getStorage(app);
+export const functions      = getFunctions(app, 'asia-southeast1');
 export const googleProvider = new GoogleAuthProvider();
 
 // Messaging is only available in browsers with full Service Worker

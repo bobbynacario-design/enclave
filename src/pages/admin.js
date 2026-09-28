@@ -4,9 +4,9 @@ import {
   doc,
   collection,
   addDoc,
+  getDoc,
   getDocs,
   updateDoc,
-  deleteDoc,
   serverTimestamp,
   query,
   where,
@@ -31,8 +31,13 @@ import {
   circleLabel,
   renderCircleChecks,
   getCheckedCircles,
-  getVisibleCircles
+  sharedCircles,
+  sortCircles,
+  isLegacyCircle,
+  mergeAssignedCircles
 } from '../util/circles.js';
+
+import { circlesAction, circlesErrorMessage } from '../util/circles-api.js';
 
 import { logError } from '../util/log.js';
 
@@ -237,9 +242,15 @@ var renderAllowlistMembers = function() {
   }
 
   list.innerHTML = adminState.allowlist.map(function(entry) {
-    var circleTags = entry.circles.map(function(circleId) {
+    // Circles members started are private to them, admins included: show
+    // only how many there are.
+    var shown = sortCircles(sharedCircles(entry.circles, state));
+    var privateCount = entry.circles.length - shown.length;
+    var circleTags = shown.map(function(circleId) {
       return '<span class="circle-tag">' + escapeHTML(circleLabel(circleId)) + '</span>';
-    }).join('');
+    }).join('') + (privateCount > 0
+      ? '<span class="circle-tag circle-tag-empty">+' + privateCount + ' private</span>'
+      : '');
 
     if (!circleTags) {
       circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
@@ -315,16 +326,7 @@ var handleAdminInvite = function() {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
 
-  var payload = {
-    email:     email,
-    circles:   circles,
-    invitedBy: state.user.uid,
-    updatedAt: serverTimestamp()
-  };
-
-  setDoc(doc(db, 'allowlist', email), payload, { merge: true }).then(function() {
-    return syncUserDocsForAllowlist(email, circles);
-  }).then(function() {
+  saveAllowlistEntry(email, circles, { invitedBy: state.user.uid, invitedVia: 'admin' }).then(function() {
     return queueInviteEmail(email, circles);
   }).then(function() {
     emailEl.value = '';
@@ -343,20 +345,22 @@ var handleAdminInvite = function() {
 var handleAdminRemove = function(email) {
   if (!state.isAdmin || !email) return;
 
-  showConfirmModal('Remove invite', 'Remove ' + email + ' from the allowlist?', 'Remove').then(function(confirmed) {
+  showConfirmModal('Remove from Enclave',
+    'Remove ' + email + '? They lose access to Enclave and every circle they\'re in. ' +
+    'Any circle they look after passes to someone else in it.', 'Remove').then(function(confirmed) {
     if (!confirmed) return;
 
-    deleteDoc(doc(db, 'allowlist', email)).then(function() {
-      return syncUserDocsForAllowlist(email, []);
-    }).then(function() {
+    // Done server-side: it also takes them out of members' circles, which
+    // admins can't see or change.
+    circlesAction('revokeMember', { email: email }).then(function() {
       adminState.allowlist = adminState.allowlist.filter(function(entry) {
         return entry.email !== email;
       });
       renderAllowlistMembers();
-      showToast('Invite removed.', 'success');
+      showToast('Removed ' + email + '.', 'success');
     }).catch(function(err) {
-      logError('Failed to remove allowlist entry', err);
-      showToast('Failed to remove invite. Check console for details.', 'error');
+      logError('Failed to remove member', err);
+      showToast(circlesErrorMessage(err), 'error');
     });
   });
 };
@@ -376,12 +380,10 @@ var handleAdminEdit = function(email) {
   }).then(function(newCircles) {
     if (newCircles === null) return;
 
-    var old = entry.circles;
+    var old = entry.circles.filter(isLegacyCircle);
     if (newCircles.length === old.length && newCircles.every(function(c) { return old.indexOf(c) !== -1; })) return;
 
-    setDoc(doc(db, 'allowlist', email), { circles: newCircles, updatedAt: serverTimestamp() }, { merge: true }).then(function() {
-      return syncUserDocsForAllowlist(email, newCircles);
-    }).then(function() {
+    saveAllowlistEntry(email, newCircles).then(function() {
       return loadAllowlistMembers();
     }).then(function() {
       showToast('Circles updated.', 'success');
@@ -405,7 +407,7 @@ var handleAdminResend = function(email, btn) {
 
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
-    queueInviteEmail(email, entry.circles, result.message).then(function(mailRef) {
+    queueInviteEmail(email, sharedCircles(entry.circles, state), result.message).then(function(mailRef) {
       showToast('Invite queued. Checking delivery...', 'info');
       return waitForDelivery(mailRef, 30000);
     }).then(function(deliveryResult) {
@@ -475,9 +477,7 @@ var handleAdminBulkInvite = function() {
 
     var email = valid[i];
 
-    setDoc(doc(db, 'allowlist', email), { email: email, circles: circles, invitedBy: state.user.uid, updatedAt: serverTimestamp() }, { merge: true }).then(function() {
-      return syncUserDocsForAllowlist(email, circles);
-    }).then(function() {
+    saveAllowlistEntry(email, circles, { invitedBy: state.user.uid, invitedVia: 'admin' }).then(function() {
       return queueInviteEmail(email, circles);
     }).then(function() {
       succeeded++;
@@ -879,8 +879,27 @@ var waitForDigestRequest = function(docRef, timeoutMs) {
   });
 };
 
-var syncUserDocsForAllowlist = function(email, circles) {
-  var normalized = normalizeCircles(circles);
+// Admins set only the legacy circles. Any circle the person joined through
+// a member is kept as it is: the rules refuse an admin write that adds or
+// drops one.
+var saveAllowlistEntry = function(email, legacyCircles, fields) {
+  var ref = doc(db, 'allowlist', email);
+
+  return getDoc(ref).then(function(snap) {
+    var existing = snap.exists() ? (snap.data() || {}).circles : [];
+    var payload = Object.assign({
+      email:     email,
+      circles:   mergeAssignedCircles(existing, legacyCircles),
+      updatedAt: serverTimestamp()
+    }, fields || {});
+
+    return setDoc(ref, payload, { merge: true });
+  }).then(function() {
+    return syncUserDocsForAllowlist(email, legacyCircles);
+  });
+};
+
+var syncUserDocsForAllowlist = function(email, legacyCircles) {
   var usersQuery = query(collection(db, 'users'), where('email', '==', email));
 
   return getDocs(usersQuery).then(function(snap) {
@@ -890,15 +909,14 @@ var syncUserDocsForAllowlist = function(email, circles) {
       var userData = userSnap.data() || {};
       if (userData.isAdmin === true) return;
 
+      var merged = mergeAssignedCircles(userData.circles, legacyCircles);
+
       updates.push(updateDoc(doc(db, 'users', userSnap.id), {
-        circles: normalized.slice()
+        circles: merged.slice()
       }));
 
       if (state.user && state.user.uid === userSnap.id) {
-        state.circles = normalized.slice();
-        document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-          btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
-        });
+        state.circles = merged.slice();
         syncSidebarSelection();
         loadPanelCircles();
       }
@@ -907,7 +925,7 @@ var syncUserDocsForAllowlist = function(email, circles) {
         return item.uid === userSnap.id;
       });
       if (member) {
-        member.circles = normalized.slice();
+        member.circles = merged.slice();
       }
     });
 

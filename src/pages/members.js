@@ -19,7 +19,11 @@ import {
   renderCircleChecks,
   getCheckedCircles,
   getInitials,
-  getVisibleCircles
+  getVisibleCircles,
+  sharedCircles,
+  sortCircles,
+  isLegacyCircle,
+  mergeAssignedCircles
 } from '../util/circles.js';
 import { logError } from '../util/log.js';
 import { loadPage, syncURLState } from '../util/shell-bridge.js';
@@ -164,7 +168,7 @@ var renderMembersList = function() {
     var matchesCircle = memberCircleFilter === 'all' ||
       (Array.isArray(m.circles) && m.circles.indexOf(memberCircleFilter) !== -1);
     var hay = ((m.name || '') + ' ' + (m.role || '') + ' ' + (m.bio || '') + ' ' +
-      (m.email || '') + ' ' + (Array.isArray(m.circles) ? m.circles.map(circleLabel).join(' ') : '')).toLowerCase();
+      (m.email || '') + ' ' + sharedCircles(m.circles, state).map(circleLabel).join(' ')).toLowerCase();
     var matchesSearch = !memberSearchQuery || hay.indexOf(memberSearchQuery) !== -1;
     return matchesCircle && matchesSearch;
   });
@@ -218,12 +222,13 @@ var renderMemberCard = function(m) {
     : '';
   var avatarText = m.photoURL ? '' : initialsEsc;
 
-  var circles = Array.isArray(m.circles) ? m.circles : [];
+  // Only circles the viewer is in: private circles stay private.
+  var circles = sortCircles(sharedCircles(m.circles, state));
   var circleTags = circles.map(function(c) {
     return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
   }).join('');
   if (!circleTags) {
-    circleTags = '<span class="circle-tag circle-tag-empty">No circles</span>';
+    circleTags = '<span class="circle-tag circle-tag-empty">No shared circles</span>';
   }
 
   var roleLineHtml = roleBioEsc
@@ -342,12 +347,12 @@ var openProfile = function(uid) {
     : '';
   var avatarText = member.photoURL ? '' : initialsEsc;
 
-  var circles = Array.isArray(member.circles) ? member.circles : [];
+  var circles = sortCircles(sharedCircles(member.circles, state));
   var circleTags = circles.map(function(c) {
     return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
   }).join('');
   if (!circleTags) {
-    circleTags = '<span class="text-muted">Not in any circles.</span>';
+    circleTags = '<span class="text-muted">No circles in common.</span>';
   }
 
   var isSelf = state.user && state.user.uid === uid;
@@ -436,27 +441,32 @@ var renderEditProfileForm = function(member) {
 
   var bioVal  = escapeAttr(member.bio  || '');
   var roleVal = escapeAttr(member.role || '');
-  var currentCircles = Array.isArray(member.circles) ? member.circles : [];
+  var currentCircles = sortCircles(sharedCircles(member.circles, state));
   var canEditCircles = !!state.isAdmin;
+  var renderTags = function(list, emptyText) {
+    var tags = list.map(function(c) {
+      return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
+    }).join('');
+    return '<div class="member-circles">' +
+      (tags || '<span class="circle-tag circle-tag-empty">' + emptyText + '</span>') +
+    '</div>';
+  };
+  var circlesPageNote = '<p class="text-muted mt-8">Start, join or leave circles on the ' +
+    '<a href="?page=circles" data-open-circles-page>Circles page</a>.</p>';
+  // Admins can switch the three original circles on and off here; circles
+  // members start are joined and left on the Circles page, like everyone's.
+  var joinedCircles = currentCircles.filter(function(c) { return !isLegacyCircle(c); });
   var circlesHTML = canEditCircles
     ? '<div class="circle-check-grid" id="editCircles">' + renderCircleChecks(currentCircles) + '</div>' +
-      '<p class="text-muted mt-8">As an admin, you can update your own circle access here.</p>'
-    : (function() {
-        var circleTags = currentCircles.map(function(c) {
-          return '<span class="circle-tag">' + escapeHTML(circleLabel(c)) + '</span>';
-        }).join('');
-        if (!circleTags) {
-          circleTags = '<span class="circle-tag circle-tag-empty">No circles assigned</span>';
-        }
-        return '<div class="member-circles">' + circleTags + '</div>' +
-          '<p class="text-muted mt-8">Ask an admin if you need circle access changed.</p>';
-      })();
+      (joinedCircles.length ? '<div class="mt-8">' + renderTags(joinedCircles, '') + '</div>' : '') +
+      circlesPageNote
+    : renderTags(currentCircles, 'Not in any circles yet') + circlesPageNote;
 
   body.innerHTML =
     '<div class="profile-header">' +
       '<div class="profile-header-meta">' +
         '<h2 class="profile-name">Edit Profile</h2>' +
-        '<p class="text-muted">Update your bio and role.' + (canEditCircles ? ' You can also manage your circles.' : ' Circles are managed by admins.') + '</p>' +
+        '<p class="text-muted">Update your bio and role.</p>' +
       '</div>' +
     '</div>' +
     '<div class="profile-section">' +
@@ -500,6 +510,13 @@ var renderEditProfileForm = function(member) {
   });
   document.getElementById('editSaveBtn').addEventListener('click', function() {
     handleSaveProfile(member.uid);
+  });
+  body.querySelectorAll('[data-open-circles-page]').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      closeProfile();
+      loadPage('circles');
+    });
   });
 
   // Async: determine push support and wire the toggle button
@@ -558,7 +575,7 @@ var handleSaveProfile = function(uid) {
   var newRole = roleEl.value.trim();
   var newBio  = bioEl.value.trim();
   var newCircles = state.isAdmin
-    ? getCheckedCircles('#editCircles')
+    ? mergeAssignedCircles(state.circles, getCheckedCircles('#editCircles'))
     : null;
   var digestEl = document.getElementById('editDigestOptIn');
   var newDigestOptOut = digestEl ? !digestEl.checked : null;

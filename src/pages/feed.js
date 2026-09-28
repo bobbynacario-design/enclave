@@ -27,8 +27,8 @@ import { state, feedState, driveAttachment } from '../state.js';
 // Utilities
 import { escapeHTML, escapeAttr, extractFirstUrl, renderRichText, sanitizeRichHTML } from '../util/escape.js';
 import { relativeTime } from '../util/time.js';
-import { getVisibleCircles, getInitials, renderCircleOptions, circleLabel } from '../util/circles.js';
-import { FEED_PAGE_SIZE, ALL_CIRCLES } from '../util/constants.js';
+import { getVisibleCircles, listVisibleCircles, getInitials, renderCircleOptions, circleLabel } from '../util/circles.js';
+import { FEED_PAGE_SIZE } from '../util/constants.js';
 import { logError } from '../util/log.js';
 
 // UI helpers
@@ -197,7 +197,7 @@ export const initFeedPage = function() {
   initPhotoAttach();
 
   if (composeCircle) {
-    composeCircle.innerHTML = renderCircleOptions(true);
+    composeCircle.innerHTML = renderCircleOptions(true, state);
   }
 
   if (composeCircle) {
@@ -1259,7 +1259,7 @@ export const loadProfileRecentPosts = function(uid) {
 var renderCirclePills = function() {
   return '<button class="pill active" data-filter="all">All</button>' +
     '<button class="pill feed-saved-pill" data-filter="saved"><span aria-hidden="true">&#9733;</span> Saved</button>' +
-    ALL_CIRCLES.map(function(id) {
+    listVisibleCircles(state).map(function(id) {
       return '<button class="pill" data-filter="' + escapeAttr(id) + '">' + escapeHTML(circleLabel(id)) + '</button>';
     }).join('');
 };

@@ -111,7 +111,8 @@ const NOTIF_TYPE_ICONS = {
   'event-rsvp':      '📅',
   'briefing':        '📰',
   'task-due':        '⏰',
-  'project-invite':  '📁'
+  'project-invite':  '📁',
+  'circle':          '⭕'
 };
 
 let notifFilter = 'all';
@@ -120,7 +121,7 @@ let markAllBusy = false;
 const NOTIF_FILTER_TYPES = {
   conversations: ['mention', 'post-comment', 'project-comment'],
   work: ['task-assigned', 'task-status', 'task-due', 'project-invite'],
-  updates: ['event-rsvp', 'briefing']
+  updates: ['event-rsvp', 'briefing', 'circle']
 };
 
 const NOTIF_FILTER_LABELS = {

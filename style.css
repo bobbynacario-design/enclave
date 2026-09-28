@@ -2717,6 +2717,178 @@ body.light .login-form-message.is-success {
   }
 }
 
+/* ─── Circles page ───────────────────────────────────────────────────────── */
+.circles-new-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.circles-create .edit-input {
+  margin-top: 6px;
+}
+
+.circles-setup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.circles-setup-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.circles-setup p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.circles-setup .btn {
+  flex-shrink: 0;
+}
+
+.circle-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.circle-card-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.circle-card-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  word-break: break-word;
+}
+
+.circle-card-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.circle-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.circle-card-actions [data-danger]:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.circle-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.circle-rename .edit-input {
+  flex: 1;
+  min-width: 160px;
+  max-width: 320px;
+}
+
+.circle-people {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.circle-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+  min-height: 32px;
+}
+
+.circle-person-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  background-size: cover;
+  background-position: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.circle-person-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.circle-person-pending .circle-person-name {
+  color: var(--text-muted);
+}
+
+.circle-person-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.circle-invite {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.circle-invite .edit-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.circle-invite .btn {
+  flex-shrink: 0;
+}
+
+.circle-card .form-help {
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .circles-setup,
+  .circle-card-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .circle-card-actions {
+    justify-content: flex-start;
+  }
+}
+
 .member-card {
   background: var(--surface);
   border: 1px solid var(--border);

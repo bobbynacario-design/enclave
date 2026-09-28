@@ -905,7 +905,7 @@ const renderInlineEventComposer = function() {
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvCircle">Circle</label>' +
-        '<select id="inlineEvCircle" class="edit-input">' + renderCircleOptions(true) + '</select>' +
+        '<select id="inlineEvCircle" class="edit-input">' + renderCircleOptions(true, state) + '</select>' +
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvDesc">Description</label>' +

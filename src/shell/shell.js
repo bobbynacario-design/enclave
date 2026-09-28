@@ -2,6 +2,7 @@
 
 import {
   doc,
+  getDoc,
   collection,
   query,
   where,
@@ -15,7 +16,7 @@ import {
 
 import { db } from '../../firebase.js';
 
-import { state, shellState, projectsState, feedState } from '../state.js';
+import { state, shellState, projectsState, feedState, circlesState } from '../state.js';
 
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 
@@ -23,10 +24,12 @@ import {
   getInitials,
   circleLabel,
   getVisibleCircles,
-  normalizeCircles
+  listVisibleCircles,
+  normalizeCircles,
+  setCircleDirectory
 } from '../util/circles.js';
 
-import { ALL_CIRCLES, ASSET_VERSION, ENCLAVE_CONTACT_EMAIL } from '../util/constants.js';
+import { ASSET_VERSION, ENCLAVE_CONTACT_EMAIL } from '../util/constants.js';
 
 import { logError } from '../util/log.js';
 
@@ -429,10 +432,14 @@ export var renderVerifyEmail = function(user) {
 export var renderShell = function() {
   var appEl = document.getElementById('app');
 
-  fetch('components/shell.html?' + ASSET_VERSION).then(function(res) {
-    if (!res.ok) throw new Error('shell HTTP ' + res.status);
-    return res.text();
-  }).then(function(shellHTML) {
+  Promise.all([
+    fetch('components/shell.html?' + ASSET_VERSION).then(function(res) {
+      if (!res.ok) throw new Error('shell HTTP ' + res.status);
+      return res.text();
+    }),
+    loadCircleDirectory()
+  ]).then(function(results) {
+    var shellHTML = results[0];
     appEl.innerHTML = shellHTML;
 
     // Nav links
@@ -444,14 +451,6 @@ export var renderShell = function() {
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         window.enclaveGoPage(btn.dataset.page);
-      });
-    });
-
-    document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-      btn.hidden = getVisibleCircles(state).indexOf(btn.dataset.circle) === -1;
-      btn.addEventListener('click', function(e) {
-        e.preventDefault();
-        window.enclaveGoCircle(btn.dataset.circle);
       });
     });
 
@@ -551,6 +550,16 @@ export var renderShell = function() {
       });
     }
 
+    // Sidebar "new circle" link
+    var newCircleLink = document.querySelector('[data-action="new-circle"]');
+    if (newCircleLink) {
+      newCircleLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        circlesState.openCreate = true;
+        loadPage('circles');
+      });
+    }
+
     // Sidebar "new project" link
     var newProjLink = document.querySelector('[data-action="new-project"]');
     if (newProjLink) {
@@ -591,10 +600,6 @@ var applyAccessChange = function(visibleChanged) {
     btn.hidden = !state.isAdmin;
   });
 
-  document.querySelectorAll('.sidebar-link[data-circle]').forEach(function(btn) {
-    btn.hidden = visible.indexOf(btn.dataset.circle) === -1;
-  });
-
   // Filtered to a circle that was just revoked — drop back to the full feed.
   if (feedState.filter !== 'all' && feedState.filter !== 'saved' && visible.indexOf(feedState.filter) === -1) {
     feedState.filter = 'all';
@@ -609,13 +614,42 @@ var applyAccessChange = function(visibleChanged) {
     return;
   }
 
-  // Feed and Events both build their queries from the circle list. Reload the
-  // active circle-bound page so revoked content is removed immediately and
-  // newly granted content appears without requiring a manual navigation.
+  // Feed and Events both build their queries from the circle list, and the
+  // Circles page lists them. Reload the active circle-bound page so revoked
+  // content is removed immediately and newly granted content appears without
+  // requiring a manual navigation.
   if (visibleChanged &&
-      (state.currentPage === 'feed' || state.currentPage === 'events')) {
+      (state.currentPage === 'feed' || state.currentPage === 'events' ||
+       state.currentPage === 'circles')) {
     loadPage(state.currentPage);
   }
+};
+
+// ─── Circle directory ─────────────────────────────────────────────────────────
+// Reads the name and owner of each circle this person can see. Rules only let
+// members read a circle's record, so this is one get per circle rather than a
+// query. A circle that fails to load falls back to a generic label.
+var loadCircleDirectory = function() {
+  var ids = getVisibleCircles(state).filter(function(id) { return id !== 'all'; });
+
+  return Promise.all(ids.map(function(id) {
+    return getDoc(doc(db, 'circles', id)).then(function(snap) {
+      return snap.exists() ? Object.assign({ id: id }, snap.data()) : null;
+    }).catch(function(err) {
+      logError('Failed to load circle ' + id, err);
+      return null;
+    });
+  })).then(function(list) {
+    setCircleDirectory(list.filter(Boolean));
+  });
+};
+
+// After the Circles page changes membership or a name: reload names, then
+// redraw the sidebar, the panel and the current circle-bound page.
+export var refreshCircleAccess = function() {
+  return loadCircleDirectory().then(function() {
+    applyAccessChange(true);
+  });
 };
 
 // The presence heartbeat rewrites this same doc every 60s, so compare before
@@ -648,7 +682,10 @@ var subscribeUserDoc = function() {
       state.isAdmin = nextAdmin;
       state.circles = nextCircles;
 
-      applyAccessChange(prevVisible !== getVisibleCircles(state).join(','));
+      var visibleChanged = prevVisible !== getVisibleCircles(state).join(',');
+      loadCircleDirectory().then(function() {
+        applyAccessChange(visibleChanged);
+      });
     },
     function(err) {
       logError('User doc listener failed', err);
@@ -752,13 +789,15 @@ var loadOnlineUsers = function() {
 };
 
 // ─── Panel: circles ───────────────────────────────────────────────────────────
+// Also redraws the sidebar's circle list, so every caller that refreshes
+// the panel after a circle change keeps both in step.
 export var loadPanelCircles = function() {
+  renderSidebarCircles();
+
   var el = document.getElementById('panelCircles');
   if (!el) return;
 
-  var circles = state.isAdmin
-    ? ALL_CIRCLES.slice()
-    : normalizeCircles(state.circles);
+  var circles = listVisibleCircles(state);
 
   if (circles.length === 0) {
     el.className = 'panel-empty';
@@ -780,4 +819,32 @@ export var loadPanelCircles = function() {
       window.enclaveGoCircle(btn.dataset.panelCircle);
     });
   });
+};
+
+// ─── Sidebar: circles ─────────────────────────────────────────────────────────
+var renderSidebarCircles = function() {
+  var el = document.getElementById('sidebarCirclesList');
+  if (!el) return;
+
+  var circles = listVisibleCircles(state);
+
+  if (circles.length === 0) {
+    el.innerHTML = '<span class="text-muted" style="padding:0 12px;font-size:13px;">No circles yet</span>';
+    return;
+  }
+
+  el.innerHTML = circles.map(function(circleId) {
+    return '<a class="sidebar-link sidebar-sublink" data-circle="' + escapeAttr(circleId) + '" ' +
+      'href="?page=feed&amp;circle=' + encodeURIComponent(circleId) + '">' +
+      escapeHTML(circleLabel(circleId)) + '</a>';
+  }).join('');
+
+  el.querySelectorAll('[data-circle]').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      window.enclaveGoCircle(link.dataset.circle);
+    });
+  });
+
+  syncSidebarSelection();
 };

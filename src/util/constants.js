@@ -1,10 +1,19 @@
-export const ASSET_VERSION = 'v171';
+export const ASSET_VERSION = 'v172';
 
-export const ALL_CIRCLES = [
-  'hustle-hub',
-  'work-network',
-  'family'
+// The three original circles, owned by the owner-admin. Admins can assign
+// these directly; every other circle is created and managed by its members
+// through the `circles` Cloud Function.
+export const LEGACY_CIRCLES = [
+  { id: 'hustle-hub',   name: 'Hustle Hub' },
+  { id: 'work-network', name: 'Work Network' },
+  { id: 'family',       name: 'Family' }
 ];
+
+export const LEGACY_CIRCLE_IDS = LEGACY_CIRCLES.map(function(c) { return c.id; });
+
+// Feed and event queries filter with `where('circle', 'in', ...)`, which
+// accepts at most 30 values ('all' plus up to 29 circles).
+export const MAX_VISIBLE_CIRCLES = 29;
 
 export const FEED_PAGE_SIZE = 20;
 export const STRATEGY_APP_URL = 'https://bobbynacario-design.github.io/forensic-bi-strategy/';
@@ -18,7 +27,8 @@ export const VALID_PAGES = {
   projects:  true,
   resources: true,
   briefings: true,
-  notifications: true
+  notifications: true,
+  circles:   true
 };
 
 export const BRIEFING_SECTION_META = {

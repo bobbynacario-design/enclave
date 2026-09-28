@@ -35,14 +35,35 @@ service cloud.firestore {
         (userDocExists() && userData().isAdmin == true);
     }
 
+    // The three original circles. Admins can read and assign these. Every
+    // other circle is created by members (through the `circles` Cloud
+    // Function) and is private to its members, admins included.
+    function legacyCircles() {
+      return ['hustle-hub', 'work-network', 'family'];
+    }
+
+    function memberCircles(circles) {
+      return circles.toSet().difference(legacyCircles().toSet());
+    }
+
+    // True when two circle lists differ only in legacy circles. Admin edits
+    // go through this so they can't add anyone, themselves included, to a
+    // member's circle, or take anyone out of one.
+    function sameMemberCircles(next, prev) {
+      return memberCircles(next).hasAll(memberCircles(prev)) &&
+        memberCircles(prev).hasAll(memberCircles(next));
+    }
+
+    function inCircle(circle) {
+      return userDocExists() &&
+        userData().circles is list &&
+        circle in userData().circles;
+    }
+
     function canAccessCircle(circle) {
       return circle == 'all' ||
-        isAdmin() ||
-        (
-          userDocExists() &&
-          userData().circles is list &&
-          circle in userData().circles
-        );
+        (isAdmin() && circle in legacyCircles()) ||
+        inCircle(circle);
     }
 
     function eventExists(eventId) {
@@ -93,13 +114,31 @@ service cloud.firestore {
     match /allowlist/{email} {
       // Users can only read their own allowlist entry (used during sign-in
       // to determine circle access). Admins can list the full allowlist.
-      allow get: if signedIn() &&
-        request.auth.token.email.lower() == email;
+      allow get: if isAdmin() || (
+        signedIn() &&
+        request.auth.token.email.lower() == email
+      );
       allow list: if isAdmin();
-      allow create, update: if isAdmin() &&
+      // Admins assign legacy circles only; member circles are added and
+      // removed by the `circles` Cloud Function.
+      allow create: if isAdmin() &&
         request.resource.data.email == email &&
-        request.resource.data.circles is list;
+        request.resource.data.circles is list &&
+        memberCircles(request.resource.data.circles).size() == 0;
+      allow update: if isAdmin() &&
+        request.resource.data.email == email &&
+        request.resource.data.circles is list &&
+        sameMemberCircles(request.resource.data.circles,
+          resource.data.get('circles', []));
       allow delete: if isAdmin();
+    }
+
+    match /circles/{circleId} {
+      // Names and owners of the circles you're in. Written only by the
+      // `circles` Cloud Function.
+      allow get: if inCircle(circleId) ||
+        (isAdmin() && circleId in legacyCircles());
+      allow list, create, update, delete: if false;
     }
 
     match /auditLog/{auditId} {
@@ -143,9 +182,12 @@ service cloud.firestore {
         request.resource.data.email == request.auth.token.email &&
         request.resource.data.circles is list &&
         (
-          ownerAdmin() || (
+          (
             exists(allowlistPath()) &&
             request.resource.data.circles.hasOnly(get(allowlistPath()).data.circles)
+          ) || (
+            ownerAdmin() &&
+            request.resource.data.circles.hasOnly(legacyCircles())
           )
         ) &&
         (
@@ -154,11 +196,15 @@ service cloud.firestore {
         );
 
       allow update: if
-        // Admin updates: any field EXCEPT isAdmin can change
+        // Admin updates: any field EXCEPT isAdmin can change, and circles
+        // only by legacy circles
         (isAdmin() &&
           request.resource.data.uid == resource.data.uid &&
           request.resource.data.email == resource.data.email &&
-          request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false)
+          request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false) &&
+          request.resource.data.get('circles', []) is list &&
+          sameMemberCircles(request.resource.data.get('circles', []),
+            resource.data.get('circles', []))
         ) || (
         // Self-updates: cannot change uid, email, circles, or isAdmin
         signedIn() &&
@@ -199,7 +245,11 @@ service cloud.firestore {
         )
       );
 
-      allow update: if isAdmin() || (
+      allow update: if (
+        isAdmin() &&
+        canAccessCircle(resource.data.circle) &&
+        canAccessCircle(request.resource.data.circle)
+      ) || (
         signedIn() &&
         resource.data.authorId == request.auth.uid &&
         request.resource.data.authorId == resource.data.authorId &&
@@ -222,7 +272,10 @@ service cloud.firestore {
         request.resource.data.comments is list
       );
 
-      allow delete: if isAdmin() || (
+      allow delete: if (
+        isAdmin() &&
+        canAccessCircle(resource.data.circle)
+      ) || (
         signedIn() &&
         resource.data.authorId == request.auth.uid &&
         canAccessCircle(resource.data.circle)
@@ -481,9 +534,16 @@ service cloud.firestore {
     match /events/{eventId} {
       allow get, list: if signedIn() &&
         canAccessCircle(resource.data.circle);
-      allow create, delete: if isAdmin();
+      allow create: if isAdmin() &&
+        canAccessCircle(request.resource.data.circle);
+      allow delete: if isAdmin() &&
+        canAccessCircle(resource.data.circle);
 
-      allow update: if isAdmin() || (
+      allow update: if (
+        isAdmin() &&
+        canAccessCircle(resource.data.circle) &&
+        canAccessCircle(request.resource.data.circle)
+      ) || (
         signedIn() &&
         canAccessCircle(resource.data.circle) &&
         canAccessCircle(request.resource.data.circle) &&

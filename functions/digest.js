@@ -5,7 +5,9 @@
 
 const APP_URL = "https://bobbynacario-design.github.io/enclave/";
 const ICON_URL = APP_URL + "icon-192.png";
-const ALL_CIRCLES = ["hustle-hub", "work-network", "family"];
+// The original circles. Admins see these alongside their own circles;
+// circles other members create stay private to their members.
+const LEGACY_CIRCLES = ["hustle-hub", "work-network", "family"];
 
 const FONT = "font-family:Arial,Helvetica,sans-serif;";
 
@@ -89,7 +91,7 @@ const buildDigest = (user, week) => {
   const isAdmin = user.isAdmin === true;
   const own = Array.isArray(user.circles) ? user.circles : [];
   const visible = {all: true};
-  (isAdmin ? ALL_CIRCLES : own).forEach((c) => {
+  (isAdmin ? LEGACY_CIRCLES.concat(own) : own).forEach((c) => {
     visible[c] = true;
   });
 

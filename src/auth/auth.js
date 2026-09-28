@@ -339,16 +339,12 @@ var upsertUserDoc = function(user, allowlistEntry) {
       // Only explicit false opts a member into onboarding. Existing member
       // records predate this field and must not be interrupted retroactively.
       state.needsOnboarding = existing.onboardingCompleted === false;
-      state.circles = state.isAdmin
-        ? normalizeCircles(existing.circles)
-        : allowedCircles.slice();
+      // users/{uid}.circles is what the rules check, and members can't
+      // change it themselves (admins and the circles Cloud Function keep it
+      // in step with the allowlist), so read it rather than rewrite it.
+      state.circles = normalizeCircles(existing.circles);
 
-      var updatePayload = Object.assign({}, base);
-      if (!state.isAdmin) {
-        updatePayload.circles = allowedCircles.slice();
-      }
-
-      return updateDoc(ref, updatePayload).catch(function(err) {
+      return updateDoc(ref, base).catch(function(err) {
         logError('User doc update failed', err);
       });
     } else {

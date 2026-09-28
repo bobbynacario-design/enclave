@@ -30,6 +30,7 @@ import { initMessagesPage }      from '../pages/messages.js';
 import { initProjectsPage, teardownProjectsPage } from '../pages/projects.js';
 import { initResourcesPage }     from '../pages/resources.js';
 import { initNotificationsPage } from '../pages/notifications.js';
+import { initCirclesPage }       from '../pages/circles.js';
 
 // ─── Global nav handlers (set at module load time) ────────────────────────────
 window.enclaveGoPage = function(page) {
@@ -223,6 +224,7 @@ export var loadPage = function(page, pageParams) {
     if (page === 'resources')     initResourcesPage();
     if (page === 'briefings')     initBriefingsPage();
     if (page === 'notifications') initNotificationsPage();
+    if (page === 'circles')       initCirclesPage();
   }).catch(function(err) {
     logError('Failed to load page ' + page, err);
     slot.innerHTML = '<div class="card"><p class="text-muted">Failed to load ' + page + '.</p></div>';
@@ -240,7 +242,7 @@ export var syncSidebarSelection = function() {
   });
 
   // Highlight More button when a "more" page is active
-  var morePages = { events: true, members: true, resources: true, admin: true, notifications: true };
+  var morePages = { events: true, members: true, circles: true, resources: true, admin: true, notifications: true };
   var moreBtn = document.getElementById('mobileMoreBtn');
   if (moreBtn) moreBtn.classList.toggle('active', !!morePages[state.currentPage]);
 

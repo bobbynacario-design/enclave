@@ -20,7 +20,8 @@ import {
   registerAppURLGetter,
   registerPanelCirclesLoader,
   registerShellRenderer,
-  registerURLApplier
+  registerURLApplier,
+  registerCirclesRefresher
 } from './src/util/shell-bridge.js';
 
 import { checkAllowlist } from './src/auth/auth.js';
@@ -49,7 +50,8 @@ import {
   renderLogin,
   renderLoading,
   renderVerifyEmail,
-  loadPanelCircles
+  loadPanelCircles,
+  refreshCircleAccess
 } from './src/shell/shell.js';
 
 // ─── Shell-bridge registrations ───────────────────────────────────────────────
@@ -65,6 +67,7 @@ registerAppURLGetter(function()       { return getAppURL(); });
 registerPanelCirclesLoader(function() { loadPanelCircles(); });
 registerShellRenderer(function()      { renderShell(); });
 registerURLApplier(function()         { applyURLState(); });
+registerCirclesRefresher(function()   { return refreshCircleAccess(); });
 
 registerNotificationNavigator(function(page, params) {
   if (page && VALID_PAGES[page]) {

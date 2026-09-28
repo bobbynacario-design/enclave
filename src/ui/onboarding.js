@@ -8,7 +8,7 @@ import {
 
 import { db } from '../../firebase.js';
 import { state } from '../state.js';
-import { circleLabel } from '../util/circles.js';
+import { circleLabel, listVisibleCircles } from '../util/circles.js';
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 import { logError } from '../util/log.js';
 import { loadPage } from '../util/shell-bridge.js';
@@ -29,13 +29,10 @@ var renderProgress = function() {
 };
 
 var renderCircleTags = function() {
-  var circles = Array.isArray(state.circles) ? state.circles : [];
-  if (state.isAdmin) {
-    circles = ['hustle-hub', 'work-network', 'family'];
-  }
+  var circles = listVisibleCircles(state);
 
   if (!circles.length) {
-    return '<p class="onboarding-empty-circles">Your administrator will assign your private circles.</p>';
+    return '<p class="onboarding-empty-circles">You\'re not in a circle yet. You can start one on the Circles page, or wait to be added.</p>';
   }
 
   return circles.map(function(circle) {

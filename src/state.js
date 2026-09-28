@@ -212,6 +212,12 @@ export const notificationsState = {
   unreadCount:   0
 };
 
+// Circles page: set by the sidebar's "+ New Circle" link so the page opens
+// with the create form showing.
+export const circlesState = {
+  openCreate: false
+};
+
 export const pickerState = {
   context: 'feed',
   projectId: null

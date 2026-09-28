@@ -18,6 +18,7 @@ const PRECACHE_URLS = [
   './src/util/escape.js',
   './src/util/constants.js',
   './src/util/circles.js',
+  './src/util/circles-api.js',
   './src/util/time.js',
   './src/util/log.js',
   './src/util/shell-bridge.js',
@@ -36,7 +37,8 @@ const PRECACHE_URLS = [
   './src/pages/notifications.js',
   './src/pages/resources.js',
   './src/pages/briefings.js',
-  './src/pages/admin.js'
+  './src/pages/admin.js',
+  './src/pages/circles.js'
 ];
 
 // External origins that must never be intercepted
