@@ -325,6 +325,7 @@ var bindEmailAuthForm = function() {
       forgotBtn.disabled = false;
       if (result.ok) {
         showMessage('If there\'s an account for ' + email + ', a password reset link is on its way. ' +
+          'It often lands in spam or promotions, so check there if it isn\'t in your inbox within a minute. ' +
           'Also works if you joined with Google and want a password.', 'success');
       } else {
         showMessage(result.message);
