@@ -3962,6 +3962,11 @@ input[type="time"].edit-input::-webkit-calendar-picker-indicator:hover {
   gap: 6px;
 }
 
+.event-delete-btn:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
 .event-actions .btn.rsvped {
   background: var(--success);
   border-color: var(--success);

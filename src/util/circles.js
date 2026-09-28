@@ -86,7 +86,21 @@ export const listVisibleCircles = function(state) {
   return sortCircles(getVisibleCircles(state).filter(function(c) { return c !== 'all'; }));
 };
 
-// Circles someone can post or add events to: the ones they can see.
+// True when this person looks after the circle. They can remove posts and
+// events there (the rules check the same thing).
+export const isCircleOwner = function(circleId, state) {
+  var circle = directory[circleId];
+  return !!(circle && state.user && circle.ownerId === state.user.uid);
+};
+
+// Where someone can add events: admins anywhere they can see, including All
+// members; everyone else the circles members started that they're in.
+export const eventCircleIds = function(state) {
+  if (state.isAdmin) return ['all'].concat(listVisibleCircles(state));
+  return listVisibleCircles(state).filter(function(c) { return !isLegacyCircle(c); });
+};
+
+// Circles someone can post to: the ones they can see.
 export const renderCircleOptions = function(includeAll, state) {
   var circles = listVisibleCircles(state);
   var html = includeAll ? '<option value="all">All members</option>' : '';

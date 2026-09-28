@@ -1,4 +1,4 @@
-export const ASSET_VERSION = 'v172';
+export const ASSET_VERSION = 'v173';
 
 // The three original circles, owned by the owner-admin. Admins can assign
 // these directly; every other circle is created and managed by its members

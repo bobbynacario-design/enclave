@@ -4,6 +4,7 @@ import {
   getDoc,
   collection,
   addDoc,
+  deleteDoc,
   getDocs,
   serverTimestamp,
   Timestamp,
@@ -21,12 +22,12 @@ import { state, eventsState } from '../state.js';
 // Utilities
 import { escapeHTML, escapeAttr } from '../util/escape.js';
 import { formatCalendarMonthLabel } from '../util/time.js';
-import { circleLabel, getVisibleCircles, getInitials, renderCircleOptions } from '../util/circles.js';
+import { circleLabel, getVisibleCircles, getInitials, eventCircleIds, isCircleOwner } from '../util/circles.js';
 import { logError } from '../util/log.js';
 
 // UI helpers
 import { showToast } from '../ui/toast.js';
-import { showNoticeModal } from '../ui/modals.js';
+import { showNoticeModal, showConfirmModal } from '../ui/modals.js';
 
 // Cross-page
 import { writeNotification } from './notifications.js';
@@ -355,7 +356,7 @@ export const initEventsPage = function() {
     composer.innerHTML = '';
   }
 
-  if (state.isAdmin) {
+  if (canCreateEvents()) {
     renderInlineEventComposer();
   }
 
@@ -364,6 +365,13 @@ export const initEventsPage = function() {
   var eventsList = document.getElementById('eventsList');
   if (eventsList) {
     eventsList.addEventListener('click', function(e) {
+      var deleteBtn = e.target.closest('[data-delete-event]');
+      if (deleteBtn) {
+        e.stopPropagation();
+        handleDeleteEvent(deleteBtn.dataset.deleteEvent, deleteBtn);
+        return;
+      }
+
       var btn = e.target.closest('[data-ics]');
       if (!btn) return;
       e.stopPropagation();
@@ -639,7 +647,7 @@ const renderEventsList = function() {
     var emptySummary = document.getElementById('eventsResultsSummary');
     if (emptySummary) emptySummary.textContent = 'No events published yet';
     list.innerHTML = '<div class="empty-state"><div class="empty-state-title">No events yet</div><p class="empty-state-text">' +
-      (state.isAdmin ? 'Create the first event to get the calendar going.' : 'Upcoming gatherings and important dates will appear here.') +
+      (canCreateEvents() ? 'Create the first event to get the calendar going.' : 'Upcoming gatherings and important dates will appear here.') +
       '</p></div>';
     return;
   }
@@ -746,14 +754,19 @@ const renderEventCard = function(ev, opts) {
         '<span>Add to calendar</span>' +
       '</button>'
     : '';
+  var deleteBtn = ev.id && canDeleteEvent(ev)
+    ? '<button class="btn btn-ghost event-delete-btn" data-delete-event="' + escapeAttr(ev.id) + '">Delete</button>'
+    : '';
   var actionsHtml = opts.isPast
     ? '<div class="event-actions event-actions-static">' +
         '<span class="text-muted">RSVP closed</span>' +
         icsBtn +
+        deleteBtn +
       '</div>'
     : '<div class="event-actions">' +
         '<button class="btn btn-primary" data-rsvp="' + escapeAttr(ev.id) + '">' + rsvpButtonLabel(rsvpCount, false) + '</button>' +
         icsBtn +
+        deleteBtn +
       '</div>';
   var attendeesHtml = !opts.isPast
     ? '<div class="event-attendees" data-event-attendees="' + escapeAttr(ev.id) + '" data-attendee-count="' + rsvpCount + '" aria-live="polite">' +
@@ -868,6 +881,51 @@ const handleRsvp = function(eventId, btn) {
   });
 };
 
+// Admins add events anywhere; members add them to the circles members
+// started that they're in. The Firestore rules enforce the same split.
+const canCreateEvents = function() {
+  return !!state.user && eventCircleIds(state).length > 0;
+};
+
+const canDeleteEvent = function(ev) {
+  return !!state.user && (
+    state.isAdmin ||
+    ev.createdBy === state.user.uid ||
+    isCircleOwner(ev.circle, state)
+  );
+};
+
+const renderEventCircleOptions = function() {
+  return eventCircleIds(state).map(function(circleId) {
+    return '<option value="' + escapeAttr(circleId) + '">' +
+      escapeHTML(circleId === 'all' ? 'All members' : circleLabel(circleId)) +
+    '</option>';
+  }).join('');
+};
+
+const handleDeleteEvent = function(eventId, btn) {
+  var allEvents = (eventsState.upcoming || []).concat(eventsState.past || []);
+  var ev = allEvents.find(function(item) { return item.id === eventId; });
+  if (!ev || !canDeleteEvent(ev)) return;
+
+  showConfirmModal('Delete event',
+    'Delete "' + (ev.title || 'this event') + '"? It will be removed for everyone.',
+    'Delete').then(function(confirmed) {
+    if (!confirmed) return;
+    if (btn) btn.disabled = true;
+
+    deleteDoc(doc(db, 'events', eventId)).then(function() {
+      showToast('Event deleted.', 'success');
+      loadEvents();
+      loadPanelEvents();
+    }).catch(function(err) {
+      logError('Failed to delete event', err);
+      showToast('Couldn\'t delete the event. Try again shortly.', 'error');
+      if (btn) btn.disabled = false;
+    });
+  });
+};
+
 const renderInlineEventComposer = function() {
   var composer = document.getElementById('eventAdminComposer');
   if (!composer) return;
@@ -881,7 +939,9 @@ const renderInlineEventComposer = function() {
       '<div class="page-header-row">' +
         '<div>' +
           '<h2 class="profile-name">Create Event</h2>' +
-          '<p class="text-muted">Add a new gathering to the enclave.</p>' +
+          '<p class="text-muted">' + (state.isAdmin
+            ? 'Add a new gathering to the enclave.'
+            : 'Add a gathering to one of your circles. Only the people in it will see it.') + '</p>' +
         '</div>' +
       '</div>' +
       '<div class="profile-section">' +
@@ -905,7 +965,7 @@ const renderInlineEventComposer = function() {
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvCircle">Circle</label>' +
-        '<select id="inlineEvCircle" class="edit-input">' + renderCircleOptions(true, state) + '</select>' +
+        '<select id="inlineEvCircle" class="edit-input">' + renderEventCircleOptions() + '</select>' +
       '</div>' +
       '<div class="profile-section">' +
         '<label class="profile-section-title" for="inlineEvDesc">Description</label>' +
@@ -996,7 +1056,7 @@ const handleInlineCreateEvent = function() {
     titleEl.value = '';
     locationEl.value = '';
     descEl.value = '';
-    circleEl.value = 'all';
+    circleEl.selectedIndex = 0;
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Create Event';
@@ -1006,7 +1066,7 @@ const handleInlineCreateEvent = function() {
     logError('Failed to create event', err);
     var msg;
     if (err.code === 'permission-denied') {
-      msg = 'You do not have permission to create events. Only admins can do this.';
+      msg = 'You can only add events to circles you\'re in. If you just left or were removed from this circle, reload the page.';
     } else {
       msg = 'Failed to create event. Please try again or check the browser console for details.';
     }

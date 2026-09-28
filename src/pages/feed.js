@@ -27,7 +27,7 @@ import { state, feedState, driveAttachment } from '../state.js';
 // Utilities
 import { escapeHTML, escapeAttr, extractFirstUrl, renderRichText, sanitizeRichHTML } from '../util/escape.js';
 import { relativeTime } from '../util/time.js';
-import { getVisibleCircles, listVisibleCircles, getInitials, renderCircleOptions, circleLabel } from '../util/circles.js';
+import { getVisibleCircles, listVisibleCircles, getInitials, renderCircleOptions, circleLabel, isCircleOwner } from '../util/circles.js';
 import { FEED_PAGE_SIZE } from '../util/constants.js';
 import { logError } from '../util/log.js';
 
@@ -853,7 +853,8 @@ var renderPostCard = function(p, context) {
       '<span class="post-save-icon" aria-hidden="true">' + (isSaved ? '&#9733;' : '&#9734;') + '</span>' +
       '<span class="post-action-label">' + (isSaved ? 'Saved' : 'Save') + '</span>' +
     '</button>';
-  var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid);
+  // Authors, admins, and whoever looks after the circle it was posted to.
+  var canDelete = state.user && (state.isAdmin || p.authorId === state.user.uid || isCircleOwner(p.circle, state));
   var deleteBtn = canDelete
     ? '<button class="post-action post-action-danger" data-delete-post="' + escapeAttr(p.id) + '" data-post-author="' + escapeAttr(p.authorId) + '" aria-label="Delete post">' +
         '<svg class="post-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -1152,7 +1153,12 @@ var handleCommentSubmit = function(postId, authorId, formEl) {
 var handleDeletePost = function(postId, authorId) {
   if (!postId) return;
 
-  showConfirmModal('Delete post', 'Delete this post?', 'Delete').then(function(confirmed) {
+  var someoneElses = !!(authorId && state.user && authorId !== state.user.uid);
+  var message = someoneElses
+    ? 'Delete this post? It will be removed for everyone who can see it.'
+    : 'Delete this post?';
+
+  showConfirmModal('Delete post', message, 'Delete').then(function(confirmed) {
     if (!confirmed) return;
 
     deleteDoc(doc(db, 'posts', postId)).then(function() {
